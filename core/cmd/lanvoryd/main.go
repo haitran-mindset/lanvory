@@ -20,6 +20,7 @@ import (
 	"lanvory.local/core/internal/drop"
 	"lanvory.local/core/internal/identity"
 	"lanvory.local/core/internal/local"
+	"lanvory.local/core/internal/mount"
 	"lanvory.local/core/internal/pairing"
 	"lanvory.local/core/internal/permissions"
 	"lanvory.local/core/internal/storage"
@@ -92,7 +93,8 @@ func run(peerInterface string, peerBind netip.AddrPort, advertise, enableQUIC, e
 	})
 	clipBuf := clipboard.NewBuffer()
 	syncMgr := syncengine.NewManager()
-	lan := &lanListener{parent: ctx, dir: dir, device: device, key: key, receiver: receiver, pairs: pairs, clipboard: clipBuf, syncMgr: syncMgr}
+	mountReg := mount.NewRegistry()
+	lan := &lanListener{parent: ctx, dir: dir, device: device, key: key, receiver: receiver, pairs: pairs, clipboard: clipBuf, syncMgr: syncMgr, mountReg: mountReg}
 	defer lan.stop()
 	if peerInterface != "" {
 		if err := lan.start(peerInterface, peerBind, advertise, enableQUIC, enablePairing); err != nil {
@@ -104,6 +106,7 @@ func run(peerInterface string, peerBind netip.AddrPort, advertise, enableQUIC, e
 	handler := local.WithListenerStatus(local.HandlerWithResources(device, dir, receiver, tunnels, key, pairs, lan.status), lan.status, lan.start, lan.stop)
 	handler = local.WithClipboard(handler, clipBuf, device, dir, key)
 	handler = local.WithSync(handler, syncMgr, device, dir, key)
+	handler = local.WithMounts(handler, mountReg, device, dir, key)
 	server := &http.Server{
 		Handler:           handler,
 		ReadHeaderTimeout: 2 * time.Second,

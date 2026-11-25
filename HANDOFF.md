@@ -684,6 +684,15 @@ Implemented the requested `POST_MVP` expansion across Go core, CLI, Electron IPC
 
 `pnpm typecheck`, `make build`, `make verify`, and both app-owned and external daemon passes of `sh scripts/smoke-native.sh pnpm` passed with exit code 0.
 
+## Live Resource Mount (Prototype)
+
+- **WebDAV + HTTP Range Engine** (`core/internal/mount/mount.go`, `mount_test.go`, `core/internal/permissions/resource.go`):
+  - Added `folder-mount` capability (`permissions.MountFolder`) and `mount.Registry` + `mount.ServeExport` supporting RFC 4918 WebDAV (`OPTIONS`, `PROPFIND`, `GET`/`HEAD` with `Range` 206 Partial Content, `PUT`, `MKCOL`, `DELETE`, `MOVE`) with strict symlink and `..` path traversal confinement and read-only enforcement.
+- **Peer mTLS Transport (`lanvory-mount/1`)** (`core/internal/peer/mount.go`, `mount_test.go`, `peer/listener.go`):
+  - Added `EnableMount` on `*peer.Listener` and `StartMountSession` loopback WebDAV proxy over `lanvory-mount/1` mTLS, verified end-to-end with `TestMountSessionRangeAndWriteOverMTLS` (HTTP `206` Range read + WebDAV `PUT` writeback).
+- **Daemon IPC, macOS `mount_webdav`, CLI & Desktop UI** (`core/internal/local/mount.go`, `core/cmd/lanvoryd/`, `core/cmd/lanvory/main.go`, `apps/desktop/src/renderer/features/sync/live-mount.tsx`):
+  - Added `/v1/mounts/exports` and `/v1/mounts` IPC routes, `lanvory mounts` CLI subcommands, optional macOS `/sbin/mount_webdav` / `/sbin/umount` integration with loopback WebDAV fallback, and Live Resource Mount export/grant/mount controls in the Sync panel.
+
 ## Open verification gates
 
 | Task | Available evidence | Missing evidence and prerequisites |

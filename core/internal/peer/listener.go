@@ -16,6 +16,7 @@ import (
 	"lanvory.local/core/internal/bridge"
 	"lanvory.local/core/internal/clipboard"
 	"lanvory.local/core/internal/drop"
+	"lanvory.local/core/internal/mount"
 	"lanvory.local/core/internal/networking"
 	"lanvory.local/core/internal/pairing"
 	syncengine "lanvory.local/core/internal/sync"
@@ -38,6 +39,8 @@ type Listener struct {
 	clipboardAllowed func(string) bool
 	syncMgr          *syncengine.Manager
 	syncAllowed      func(string, string) bool
+	mountReg         *mount.Registry
+	mountAllowed     func(string, string) bool
 }
 
 func Listen(ctx context.Context, name string, bind netip.AddrPort, key ed25519.PrivateKey, inventory func() ([]networking.Interface, error), trusted func(string) (bool, error), receiver *drop.Receiver, services bridge.Lookup, pairs *pairing.Manager) (*Listener, error) {
@@ -212,6 +215,18 @@ func (l *Listener) Serve(ctx context.Context) error {
 					return
 				}
 				_ = syncengine.ServeConn(ctx, session, pin.String(), l.syncMgr, l.syncAllowed)
+			case mount.Protocol:
+				if l.mountReg == nil {
+					return
+				}
+				pin, err := certificateFingerprint(session.ConnectionState(), mount.Protocol)
+				if err != nil {
+					return
+				}
+				if err := conn.SetDeadline(time.Time{}); err != nil {
+					return
+				}
+				_ = serveMountConn(ctx, session, pin.String(), l.mountReg, l.mountAllowed, func() bool { return l.currentScope(remote) })
 			}
 		})
 	}

@@ -1,5 +1,6 @@
 const { app, BrowserWindow, clipboard, dialog, ipcMain, Notification, shell } = require('electron');
 const { execFile, spawn } = require('node:child_process');
+const http = require('node:http');
 const { existsSync, lstatSync, readdirSync, writeFileSync, rmSync } = require('node:fs');
 const { promisify } = require('node:util');
 const path = require('node:path');
@@ -865,6 +866,212 @@ if (!app.requestSingleInstanceLock()) {
           : 'Unable to sync folder with peer.';
         return { error: detail };
       }
+    });
+    ipcMain.handle('lanvory:mount-exports', async (event) => {
+      assertTrustedFrame(event);
+      return exec(path.join(bundle, 'lanvory'), ['mounts', 'exports'], { timeout: 4000, maxBuffer: 131072 })
+        .then(({ stdout }) => JSON.parse(stdout), () => null);
+    });
+    ipcMain.handle('lanvory:mount-export', async (event, id, folderPath, readOnly) => {
+      assertTrustedFrame(event);
+      if (typeof id !== 'string' || !/^[a-z0-9][a-z0-9_-]{0,63}$/.test(id)
+          || typeof folderPath !== 'string' || !path.isAbsolute(folderPath)
+          || typeof readOnly !== 'boolean') {
+        return { error: 'Invalid mount ID, folder path, or access mode.' };
+      }
+      const args = ['mounts', 'export', id, folderPath];
+      if (!readOnly) args.push('--rw');
+      try {
+        const { stdout } = await exec(path.join(bundle, 'lanvory'), args, { timeout: 4000, maxBuffer: 65536 });
+        return JSON.parse(stdout);
+      } catch (err) {
+        const detail = typeof err?.stderr === 'string' && err.stderr.trim()
+          ? err.stderr.trim().replace(/^lanvory:\s*/, '')
+          : 'Unable to export folder for live mount.';
+        return { error: detail };
+      }
+    });
+    ipcMain.handle('lanvory:mount-unexport', async (event, id) => {
+      assertTrustedFrame(event);
+      if (typeof id !== 'string' || !/^[a-z0-9][a-z0-9_-]{0,63}$/.test(id)) return false;
+      return exec(path.join(bundle, 'lanvory'), ['mounts', 'unexport', id], { timeout: 4000, maxBuffer: 4096 })
+        .then(() => true, () => false);
+    });
+    ipcMain.handle('lanvory:set-mount-access', async (event, fingerprint, mountId, allowed) => {
+      assertTrustedFrame(event);
+      if (typeof fingerprint !== 'string' || !/^[a-fA-F0-9]{64}$/.test(fingerprint)
+          || typeof mountId !== 'string' || !/^[a-z0-9][a-z0-9_-]{0,63}$/.test(mountId)
+          || typeof allowed !== 'boolean') return false;
+      return exec(path.join(bundle, 'lanvory'), permissionArgs(allowed ? 'grant' : 'revoke', fingerprint, 'folder-mount', mountId, 'until-revoked'),
+        { timeout: 4000, maxBuffer: 4096 }).then(() => true, () => false);
+    });
+    ipcMain.handle('lanvory:mounts', async (event) => {
+      assertTrustedFrame(event);
+      return exec(path.join(bundle, 'lanvory'), ['mounts', 'list'], { timeout: 4000, maxBuffer: 131072 })
+        .then(({ stdout }) => JSON.parse(stdout), () => null);
+    });
+    ipcMain.handle('lanvory:mount-open', async (event, adapter, endpoint, pin, remoteId, mountPoint) => {
+      assertTrustedFrame(event);
+      if (typeof adapter !== 'string' || !/^[a-zA-Z0-9_.-]{1,32}$/.test(adapter)
+          || typeof endpoint !== 'string' || !/^(?:[0-9]{1,3}\.){3}[0-9]{1,3}:[0-9]{1,5}$/.test(endpoint)
+          || typeof pin !== 'string' || !/^[a-fA-F0-9]{64}$/.test(pin)
+          || typeof remoteId !== 'string' || !/^[a-z0-9][a-z0-9_-]{0,63}$/.test(remoteId)) {
+        return { error: 'Invalid adapter, endpoint, device ID, or remote mount ID.' };
+      }
+      const args = ['mounts', 'open', adapter, endpoint, pin, remoteId];
+      if (typeof mountPoint === 'string' && mountPoint.trim() && path.isAbsolute(mountPoint.trim())) {
+        args.push(mountPoint.trim());
+      }
+      try {
+        const { stdout } = await exec(path.join(bundle, 'lanvory'), args, { timeout: 15000, maxBuffer: 131072 });
+        return JSON.parse(stdout);
+      } catch (err) {
+        const detail = typeof err?.stderr === 'string' && err.stderr.trim()
+          ? err.stderr.trim().replace(/^lanvory:\s*/, '')
+          : 'Unable to open live mount.';
+        return { error: detail };
+      }
+    });
+    ipcMain.handle('lanvory:mount-close', async (event, id) => {
+      assertTrustedFrame(event);
+      if (typeof id !== 'string' || !/^[a-zA-Z0-9_-]{1,64}$/.test(id)) return false;
+      return exec(path.join(bundle, 'lanvory'), ['mounts', 'close', id], { timeout: 8000, maxBuffer: 4096 })
+        .then(() => true, () => false);
+    });
+    ipcMain.handle('lanvory:mount-open-finder', async (event, target) => {
+      assertTrustedFrame(event);
+      if (typeof target !== 'string' || !target.trim()) return false;
+      const trimmed = target.trim();
+      if (/^http:\/\/127\.0\.0\.1:[0-9]{1,5}\/$/.test(trimmed)) {
+        await shell.openExternal(trimmed);
+        return true;
+      }
+      if (path.isAbsolute(trimmed)) {
+        const err = await shell.openPath(trimmed);
+        return err === '';
+      }
+      return false;
+    });
+
+    function requestDaemon(method, routePath, payload) {
+      return new Promise((resolve, reject) => {
+        const stateDir = process.env.LANVORY_STATE_DIR || path.join(app.getPath('home'), '.lanvory');
+        const body = payload !== undefined ? JSON.stringify(payload) : null;
+        const req = http.request({
+          socketPath: path.join(stateDir, 'daemon.sock'),
+          path: routePath,
+          method,
+          timeout: 12000,
+          headers: body ? { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) } : {},
+        }, (res) => {
+          const chunks = [];
+          res.on('data', (c) => chunks.push(c));
+          res.on('end', () => {
+            const text = Buffer.concat(chunks).toString('utf8');
+            if (res.statusCode >= 400) {
+              reject(new Error(text.trim() || `Daemon HTTP ${res.statusCode}`));
+              return;
+            }
+            if (!text.trim()) {
+              resolve(null);
+              return;
+            }
+            try {
+              resolve(JSON.parse(text));
+            } catch {
+              resolve(text);
+            }
+          });
+        });
+        req.on('error', reject);
+        req.on('timeout', () => { req.destroy(new Error('Daemon request timed out')); });
+        if (body) req.write(body);
+        req.end();
+      });
+    }
+
+    ipcMain.handle('lanvory:mount-discover', async (event, adapter, endpoint, pin) => {
+      assertTrustedFrame(event);
+      if (typeof adapter !== 'string' || !/^[a-zA-Z0-9_.-]{1,32}$/.test(adapter)
+          || typeof endpoint !== 'string' || !/^(?:[0-9]{1,3}\.){3}[0-9]{1,3}:[0-9]{1,5}$/.test(endpoint)
+          || typeof pin !== 'string' || !/^[a-fA-F0-9]{64}$/.test(pin)) {
+        return { error: 'Invalid adapter, endpoint, or peer ID.' };
+      }
+      return requestDaemon('POST', '/v1/mounts/discover', { interface: adapter, endpoint, fingerprint: pin })
+        .catch((err) => ({ error: err?.message || 'Unable to discover remote resources.' }));
+    });
+
+    ipcMain.handle('lanvory:mount-native', async (event, id, mountPoint) => {
+      assertTrustedFrame(event);
+      if (typeof id !== 'string' || !/^[a-zA-Z0-9_-]{1,64}$/.test(id)) {
+        return { error: 'Invalid resource session ID.' };
+      }
+      const payload = typeof mountPoint === 'string' && path.isAbsolute(mountPoint.trim()) ? { mountPoint: mountPoint.trim() } : {};
+      return requestDaemon('POST', `/v1/mounts/${encodeURIComponent(id)}/native`, payload)
+        .catch((err) => ({ error: err?.message || 'Unable to mount in Finder.' }));
+    });
+
+    ipcMain.handle('lanvory:mount-browse', async (event, id, subPath) => {
+      assertTrustedFrame(event);
+      if (typeof id !== 'string' || !/^[a-zA-Z0-9_-]{1,64}$/.test(id)) {
+        return { error: 'Invalid resource session ID.' };
+      }
+      const cleanPath = typeof subPath === 'string' && subPath.trim() ? subPath.trim() : '/';
+      return requestDaemon('GET', `/v1/mounts/${encodeURIComponent(id)}/browse?path=${encodeURIComponent(cleanPath)}`)
+        .catch((err) => ({ error: err?.message || 'Unable to browse remote directory.' }));
+    });
+
+    ipcMain.handle('lanvory:mount-stream', async (event, id, filePath, offset, length, etag) => {
+      assertTrustedFrame(event);
+      if (typeof id !== 'string' || !/^[a-zA-Z0-9_-]{1,64}$/.test(id)
+          || typeof filePath !== 'string' || !filePath.trim()) {
+        return { error: 'Invalid resource session or file path.' };
+      }
+      const off = Number.isFinite(offset) && offset >= 0 ? Math.floor(offset) : 0;
+      const len = Number.isFinite(length) && length > 0 ? Math.floor(length) : 65536;
+      const q = new URLSearchParams({ path: filePath.trim(), offset: String(off), length: String(len) });
+      if (typeof etag === 'string' && etag) q.set('etag', etag);
+      return requestDaemon('GET', `/v1/mounts/${encodeURIComponent(id)}/stream?${q.toString()}`)
+        .catch((err) => ({ error: err?.message || 'Unable to stream remote file.' }));
+    });
+
+    ipcMain.handle('lanvory:mount-mkdir', async (event, id, dirPath) => {
+      assertTrustedFrame(event);
+      if (typeof id !== 'string' || !/^[a-zA-Z0-9_-]{1,64}$/.test(id) || typeof dirPath !== 'string' || !dirPath.trim()) {
+        return { ok: false, error: 'Invalid directory path.' };
+      }
+      return requestDaemon('POST', `/v1/mounts/${encodeURIComponent(id)}/mkdir`, { path: dirPath.trim() })
+        .then(() => ({ ok: true }), (err) => ({ ok: false, error: err?.message || 'Unable to create directory.' }));
+    });
+
+    ipcMain.handle('lanvory:mount-delete-entry', async (event, id, targetPath) => {
+      assertTrustedFrame(event);
+      if (typeof id !== 'string' || !/^[a-zA-Z0-9_-]{1,64}$/.test(id) || typeof targetPath !== 'string' || !targetPath.trim()) {
+        return { ok: false, error: 'Invalid target path.' };
+      }
+      return requestDaemon('DELETE', `/v1/mounts/session/${encodeURIComponent(id)}/entry?path=${encodeURIComponent(targetPath.trim())}`)
+        .then(() => ({ ok: true }), (err) => ({ ok: false, error: err?.message || 'Unable to delete entry.' }));
+    });
+
+    ipcMain.handle('lanvory:mount-rename', async (event, id, oldPath, newPath) => {
+      assertTrustedFrame(event);
+      if (typeof id !== 'string' || !/^[a-zA-Z0-9_-]{1,64}$/.test(id)
+          || typeof oldPath !== 'string' || !oldPath.trim()
+          || typeof newPath !== 'string' || !newPath.trim()) {
+        return { ok: false, error: 'Invalid rename paths.' };
+      }
+      return requestDaemon('POST', `/v1/mounts/${encodeURIComponent(id)}/rename`, { path: oldPath.trim(), newPath: newPath.trim() })
+        .then(() => ({ ok: true }), (err) => ({ ok: false, error: err?.message || 'Unable to rename entry.' }));
+    });
+
+    ipcMain.handle('lanvory:mount-events', async (event, id, since) => {
+      assertTrustedFrame(event);
+      if (typeof id !== 'string' || !/^[a-zA-Z0-9_-]{1,64}$/.test(id)) {
+        return { error: 'Invalid resource session ID.' };
+      }
+      const seq = Number.isFinite(since) && since >= 0 ? Math.floor(since) : 0;
+      return requestDaemon('GET', `/v1/mounts/${encodeURIComponent(id)}/events?since=${seq}`)
+        .catch((err) => ({ error: err?.message || 'Unable to fetch resource events.' }));
     });
     ipcMain.handle('lanvory:service-snapshot', async (event) => {
       assertTrustedFrame(event);

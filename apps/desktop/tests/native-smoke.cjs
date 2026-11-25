@@ -594,7 +594,7 @@ async function verify() {
       [...document.querySelectorAll('nav button')].find(button => button.textContent.trim() === ${JSON.stringify(page)}).click()
     `);
     await navigate('Network');
-    execFileSync('/usr/bin/sqlite3', [stateDatabase,
+    execFileSync('/usr/bin/sqlite3', ['-cmd', '.timeout 5000', stateDatabase,
       `DELETE FROM trusted_peers WHERE owner_id = '${initial.id}' AND fingerprint = '${testPeer}';`]);
     await navigate('Sharing');
     await eventually(() => evaluate(`

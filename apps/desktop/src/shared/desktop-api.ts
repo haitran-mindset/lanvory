@@ -62,7 +62,23 @@ export interface DesktopApi {
   setSyncFolderPaused(id: string, paused: boolean): Promise<unknown>;
   setSyncAccess(fingerprint: string, folderId: string, allowed: boolean): Promise<boolean>;
   syncWithPeer(id: string, adapter: string, endpoint: string, pin: string, peerLabel?: string): Promise<unknown>;
+  mountExports(): Promise<unknown>;
+  exportMountFolder(id: string, path: string, readOnly: boolean): Promise<unknown>;
+  unexportMountFolder(id: string): Promise<boolean>;
+  setMountAccess(fingerprint: string, mountId: string, allowed: boolean): Promise<boolean>;
+  mounts(): Promise<unknown>;
+  discoverResources(adapter: string, endpoint: string, fingerprint: string): Promise<unknown>;
+  openMount(adapter: string, endpoint: string, fingerprint: string, remoteId: string, mountPoint?: string): Promise<unknown>;
+  attachNativeMount(id: string, mountPoint?: string): Promise<unknown>;
+  browseResource(id: string, subPath?: string): Promise<unknown>;
+  streamResourceChunk(id: string, filePath: string, offset: number, length: number, etag?: string): Promise<unknown>;
+  createResourceDir(id: string, dirPath: string): Promise<{ ok: boolean; error?: string }>;
+  deleteResourceEntry(id: string, targetPath: string): Promise<{ ok: boolean; error?: string }>;
+  renameResourceEntry(id: string, oldPath: string, newPath: string): Promise<{ ok: boolean; error?: string }>;
+  pollResourceEvents(id: string, since: number): Promise<unknown>;
+  closeMount(id: string): Promise<boolean>;
+  openMountInFinder(target: string): Promise<boolean>;
   trustPeer(adapter: string, endpoint: string, fingerprint: string): Promise<boolean>;
   revokePeer(fingerprint: string): Promise<boolean>;
-  onNavigate(callback: (page: 'Devices' | 'Sharing' | 'Sync' | 'Services' | 'Network' | 'Settings') => void): () => void;
+  onNavigate(callback: (page: 'Devices' | 'Sharing' | 'Sync' | 'Live Resources' | 'Services' | 'Network' | 'Settings') => void): () => void;
 }

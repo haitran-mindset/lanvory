@@ -2,6 +2,7 @@ import { type ReactNode, useLayoutEffect, useRef } from "react";
 import {
   Activity,
   Boxes,
+  HardDrive,
   Layers,
   Monitor,
   Network,
@@ -16,6 +17,7 @@ const navigation = [
   ["Devices", Monitor],
   ["Sharing", Layers],
   ["Sync", RefreshCw],
+  ["Live Resources", HardDrive],
   ["Services", Boxes],
   ["Network", Network],
   ["Settings", Settings],

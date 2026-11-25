@@ -8,6 +8,7 @@ import type { PairingTarget } from '../features/devices/nearby';
 import { SettingsPanel, type TextSize, type Theme, type Density } from '../features/settings/settings';
 import { NetworkPanel } from '../features/network/network';
 import { SyncPanel } from '../features/sync/sync';
+import { MountsPanel } from '../features/mounts/mounts';
 import { Workspace, type Page } from '../layouts/workspace';
 import { CommandPalette, type PaletteCommand } from '../components/command-palette';
 import { NotificationsProvider, useNotifications } from '../components/notifications';
@@ -212,6 +213,9 @@ function AppContent({
         } else if (event.key === '6') {
           event.preventDefault();
           navigate('Sync');
+        } else if (event.key === '7') {
+          event.preventDefault();
+          navigate('Live Resources');
         }
       } else if (event.key === 'Escape') {
         if (paletteOpen) {
@@ -413,7 +417,7 @@ function AppContent({
             setResponse({ device: result.data });
             return true;
           }} />
-        ) : page === 'Network' ? <NetworkPanel visible={windowVisible} deviceName={identity?.name} routes={peerRoutes} onRoute={rememberRoute} /> : page === 'Sync' ? <SyncPanel visible={windowVisible} ownerId={identity?.id} routes={peerRoutes} onRoute={rememberRoute} /> : page === 'Services' ? <Services key={identity?.id} ownerId={identity?.id} visible={windowVisible} routes={peerRoutes} onPair={findDeviceToPair} onRoute={rememberRoute} /> : page === 'Sharing' ? null : (
+        ) : page === 'Network' ? <NetworkPanel visible={windowVisible} deviceName={identity?.name} routes={peerRoutes} onRoute={rememberRoute} /> : page === 'Sync' ? <SyncPanel visible={windowVisible} ownerId={identity?.id} routes={peerRoutes} onRoute={rememberRoute} /> : page === 'Live Resources' ? <MountsPanel visible={windowVisible} ownerId={identity?.id} routes={peerRoutes} onRoute={rememberRoute} /> : page === 'Services' ? <Services key={identity?.id} ownerId={identity?.id} visible={windowVisible} routes={peerRoutes} onPair={findDeviceToPair} onRoute={rememberRoute} /> : page === 'Sharing' ? null : (
           <DevicesPage incomingPairingEnabled={listener?.pairing === true} response={response} retrying={retrying} visible={windowVisible} scanRevision={scanRevision}
             nearbyCount={nearbyCount} counts={counts} trustRevision={trustRevision} pairingTarget={pairingTarget}
             onDiscover={discover} onShare={() => navigate('Sharing')} onServices={() => navigate('Services')} onNetwork={() => navigate('Network')} onRetry={() => void retry()}
@@ -430,6 +434,7 @@ function AppContent({
             { id: 'nav-devices', category: 'Navigate', label: 'Go to Devices', shortcut: '⌘1', run: () => navigate('Devices') },
             { id: 'nav-sharing', category: 'Navigate', label: 'Go to Sharing', shortcut: '⌘2', run: () => navigate('Sharing') },
             { id: 'nav-sync', category: 'Navigate', label: 'Go to Sync', shortcut: '⌘6', run: () => navigate('Sync') },
+            { id: 'nav-mounts', category: 'Navigate', label: 'Go to Live Resources', shortcut: '⌘7', run: () => navigate('Live Resources') },
             { id: 'nav-services', category: 'Navigate', label: 'Go to Services', shortcut: '⌘3', run: () => navigate('Services') },
             { id: 'nav-network', category: 'Navigate', label: 'Go to Network', shortcut: '⌘4', run: () => navigate('Network') },
             { id: 'nav-settings', category: 'Navigate', label: 'Go to Settings', shortcut: '⌘5', run: () => navigate('Settings') },

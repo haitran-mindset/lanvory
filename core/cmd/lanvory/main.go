@@ -86,7 +86,14 @@ func main() {
 		slices.Equal(arguments, []string{"sync", "list"}),
 		(len(arguments) == 4 || len(arguments) == 5) && arguments[0] == "sync" && arguments[1] == "add",
 		len(arguments) == 3 && arguments[0] == "sync" && (arguments[1] == "remove" || arguments[1] == "scan" || arguments[1] == "pause" || arguments[1] == "resume"),
-		(len(arguments) == 6 || len(arguments) == 7) && arguments[0] == "sync" && arguments[1] == "run":
+		(len(arguments) == 6 || len(arguments) == 7) && arguments[0] == "sync" && arguments[1] == "run",
+		slices.Equal(arguments, []string{"mounts", "exports"}),
+		(len(arguments) == 4 || (len(arguments) == 5 && arguments[4] == "--rw")) && arguments[0] == "mounts" && arguments[1] == "export",
+		len(arguments) == 3 && arguments[0] == "mounts" && (arguments[1] == "unexport" || arguments[1] == "close"),
+		slices.Equal(arguments, []string{"mounts", "list"}),
+		len(arguments) == 5 && arguments[0] == "mounts" && arguments[1] == "discover",
+		(len(arguments) == 3 || len(arguments) == 4) && arguments[0] == "mounts" && (arguments[1] == "browse" || arguments[1] == "native"),
+		(len(arguments) == 6 || len(arguments) == 7) && arguments[0] == "mounts" && arguments[1] == "open":
 		if err := run(arguments); err != nil {
 			fmt.Fprintln(os.Stderr, "lanvory:", err)
 			os.Exit(1)
@@ -201,6 +208,69 @@ func run(arguments []string) error {
 				return err
 			}
 			return output.Encode(result)
+		}
+	}
+	if arguments[0] == "mounts" {
+		switch arguments[1] {
+		case "exports":
+			exports, err := local.ListMountExports(ctx, dir)
+			if err != nil {
+				return err
+			}
+			return output.Encode(exports)
+		case "export":
+			readOnly := len(arguments) != 5 || arguments[4] != "--rw"
+			exp, err := local.AddMountExport(ctx, dir, arguments[2], arguments[3], readOnly)
+			if err != nil {
+				return err
+			}
+			return output.Encode(exp)
+		case "unexport":
+			return local.RemoveMountExport(ctx, dir, arguments[2])
+		case "list":
+			mounts, err := local.ListMounts(ctx, dir)
+			if err != nil {
+				return err
+			}
+			return output.Encode(mounts)
+		case "discover":
+			resources, err := local.DiscoverPeerResources(ctx, dir, arguments[2], arguments[3], arguments[4])
+			if err != nil {
+				return err
+			}
+			return output.Encode(resources)
+		case "browse":
+			subPath := "/"
+			if len(arguments) == 4 {
+				subPath = arguments[3]
+			}
+			entries, err := local.BrowseMount(ctx, dir, arguments[2], subPath)
+			if err != nil {
+				return err
+			}
+			return output.Encode(entries)
+		case "native":
+			mountPoint := ""
+			if len(arguments) == 4 {
+				mountPoint = arguments[3]
+			}
+			rec, err := local.AttachNativeMount(ctx, dir, arguments[2], mountPoint)
+			if err != nil {
+				return err
+			}
+			return output.Encode(rec)
+		case "open":
+			mountPoint := ""
+			if len(arguments) == 7 {
+				mountPoint = arguments[6]
+			}
+			rec, err := local.OpenMount(ctx, dir, arguments[2], arguments[3], arguments[4], "", arguments[5], mountPoint)
+			if err != nil {
+				return err
+			}
+			return output.Encode(rec)
+		case "close":
+			return local.CloseMount(ctx, dir, arguments[2])
 		}
 	}
 	if arguments[0] == "services" {

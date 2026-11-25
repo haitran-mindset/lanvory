@@ -18,6 +18,7 @@ import (
 	"lanvory.local/core/internal/discovery"
 	"lanvory.local/core/internal/drop"
 	"lanvory.local/core/internal/local"
+	"lanvory.local/core/internal/mount"
 	"lanvory.local/core/internal/networking"
 	"lanvory.local/core/internal/pairing"
 	"lanvory.local/core/internal/peer"
@@ -35,6 +36,7 @@ type lanListener struct {
 	pairs     *pairing.Manager
 	clipboard *clipboard.Buffer
 	syncMgr   *syncengine.Manager
+	mountReg  *mount.Registry
 
 	mu      sync.Mutex
 	current local.ListenerStatus
@@ -127,6 +129,16 @@ func (l *lanListener) start(adapter string, bind netip.AddrPort, advertise, enab
 				Fingerprint: fingerprint,
 				Capability:  permissions.FolderSync,
 				Resource:    folderID,
+			}, time.Now())
+			return err == nil && allowed
+		})
+	}
+	if l.mountReg != nil {
+		tcp.EnableMount(l.mountReg, func(fingerprint, mountID string) bool {
+			allowed, err := storage.HasGrant(l.dir, l.device.ID, storage.Grant{
+				Fingerprint: fingerprint,
+				Capability:  permissions.MountFolder,
+				Resource:    mountID,
 			}, time.Now())
 			return err == nil && allowed
 		})
