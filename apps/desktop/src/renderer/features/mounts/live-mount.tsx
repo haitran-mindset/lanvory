@@ -6,6 +6,7 @@ import {
   CheckCircle2,
   ChevronRight,
   ExternalLink,
+  Eye,
   File as FileIcon,
   FileText,
   Film,
@@ -465,26 +466,51 @@ export function LiveMountSection({
                 disabled={busy}
               />
             </label>
-            <div className="field">
-              <span>Permission</span>
-              <div className="lr-mode-pills">
+            <div className="lr-permission-field">
+              <span className="lr-permission-label">Permission</span>
+              <div className="lr-mode-pills" role="radiogroup" aria-label="Folder permission">
                 <button
                   type="button"
+                  role="radio"
+                  aria-checked={readOnly}
                   className={`lr-mode-pill ${readOnly ? 'is-active' : ''}`}
                   disabled={busy}
                   onClick={() => setReadOnly(true)}
                 >
-                  <strong>View & stream only</strong>
-                  <small>Recommended · Read-only</small>
+                  <span className="lr-mode-pill-icon" aria-hidden="true">
+                    <Eye size={16} />
+                  </span>
+                  <span className="lr-mode-pill-body">
+                    <span className="lr-mode-pill-title">
+                      <strong>View &amp; stream only</strong>
+                      <span className="lr-mode-badge">Recommended</span>
+                    </span>
+                    <small>Read-only access</small>
+                  </span>
+                  <span className="lr-mode-pill-radio" aria-hidden="true">
+                    {readOnly ? <Check size={12} /> : null}
+                  </span>
                 </button>
                 <button
                   type="button"
+                  role="radio"
+                  aria-checked={!readOnly}
                   className={`lr-mode-pill ${!readOnly ? 'is-active' : ''}`}
                   disabled={busy}
                   onClick={() => setReadOnly(false)}
                 >
-                  <strong>Allow editing</strong>
-                  <small>Create, rename & delete</small>
+                  <span className="lr-mode-pill-icon" aria-hidden="true">
+                    <Pencil size={16} />
+                  </span>
+                  <span className="lr-mode-pill-body">
+                    <span className="lr-mode-pill-title">
+                      <strong>Allow editing</strong>
+                    </span>
+                    <small>Create, rename &amp; delete</small>
+                  </span>
+                  <span className="lr-mode-pill-radio" aria-hidden="true">
+                    {!readOnly ? <Check size={12} /> : null}
+                  </span>
                 </button>
               </div>
             </div>

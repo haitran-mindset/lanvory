@@ -152,6 +152,16 @@ func (l *lanListener) start(adapter string, bind netip.AddrPort, advertise, enab
 			tcp.Close()
 			return fmt.Errorf("start QUIC peer listener: %w", err)
 		}
+		if l.mountReg != nil {
+			udp.EnableMount(l.mountReg, func(fingerprint, mountID string) bool {
+				allowed, err := storage.HasGrant(l.dir, l.device.ID, storage.Grant{
+					Fingerprint: fingerprint,
+					Capability:  permissions.MountFolder,
+					Resource:    mountID,
+				}, time.Now())
+				return err == nil && allowed
+			})
+		}
 		udpDone = make(chan struct{})
 		go func() {
 			defer close(udpDone)

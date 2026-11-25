@@ -723,8 +723,11 @@ func requestLocalTimedBody(ctx context.Context, dir, method, route string, body 
 	if response.StatusCode == http.StatusConflict {
 		return errors.New("interface is unavailable or ineligible")
 	}
-	if response.StatusCode != http.StatusOK || destination == nil {
+	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
 		return fmt.Errorf("daemon returned %s", response.Status)
+	}
+	if destination == nil {
+		return nil
 	}
 	const limit = 64 * 1024
 	data, err := io.ReadAll(io.LimitReader(response.Body, limit+1))

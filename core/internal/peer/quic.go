@@ -16,6 +16,7 @@ import (
 
 	"lanvory.local/core/internal/bridge"
 	"lanvory.local/core/internal/drop"
+	"lanvory.local/core/internal/mount"
 	"lanvory.local/core/internal/networking"
 )
 
@@ -86,8 +87,10 @@ type QUICListener struct {
 	source    netip.Addr
 	index     int
 	trusted   func(string) (bool, error)
-	receiver  *drop.Receiver
-	services  bridge.Lookup
+	receiver     *drop.Receiver
+	services     bridge.Lookup
+	mountReg     *mount.Registry
+	mountAllowed func(string, string) bool
 	closeOnce sync.Once
 }
 
@@ -123,12 +126,19 @@ func ListenQUIC(ctx context.Context, name string, bind netip.AddrPort, key ed255
 	if services != nil {
 		protocols = append(protocols, bridge.Protocol)
 	}
+	protocols = append(protocols, mount.Protocol)
 	result.listener, err = result.transport.Listen(trustedProtocolsTLS(identity, protocols, trusted), quicConfig(true))
 	if err != nil {
 		result.Close()
 		return nil, err
 	}
 	return result, nil
+}
+
+// EnableMount attaches a Live Resources registry and authorization callback to the QUIC listener.
+func (l *QUICListener) EnableMount(reg *mount.Registry, allowed func(fingerprint, mountID string) bool) {
+	l.mountReg = reg
+	l.mountAllowed = allowed
 }
 
 func (l *QUICListener) allowedPacket(endpoint netip.AddrPort) bool {
@@ -222,16 +232,22 @@ func (l *QUICListener) serveConnection(ctx context.Context, conn *quic.Conn) {
 	if !scope() {
 		return
 	}
-	serveQUICStreams(ctx, conn, l.trusted, scope, l.receiver, l.services)
+	serveQUICStreamsWithMount(ctx, conn, l.trusted, scope, l.receiver, l.services, l.mountReg, l.mountAllowed)
 }
 
 func serveQUICStreams(ctx context.Context, conn *quic.Conn, trusted func(string) (bool, error), scope func() bool,
 	receiver *drop.Receiver, services bridge.Lookup) {
+	serveQUICStreamsWithMount(ctx, conn, trusted, scope, receiver, services, nil, nil)
+}
+
+func serveQUICStreamsWithMount(ctx context.Context, conn *quic.Conn, trusted func(string) (bool, error), scope func() bool,
+	receiver *drop.Receiver, services bridge.Lookup, mountReg *mount.Registry, mountAllowed func(string, string) bool) {
 	state := conn.ConnectionState().TLS
 	protocol := state.NegotiatedProtocol
 	if protocol != quicTrustedProtocol &&
 		!(protocol == drop.Protocol && receiver != nil) &&
-		!(protocol == bridge.Protocol && services != nil) {
+		!(protocol == bridge.Protocol && services != nil) &&
+		!(protocol == mount.Protocol && mountReg != nil) {
 		return
 	}
 	pin, err := certificateFingerprint(state, protocol)
@@ -270,6 +286,8 @@ func serveQUICStreams(ctx context.Context, conn *quic.Conn, trusted func(string)
 			var err error
 			if protocol == drop.Protocol {
 				err = receiver.ReceiveStream(streamCtx, wire, fingerprint, scope)
+			} else if protocol == mount.Protocol {
+				err = serveMountConn(streamCtx, wire, fingerprint, mountReg, mountAllowed, scope)
 			} else {
 				err = bridge.Serve(streamCtx, wire, fingerprint, services, scope)
 			}
