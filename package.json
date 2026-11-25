@@ -1,0 +1,13 @@
+{
+  "name": "lanvory",
+  "private": true,
+  "packageManager": "pnpm@12.5.1",
+  "scripts": {
+    "build": "pnpm --filter @lanvory/desktop build",
+    "typecheck": "pnpm --filter @lanvory/desktop typecheck",
+    "desktop": "pnpm --filter @lanvory/desktop start"
+  },
+  "devDependencies": {
+    "@electron/packager": "^20.3.0"
+  }
+}

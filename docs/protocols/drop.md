@@ -1,0 +1,13 @@
+# Lanvory Drop single-file transfer
+
+`lanvory-drop/1` is a separate ALPN on the opt-in LAN peer listener. The sender attempts QUIC first and uses TCP on a pre-stream handshake timeout. It requires TLS 1.3, pinned Ed25519 identity verification by the sender and a saved client fingerprint on the receiver. Sender and receiver enforce the active approved network interface. Authentication grants no inbox access.
+
+Each connection carries one offer: a four-byte big-endian length followed by a JSON object containing `name`, `size`, and `sha256`. The manifest is limited to 4 KiB. The receiver validates the name and size, checks the exact `file-receive` grant for `inbox`, then queues an offer for up to 45 seconds. The sender waits before sending the payload. Incoming decisions run over owner-only Unix IPC.
+
+If the receiver accepts and can prepare the destination, it sends byte `1`. The sender streams exactly the offered number of bytes. On success the receiver sends byte `2` after SHA-256 verification and publication. A failed or denied operation closes the connection. A lost final acknowledgement can leave a complete file on the receiver. Retrying will not overwrite it.
+
+The maximum offered size is 1 GiB. Manifest and payload reads have bounded idle timeouts, the stream has a three-minute limit, and pending and active offers are bounded globally and per fingerprint. Permission and interface state are checked before queuing, while awaiting approval, during streaming and before publication. The sender can cancel with Ctrl+C. The receiving daemon cancels pending and active transfers when it stops. Disk space is checked before asking the sender to stream.
+
+The receiver writes a mode-0600 temporary file within the private state inbox. It uses a directory-scoped file API, rejects unsafe or reserved names, and publishes a complete file with a no-overwrite hard link. Failed receives remove the temporary file on ordinary exit. An abruptly terminated process can leave a hidden partial file requiring cleanup. This slice uses `~/.lanvory/inbox` as the fixed destination and supports progress and history for single files. Directories and resume remain open.
+
+The daemon tracks live bytes and waiting/streaming state in memory for both directions. SQLite schema v5 retains the latest 100 terminal records per local identity. Records include direction, peer fingerprint, filename, size, transferred bytes, result and timestamp. Source paths and file contents are excluded. The desktop polls the activity snapshot while Sharing is visible. It surfaces history storage failures without changing the result of an otherwise successful transfer.

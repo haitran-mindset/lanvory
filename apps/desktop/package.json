@@ -1,0 +1,27 @@
+{
+  "name": "@lanvory/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "src/main/index.cjs",
+  "scripts": {
+    "build": "vite build --base ./",
+    "typecheck": "tsc --noEmit",
+    "start": "electron ."
+  },
+  "dependencies": {
+    "@radix-ui/react-checkbox": "^1.4.1",
+    "@radix-ui/react-select": "^2.4.1",
+    "lucide-react": "^0.468.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "electron": "45.4.1",
+    "typescript": "~5.9.3",
+    "vite": "^7.0.0"
+  }
+}

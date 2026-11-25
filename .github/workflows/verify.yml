@@ -1,0 +1,87 @@
+name: Verify desktop builds and core
+
+'on':
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: macos-verify-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  linux-core:
+    name: Verify Go core on Linux
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: core
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: core/go.mod
+          cache: false
+      - name: Install SQLite and Secret Service development headers
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libsqlite3-dev libsecret-1-dev
+      - run: go vet ./...
+      - run: go test -race ./...
+
+  verify:
+    name: Verify macOS (${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            arch: arm64
+            machine: arm64
+          - runner: macos-15-intel
+            arch: x64
+            machine: x86_64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    steps:
+      - name: Check runner architecture
+        env:
+          EXPECTED_MACHINE: ${{ matrix.machine }}
+        run: test "$(uname -m)" = "$EXPECTED_MACHINE"
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: core/go.mod
+          cache: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - uses: pnpm/action-setup@v6
+      - run: pnpm install --frozen-lockfile
+      - name: Check Go formatting
+        run: |
+          result=$(gofmt -l core)
+          if [ -n "$result" ]; then
+            printf '%s\n' "$result"
+            exit 1
+          fi
+      - name: Verify source and build macOS disk image
+        run: make verify dmg-macos
+      - name: Check mounted disk image and SBOM
+        env:
+          EXPECTED_ARCH: ${{ matrix.arch }}
+        run: |
+          set -- dist/macos/*/Lanvory-*-"$EXPECTED_ARCH".dmg
+          test "$#" -eq 1
+          test -f "$1"
+          sh scripts/smoke-macos-dmg.sh --verify-only "$1"

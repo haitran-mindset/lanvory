@@ -1,0 +1,47 @@
+export type LoginItemState = 'enabled' | 'disabled' | 'requires-approval' | 'not-found';
+
+export interface DesktopApi {
+  copyFingerprint(expected: string): Promise<boolean>;
+  copyPairingDetails(expected: string): Promise<boolean>;
+  identity(retry?: boolean): Promise<unknown>;
+  loginItem(): Promise<LoginItemState | null>;
+  setLoginItem(enabled: boolean): Promise<LoginItemState | null>;
+  pairingAlerts(): Promise<boolean | null>;
+  setPairingAlerts(enabled: boolean): Promise<boolean>;
+  startMinimized(): Promise<boolean | null>;
+  setStartMinimized(enabled: boolean): Promise<boolean>;
+  renameDevice(name: string): Promise<unknown>;
+  setInterfaceApproval(adapter: string, approved: boolean): Promise<boolean>;
+  setListener(action: 'start' | 'stop', adapter?: string, bind?: string, pairing?: boolean): Promise<unknown>;
+  listenerStatus(): Promise<unknown>;
+  copyLanAddress(expected: string): Promise<boolean>;
+  copyNetworkReport(): Promise<boolean>;
+  checkScope(adapter: string, address: string): Promise<unknown>;
+  interfaces(): Promise<unknown>;
+  discover(): Promise<unknown>;
+  resolveDiscovery(adapter: string, name: string): Promise<unknown>;
+  pairingRequests(): Promise<unknown>;
+  startPairing(adapter: string, endpoint: string, pin: string): Promise<'paired' | 'cancelled' | 'failed'>;
+  cancelPairing(): Promise<void>;
+  decidePairing(id: string, approve: boolean, code?: string): Promise<boolean>;
+  matchTrustedPeer(adapter: string, endpoint: string): Promise<string | null>;
+  trustedPeers(): Promise<unknown>;
+  openInbox(): Promise<'opened' | 'missing' | 'failed'>;
+  openNotices(): Promise<'opened' | 'unavailable' | 'failed'>;
+  openTunnelUrl(endpoint: string): Promise<boolean>;
+  permissionActivity(): Promise<unknown>;
+  inboxAccess(): Promise<unknown>;
+  setInboxAccess(fingerprint: string, allowed: boolean, duration?: 'until-revoked' | 'hour' | 'day'): Promise<boolean>;
+  fileSnapshot(): Promise<unknown>;
+  deleteTransferHistory(id: string): Promise<boolean>;
+  serviceSnapshot(): Promise<unknown>;
+  serviceAction(action: string, input: Record<string, string>): Promise<boolean>;
+  decideFile(id: string, allow: boolean): Promise<boolean>;
+  selectFile(): Promise<string | null>;
+  selectDroppedFile(file: File): Promise<string | null>;
+  clearSelectedFile(): Promise<boolean>;
+  sendFile(adapter: string, endpoint: string, pin: string): Promise<'completed' | 'cancelled' | 'failed'>;
+  cancelFileSend(): Promise<void>;
+  trustPeer(adapter: string, endpoint: string, fingerprint: string): Promise<boolean>;
+  revokePeer(fingerprint: string): Promise<boolean>;
+}
