@@ -1,12 +1,25 @@
-import { type FormEvent, useEffect, useState } from 'react';
+import { type FormEvent, useEffect, useRef, useState } from 'react';
 import { SelectField } from '../../components/ui/select';
 import { Checkbox } from '../../components/ui/checkbox';
 
-import { ChevronDown, Copy, Network, RefreshCw, Wifi, SlidersHorizontal, ShieldCheck } from 'lucide-react';
+import { Activity, AlertCircle, ChevronDown, Copy, Info, Loader2, Network, RefreshCw, Wifi, SlidersHorizontal, ShieldCheck } from 'lucide-react';
 import { z } from 'zod';
 import { readInterfaces, type Interfaces } from '../../services/network-interfaces';
 import { PanelHeading } from '../../components/panel-heading';
+import { useNotifications } from '../../components/notifications';
 import { NetworkExplorer } from './explorer';
+import type { PeerRoute } from '../sharing/sharing';
+
+const scanSchema = z.object({
+  services: z.array(z.object({ name: z.string(), interface: z.string(), transport: z.enum(['tcp', 'udp']).optional() })),
+  unavailable: z.boolean().optional(),
+});
+
+const resolutionSchema = z.object({
+  name: z.string(),
+  interface: z.string(),
+  endpoints: z.array(z.string().regex(/^(?:[0-9]{1,3}\.){3}[0-9]{1,3}:[0-9]{1,5}$/)),
+});
 
 const listenerSchema = z.discriminatedUnion('state', [
   z.object({ state: z.literal('local-only') }),
@@ -46,7 +59,13 @@ function readConnectionSettings(): ConnectionSettings {
   }
 }
 
-export function NetworkPanel({ visible, deviceName }: { visible: boolean; deviceName?: string }) {
+export function NetworkPanel({ visible, deviceName, routes, onRoute }: {
+  visible: boolean;
+  deviceName?: string;
+  routes?: Record<string, PeerRoute>;
+  onRoute?(route: PeerRoute): void;
+}) {
+  const detectGeneration = useRef(0);
   const [interfaces, setInterfaces] = useState<Interfaces | null>();
   const [listener, setListener] = useState<z.infer<typeof listenerSchema> | null>();
   const [trustedPeers, setTrustedPeers] = useState<Array<{ fingerprint: string; verifiedAt: string }> | null>();
@@ -57,7 +76,12 @@ export function NetworkPanel({ visible, deviceName }: { visible: boolean; device
   const [checking, setChecking] = useState(false);
   const [checkResult, setCheckResult] = useState('');
   const [pinging, setPinging] = useState(false);
-  const [pingResult, setPingResult] = useState('');
+  const [pingStatus, setPingStatus] = useState<
+    | { state: 'idle' }
+    | { state: 'loading' | 'info'; message: string }
+    | { state: 'success'; endpoint: string; adapter: string; fingerprint: string; latencyMs?: number }
+    | { state: 'error'; message: string }
+  >({ state: 'idle' });
   const [copyingReport, setCopyingReport] = useState(false);
   const [reportMessage, setReportMessage] = useState('');
   const [updating, setUpdating] = useState<string>();
@@ -185,19 +209,64 @@ export function NetworkPanel({ visible, deviceName }: { visible: boolean; device
     const adapter = String(form.get('pingAdapter') ?? '').trim();
     const endpoint = String(form.get('pingEndpoint') ?? '').trim();
     const fingerprint = String(form.get('pingFingerprint') ?? '').trim();
-    if (!adapter || !/^(?:[0-9]{1,3}\.){3}[0-9]{1,5}$/.test(endpoint) || !/^[a-fA-F0-9]{64}$/.test(fingerprint)) {
-      setPingResult('Enter an approved adapter, IPv4:port endpoint, and 64-character device ID.');
+    if (!adapter || !/^(?:[0-9]{1,3}\.){3}[0-9]{1,3}:[0-9]{1,5}$/.test(endpoint) || !/^[a-fA-F0-9]{64}$/.test(fingerprint)) {
+      setPingStatus({ state: 'error', message: 'Enter an approved adapter, IPv4:port endpoint, and 64-character device ID.' });
       return;
     }
     setPinging(true);
-    setPingResult('');
+    setPingStatus({ state: 'loading', message: `Pinging ${endpoint} over ${adapter}…` });
     const result = await window.lanvory.pingPeer(adapter, endpoint, fingerprint).catch(() => ({ verified: false, latencyMs: undefined, error: 'Unable to reach peer.' }));
     if (result.verified) {
-      setPingResult(`Authenticated peer ${endpoint} responded (${result.latencyMs ?? 0} ms RTT).`);
+      onRoute?.({ fingerprint: fingerprint.toLowerCase(), adapter, endpoint });
+      setPingStatus({
+        state: 'success',
+        endpoint,
+        adapter,
+        fingerprint: fingerprint.toLowerCase(),
+        latencyMs: result.latencyMs,
+      });
     } else {
-      setPingResult(result.error ?? 'Peer unreachable or identity verification failed.');
+      setPingStatus({ state: 'error', message: result.error ?? 'Peer unreachable or identity verification failed.' });
     }
     setPinging(false);
+  }
+
+  async function detectPeerEndpoint(fingerprint: string, endpointInput: HTMLInputElement | null) {
+    const normalized = fingerprint.toLowerCase();
+    const generation = ++detectGeneration.current;
+    const saved = routes?.[normalized]?.endpoint;
+    if (saved) {
+      if (endpointInput) endpointInput.value = saved;
+      setPingStatus({ state: 'info', message: `Detected saved endpoint ${saved}.` });
+      return;
+    }
+    setPingStatus({ state: 'loading', message: 'Detecting peer endpoint via LAN discovery…' });
+    const scan = scanSchema.safeParse(await window.lanvory.discover().catch(() => null));
+    if (generation !== detectGeneration.current) return;
+    if (!scan.success || scan.data.unavailable) {
+      setPingStatus({ state: 'info', message: 'Unable to auto-detect endpoint on LAN. Enter the peer address manually.' });
+      return;
+    }
+    for (const service of scan.data.services) {
+      const resolved = resolutionSchema.safeParse(
+        await window.lanvory.resolveDiscovery(service.interface, service.name).catch(() => null),
+      );
+      if (generation !== detectGeneration.current) return;
+      if (!resolved.success) continue;
+      for (const endpoint of resolved.data.endpoints.slice(0, 3)) {
+        const matched = await window.lanvory.matchTrustedPeer(service.interface, endpoint).catch(() => null);
+        if (generation !== detectGeneration.current) return;
+        if (matched?.toLowerCase() === normalized) {
+          if (endpointInput) endpointInput.value = endpoint;
+          onRoute?.({ fingerprint: normalized, adapter: service.interface, endpoint });
+          setPingStatus({ state: 'info', message: `Detected peer endpoint ${endpoint} on ${service.interface}.` });
+          return;
+        }
+      }
+    }
+    if (generation === detectGeneration.current) {
+      setPingStatus({ state: 'info', message: 'Could not auto-detect endpoint via mDNS. Enter the peer LAN address manually.' });
+    }
   }
 
   async function update(adapter: string, approved: boolean) {
@@ -275,11 +344,21 @@ export function NetworkPanel({ visible, deviceName }: { visible: boolean; device
           const scopeDetails = document.querySelector<HTMLDetailsElement>('[aria-labelledby=scope-heading]');
           if (scopeDetails) scopeDetails.open = true;
           const fpInput = document.querySelector<HTMLInputElement>('input[name="pingFingerprint"]');
-          if (fpInput) {
-            fpInput.value = fingerprint;
-            fpInput.scrollIntoView({ behavior: 'smooth' });
-            fpInput.focus();
-          }
+          const endpointInput = document.querySelector<HTMLInputElement>('input[name="pingEndpoint"]');
+          if (fpInput) fpInput.value = fingerprint;
+          if (endpointInput) endpointInput.value = '';
+          void detectPeerEndpoint(fingerprint, endpointInput);
+          requestAnimationFrame(() => {
+            const target = endpointInput ?? fpInput;
+            const container = target?.closest<HTMLElement>('.page-scroll');
+            if (target && container) {
+              const containerRect = container.getBoundingClientRect();
+              const targetRect = target.getBoundingClientRect();
+              const top = container.scrollTop + (targetRect.top - containerRect.top) - (containerRect.height / 2) + (targetRect.height / 2);
+              container.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
+            }
+            target?.focus({ preventScroll: true });
+          });
         }}
       />
       <details className="operation-card operation-disclosure network-advanced">
@@ -361,12 +440,64 @@ export function NetworkPanel({ visible, deviceName }: { visible: boolean; device
                 disabled={pinging || !approvedAdapters?.length}
                 options={(approvedAdapters ?? []).map((nic) => ({ value: nic.name, label: nic.name }))} />
               <label>Peer endpoint<input name="pingEndpoint" required maxLength={21} placeholder="192.168.1.42:43110" disabled={pinging} /></label>
-              <label>Peer device ID<input name="pingFingerprint" required maxLength={64} placeholder="64-character hex fingerprint" disabled={pinging} /></label>
+              <label>Peer device ID<input name="pingFingerprint" required maxLength={64} placeholder="64-character hex fingerprint" disabled={pinging}
+                onChange={(event) => {
+                  const fp = event.currentTarget.value.trim().toLowerCase();
+                  if (/^[a-f0-9]{64}$/.test(fp)) {
+                    const endpointInput = event.currentTarget.form?.elements.namedItem('pingEndpoint') as HTMLInputElement | null;
+                    if (endpointInput && !endpointInput.value.trim()) {
+                      void detectPeerEndpoint(fp, endpointInput);
+                    }
+                  }
+                }} /></label>
               <button type="submit" className="refresh" disabled={pinging || updating !== undefined || !approvedAdapters?.length}>
                 {pinging ? 'Pinging…' : 'Ping peer'}
               </button>
             </form>
-            <p className="ping-result" role="status">{pingResult}</p>
+            {pingStatus.state === 'success' && (
+              <div className="ping-result-card is-success" role="status">
+                <div className="ping-result-icon">
+                  <ShieldCheck size={18} aria-hidden="true" />
+                </div>
+                <div className="ping-result-body">
+                  <div className="ping-result-header">
+                    <strong>Peer authenticated &amp; reachable</strong>
+                    <span className="ping-latency-pill">
+                      <Activity size={12} aria-hidden="true" />
+                      {pingStatus.latencyMs ?? 0} ms RTT
+                    </span>
+                  </div>
+                  <div className="ping-result-meta">
+                    <span>Endpoint <code>{pingStatus.endpoint}</code></span>
+                    <span>Adapter <code>{pingStatus.adapter}</code></span>
+                    <span>ID <code>{pingStatus.fingerprint.slice(0, 8)}…{pingStatus.fingerprint.slice(-6)}</code></span>
+                  </div>
+                </div>
+              </div>
+            )}
+            {pingStatus.state === 'error' && (
+              <div className="ping-result-card is-error" role="status">
+                <div className="ping-result-icon">
+                  <AlertCircle size={18} aria-hidden="true" />
+                </div>
+                <div className="ping-result-body">
+                  <strong>Ping failed</strong>
+                  <p>{pingStatus.message}</p>
+                </div>
+              </div>
+            )}
+            {(pingStatus.state === 'loading' || pingStatus.state === 'info') && (
+              <div className="ping-result-card is-info" role="status">
+                <div className="ping-result-icon">
+                  {pingStatus.state === 'loading'
+                    ? <Loader2 size={17} className="spinning" aria-hidden="true" />
+                    : <Info size={17} aria-hidden="true" />}
+                </div>
+                <div className="ping-result-body">
+                  <p>{pingStatus.message}</p>
+                </div>
+              </div>
+            )}
           </div>
         </>}
       </details>

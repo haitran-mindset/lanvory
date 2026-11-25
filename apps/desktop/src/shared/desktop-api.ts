@@ -61,6 +61,7 @@ export interface DesktopApi {
   scanSyncFolder(id: string): Promise<unknown>;
   setSyncFolderPaused(id: string, paused: boolean): Promise<unknown>;
   setSyncAccess(fingerprint: string, folderId: string, allowed: boolean): Promise<boolean>;
+  syncWithPeer(id: string, adapter: string, endpoint: string, pin: string, peerLabel?: string): Promise<unknown>;
   trustPeer(adapter: string, endpoint: string, fingerprint: string): Promise<boolean>;
   revokePeer(fingerprint: string): Promise<boolean>;
   onNavigate(callback: (page: 'Devices' | 'Sharing' | 'Sync' | 'Services' | 'Network' | 'Settings') => void): () => void;

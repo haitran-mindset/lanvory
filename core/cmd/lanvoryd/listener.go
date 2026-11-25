@@ -23,16 +23,18 @@ import (
 	"lanvory.local/core/internal/peer"
 	"lanvory.local/core/internal/permissions"
 	"lanvory.local/core/internal/storage"
+	syncengine "lanvory.local/core/internal/sync"
 )
 
 type lanListener struct {
-	parent   context.Context
-	dir      string
-	device   local.Device
-	key      ed25519.PrivateKey
+	parent    context.Context
+	dir       string
+	device    local.Device
+	key       ed25519.PrivateKey
 	receiver  *drop.Receiver
 	pairs     *pairing.Manager
 	clipboard *clipboard.Buffer
+	syncMgr   *syncengine.Manager
 
 	mu      sync.Mutex
 	current local.ListenerStatus
@@ -115,6 +117,16 @@ func (l *lanListener) start(adapter string, bind netip.AddrPort, advertise, enab
 				Fingerprint: fingerprint,
 				Capability:  permissions.ClipboardShare,
 				Resource:    "clipboard",
+			}, time.Now())
+			return err == nil && allowed
+		})
+	}
+	if l.syncMgr != nil {
+		tcp.EnableSync(l.syncMgr, func(fingerprint, folderID string) bool {
+			allowed, err := storage.HasGrant(l.dir, l.device.ID, storage.Grant{
+				Fingerprint: fingerprint,
+				Capability:  permissions.FolderSync,
+				Resource:    folderID,
 			}, time.Now())
 			return err == nil && allowed
 		})

@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 import { pairedDeviceName, readPairedNames } from "../../services/paired-names";
 import { PanelHeading } from "../../components/panel-heading";
+import { useNotifications } from "../../components/notifications";
 import { InboxAccess } from "./inbox-access";
 import { ClipboardCard } from "./clipboard-card";
 
@@ -272,6 +273,7 @@ export function Sharing({
   onPendingFilesChange(count: number): void;
   onRoute?(route: PeerRoute): void;
 }) {
+  const { notify } = useNotifications();
   const [recipients, setRecipients] = useState<z.infer<
     typeof recipientSchema
   > | null>();
@@ -521,6 +523,12 @@ export function Sharing({
             ? `The peer confirmed all ${count} files were received and verified.`
             : "The peer confirmed the file was received and verified.",
         );
+        notify({
+          category: "sharing",
+          tone: "success",
+          title: count > 1 ? `Sent ${count} files` : "File sent",
+          body: "Peer verified integrity and receipt.",
+        });
       } else {
         const remaining = await window.lanvory
           .getSelectedFiles?.()
@@ -554,6 +562,11 @@ export function Sharing({
             offers: previous.offers.filter((offer) => offer.id !== id),
           },
       );
+      notify({
+        category: "sharing",
+        tone: allow ? "success" : "info",
+        title: allow ? "File offer approved" : "File offer declined",
+      });
     }
     setOfferMessage(
       accepted

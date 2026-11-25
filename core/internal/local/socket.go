@@ -189,7 +189,7 @@ func handlerWithReceiverAndVerifier(device Device, dir string, receiver *drop.Re
 	registerPairing(mux, device, dir, key, pairs)
 	registerProfile(mux, dir, device)
 	registerClipboard(mux, device, dir, clipboard.NewBuffer(), key)
-	registerSync(mux, device, dir, syncengine.NewManager())
+	registerSync(mux, device, dir, syncengine.NewManager(), key)
 	mux.HandleFunc("GET "+networkRoute, func(w http.ResponseWriter, r *http.Request) {
 		interfaces, err := approvedInventory(dir)
 		if err != nil {
@@ -712,6 +712,12 @@ func requestLocalTimedBody(ctx context.Context, dir, method, route string, body 
 			return errors.New("peer verification timed out")
 		case http.StatusBadGateway:
 			return errors.New("unable to establish the peer TLS connection")
+		}
+	}
+	if strings.HasPrefix(path, syncRoute+"/") && strings.HasSuffix(path, "/run") && response.StatusCode >= 400 {
+		raw, _ := io.ReadAll(io.LimitReader(response.Body, 512))
+		if msg := strings.TrimSpace(string(raw)); msg != "" {
+			return errors.New(msg)
 		}
 	}
 	if response.StatusCode == http.StatusConflict {

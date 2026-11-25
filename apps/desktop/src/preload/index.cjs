@@ -68,6 +68,7 @@ contextBridge.exposeInMainWorld('lanvory', {
   scanSyncFolder: (id) => ipcRenderer.invoke('lanvory:sync-scan', id),
   setSyncFolderPaused: (id, paused) => ipcRenderer.invoke('lanvory:sync-pause', id, paused),
   setSyncAccess: (fingerprint, folderId, allowed) => ipcRenderer.invoke('lanvory:set-sync-access', fingerprint, folderId, allowed),
+  syncWithPeer: (id, adapter, endpoint, pin, peerLabel) => ipcRenderer.invoke('lanvory:sync-run', id, adapter, endpoint, pin, peerLabel),
   identity: (retry) => ipcRenderer.invoke('lanvory:identity', retry === true),
   onNavigate: (callback) => {
     const listener = (_event, page) => {

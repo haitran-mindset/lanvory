@@ -1,9 +1,12 @@
 import { type FormEvent, useEffect, useState } from 'react';
-import { AlertCircle, CheckCircle2, FolderSync, Info, Pause, Play, Plus, RefreshCw, Trash2 } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Folder, FolderSync, Info, Pause, Play, Plus, RefreshCw, Trash2 } from 'lucide-react';
 import { z } from 'zod';
 import { PanelHeading } from '../../components/panel-heading';
+import { connectionError, PeerConnectionFields } from '../../components/peer-connection-fields';
 import { SelectField } from '../../components/ui/select';
+import { useNotifications } from '../../components/notifications';
 import { pairedDeviceName, readPairedNames } from '../../services/paired-names';
+import type { PeerRoute } from '../sharing/sharing';
 
 const folderSchema = z.object({
   id: z.string(),
@@ -35,6 +38,21 @@ const folderSchema = z.object({
 });
 
 const foldersSchema = z.array(folderSchema);
+const syncResultSchema = z.object({
+  folderId: z.string(),
+  downloaded: z.number().nonnegative(),
+  uploaded: z.number().nonnegative(),
+  conflicts: z.number().nonnegative(),
+  skipped: z.number().nonnegative(),
+  folder: folderSchema,
+});
+const grantSchema = z.object({
+  fingerprint: z.string(),
+  capability: z.string(),
+  resource: z.string(),
+  inactive: z.boolean().optional(),
+});
+type SyncGrant = z.infer<typeof grantSchema>;
 type SyncFolder = z.infer<typeof folderSchema>;
 
 const modeOptions = [
@@ -62,10 +80,18 @@ function SyncBanner({ feedback }: { feedback: SyncFeedback }) {
   );
 }
 
-export function SyncPanel({ visible, ownerId }: { visible: boolean; ownerId?: string }) {
+export function SyncPanel({ visible, ownerId, routes, onRoute }: {
+  visible: boolean;
+  ownerId?: string;
+  routes?: Record<string, PeerRoute>;
+  onRoute?(route: PeerRoute): void;
+}) {
+  const { notify } = useNotifications();
   const [folders, setFolders] = useState<SyncFolder[] | null>();
   const [peers, setPeers] = useState<Array<{ fingerprint: string }>>([]);
+  const [grants, setGrants] = useState<SyncGrant[]>([]);
   const [selectedPeerByFolder, setSelectedPeerByFolder] = useState<Record<string, string>>({});
+  const [connectionReadyByFolder, setConnectionReadyByFolder] = useState<Record<string, boolean>>({});
   const [pickedPath, setPickedPath] = useState('');
   const [mode, setMode] = useState<'send-only' | 'receive-only' | 'bidirectional'>('bidirectional');
   const [busy, setBusy] = useState(false);
@@ -74,14 +100,17 @@ export function SyncPanel({ visible, ownerId }: { visible: boolean; ownerId?: st
   const names = ownerId ? readPairedNames(ownerId) : {};
 
   async function refresh() {
-    const [rawFolders, rawPeers] = await Promise.all([
+    const [rawFolders, rawPeers, rawServiceSnap] = await Promise.all([
       window.lanvory.syncFolders().catch(() => null),
       window.lanvory.trustedPeers().catch(() => null),
+      window.lanvory.serviceSnapshot().catch(() => null),
     ]);
     const parsed = foldersSchema.safeParse(rawFolders);
     setFolders(parsed.success ? parsed.data : null);
     const parsedPeers = z.array(z.object({ fingerprint: z.string() })).safeParse(rawPeers);
     if (parsedPeers.success) setPeers(parsedPeers.data);
+    const parsedGrants = z.object({ grants: z.array(grantSchema) }).safeParse(rawServiceSnap);
+    if (parsedGrants.success) setGrants(parsedGrants.data.grants);
   }
 
   useEffect(() => {
@@ -114,6 +143,12 @@ export function SyncPanel({ visible, ownerId }: { visible: boolean; ownerId?: st
         await refresh();
         setAddMessage({ tone: 'success', text: `Registered sync folder “${created.data.id}”.` });
         setListMessage(null);
+        notify({
+          category: 'sync',
+          tone: 'success',
+          title: `Sync folder added: ${created.data.id}`,
+          body: created.data.path,
+        });
       } else {
         const errText = raw && typeof raw === 'object' && 'error' in raw && typeof raw.error === 'string'
           ? raw.error
@@ -132,10 +167,53 @@ export function SyncPanel({ visible, ownerId }: { visible: boolean; ownerId?: st
     if (scanned.success) {
       setFolders((prev) => prev?.map((f) => (f.id === id ? scanned.data : f)) ?? [scanned.data]);
       setListMessage({ tone: 'success', text: `Scanned “${id}”: ${scanned.data.fileCount} files indexed (${formatBytes(scanned.data.totalBytes)}).` });
+      notify({
+        category: 'sync',
+        tone: 'success',
+        title: `Sync scan finished: ${id}`,
+        body: `${scanned.data.fileCount} files indexed (${formatBytes(scanned.data.totalBytes)}).`,
+      });
     } else {
       setListMessage({ tone: 'error', text: `Unable to scan “${id}”.` });
     }
     setBusy(false);
+  }
+
+  async function syncWithPeer(event: FormEvent<HTMLFormElement>, folderId: string) {
+    event.preventDefault();
+    const fp = selectedPeerByFolder[folderId];
+    if (!fp) return;
+    const form = new FormData(event.currentTarget);
+    const adapter = String(form.get('adapter') ?? '').trim();
+    const endpoint = String(form.get('endpoint') ?? '').trim();
+    const validationErr = await connectionError(adapter, endpoint);
+    if (validationErr) {
+      setListMessage({ tone: 'error', text: validationErr });
+      return;
+    }
+    setBusy(true);
+    setListMessage({ tone: 'info', text: `Syncing “${folderId}” with ${pairedDeviceName(fp, names)}…` });
+    try {
+      const raw = await window.lanvory
+        .syncWithPeer(folderId, adapter, endpoint, fp, pairedDeviceName(fp, names))
+        .catch(() => null);
+      const parsed = syncResultSchema.safeParse(raw);
+      if (parsed.success) {
+        onRoute?.({ fingerprint: fp, adapter, endpoint });
+        setFolders((prev) => prev?.map((f) => (f.id === folderId ? parsed.data.folder : f)) ?? [parsed.data.folder]);
+        const { downloaded, uploaded, conflicts } = parsed.data;
+        const summary = `Synced “${folderId}”: ${downloaded} downloaded, ${uploaded} uploaded${conflicts > 0 ? `, ${conflicts} conflict(s) preserved` : ''}.`;
+        setListMessage({ tone: 'success', text: summary });
+        notify({ category: 'sync', tone: 'success', title: `Folder synced: ${folderId}`, body: summary });
+      } else {
+        const errText = raw && typeof raw === 'object' && 'error' in raw && typeof raw.error === 'string'
+          ? raw.error
+          : `Unable to sync “${folderId}” with peer.`;
+        setListMessage({ tone: 'error', text: errText });
+      }
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function togglePause(folder: SyncFolder) {
@@ -239,8 +317,8 @@ export function SyncPanel({ visible, ownerId }: { visible: boolean; ownerId?: st
                       </div>
                     </div>
                     <div className="sync-folder-actions">
-                      <button type="button" className="refresh" disabled={busy} onClick={() => void scanFolder(folder.id)}>
-                        <RefreshCw size={14} aria-hidden="true" />
+                      <button type="button" className="refresh sync-scan-btn" disabled={busy} onClick={() => void scanFolder(folder.id)}>
+                        <RefreshCw size={13} aria-hidden="true" />
                         <span>Scan</span>
                       </button>
                       <button
@@ -255,7 +333,7 @@ export function SyncPanel({ visible, ownerId }: { visible: boolean; ownerId?: st
                       </button>
                       <button
                         type="button"
-                        className="refresh sync-icon-btn"
+                        className="refresh sync-icon-btn sync-remove-btn"
                         disabled={busy}
                         title="Remove folder"
                         aria-label={`Remove ${folder.id}`}
@@ -265,9 +343,12 @@ export function SyncPanel({ visible, ownerId }: { visible: boolean; ownerId?: st
                       </button>
                     </div>
                   </div>
-                  <code className="sync-folder-path-pill" title={folder.path}>
-                    {folder.path}
-                  </code>
+                  <div className="sync-folder-path-row">
+                    <Folder size={13} aria-hidden="true" />
+                    <code className="sync-folder-path-pill" title={folder.path}>
+                      {folder.path}
+                    </code>
+                  </div>
                   <div className="sync-folder-meta">
                     <span>{folder.fileCount} {folder.fileCount === 1 ? 'file' : 'files'}</span>
                     <span>·</span>
@@ -292,63 +373,95 @@ export function SyncPanel({ visible, ownerId }: { visible: boolean; ownerId?: st
                       </ul>
                     </details>
                   )}
-                  {peers.length > 0 && (
-                    <div className="sync-peer-access">
-                      <SelectField
-                        label="Peer access"
-                        name={`syncPeer-${folder.id}`}
-                        placeholder="Select paired peer"
-                        value={selectedPeerByFolder[folder.id] ?? ''}
-                        disabled={busy}
-                        onValueChange={(val) => setSelectedPeerByFolder((prev) => ({ ...prev, [folder.id]: val }))}
-                        options={peers.map((p) => ({ value: p.fingerprint, label: pairedDeviceName(p.fingerprint, names) }))}
-                      />
-                      <button
-                        type="button"
-                        className="refresh"
-                        disabled={busy || !selectedPeerByFolder[folder.id]}
-                        onClick={() => {
-                          const fp = selectedPeerByFolder[folder.id];
-                          if (!fp) return;
-                          setBusy(true);
-                          void window.lanvory
-                            .setSyncAccess(fp, folder.id, true)
-                            .then((ok) => {
-                              setListMessage(
-                                ok
-                                  ? { tone: 'success', text: `Granted sync access on “${folder.id}” to ${pairedDeviceName(fp, names)}.` }
-                                  : { tone: 'error', text: 'Unable to grant folder sync permission.' },
-                              );
-                            })
-                            .finally(() => setBusy(false));
-                        }}
-                      >
-                        Allow
-                      </button>
-                      <button
-                        type="button"
-                        className="refresh"
-                        disabled={busy || !selectedPeerByFolder[folder.id]}
-                        onClick={() => {
-                          const fp = selectedPeerByFolder[folder.id];
-                          if (!fp) return;
-                          setBusy(true);
-                          void window.lanvory
-                            .setSyncAccess(fp, folder.id, false)
-                            .then((ok) => {
-                              setListMessage(
-                                ok
-                                  ? { tone: 'info', text: `Revoked sync access on “${folder.id}” for ${pairedDeviceName(fp, names)}.` }
-                                  : { tone: 'error', text: 'Unable to revoke folder sync permission.' },
-                              );
-                            })
-                            .finally(() => setBusy(false));
-                        }}
-                      >
-                        Revoke
-                      </button>
-                    </div>
-                  )}
+                  {peers.length > 0 && (() => {
+                    const selectedPeer = selectedPeerByFolder[folder.id] ?? '';
+                    const isAllowed = Boolean(selectedPeer) && grants.some(
+                      (g) => g.fingerprint === selectedPeer && g.capability === 'folder-sync' && g.resource === folder.id && !g.inactive,
+                    );
+                    return (
+                    <form className="sync-peer-form" onSubmit={(event) => void syncWithPeer(event, folder.id)}>
+                      <div className="sync-peer-access">
+                        <SelectField
+                          label="Peer access & sync"
+                          name={`syncPeer-${folder.id}`}
+                          placeholder="Select paired peer"
+                          value={selectedPeer}
+                          disabled={busy}
+                          onValueChange={(val) => setSelectedPeerByFolder((prev) => ({ ...prev, [folder.id]: val }))}
+                          options={peers.map((p) => ({ value: p.fingerprint, label: pairedDeviceName(p.fingerprint, names) }))}
+                        />
+                        {selectedPeer && (
+                          <div className="sync-peer-access-buttons">
+                            {!isAllowed ? (
+                              <button
+                                type="button"
+                                className="primary sync-allow-btn"
+                                disabled={busy}
+                                onClick={() => {
+                                  setBusy(true);
+                                  void window.lanvory
+                                    .setSyncAccess(selectedPeer, folder.id, true)
+                                    .then(async (ok) => {
+                                      if (ok) await refresh();
+                                      setListMessage(
+                                        ok
+                                          ? { tone: 'success', text: `Granted sync access on “${folder.id}” to ${pairedDeviceName(selectedPeer, names)}.` }
+                                          : { tone: 'error', text: 'Unable to grant folder sync permission.' },
+                                      );
+                                    })
+                                    .finally(() => setBusy(false));
+                                }}
+                              >
+                                Allow
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                className="refresh sync-revoke-btn"
+                                disabled={busy}
+                                onClick={() => {
+                                  setBusy(true);
+                                  void window.lanvory
+                                    .setSyncAccess(selectedPeer, folder.id, false)
+                                    .then(async (ok) => {
+                                      if (ok) await refresh();
+                                      setListMessage(
+                                        ok
+                                          ? { tone: 'info', text: `Revoked sync access on “${folder.id}” for ${pairedDeviceName(selectedPeer, names)}.` }
+                                          : { tone: 'error', text: 'Unable to revoke folder sync permission.' },
+                                      );
+                                    })
+                                    .finally(() => setBusy(false));
+                                }}
+                              >
+                                Revoke
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                      {selectedPeer && isAllowed && (
+                        <div className="trust-form sync-peer-connect" key={selectedPeer}>
+                          <PeerConnectionFields
+                            suggestedEndpoint={routes?.[selectedPeer]?.endpoint}
+                            endpointLabel="Peer Lanvory address"
+                            adapterLabel="Network adapter"
+                            disabled={busy}
+                            onReady={(ready) => setConnectionReadyByFolder((prev) => ({ ...prev, [folder.id]: ready }))}
+                          />
+                          <button
+                            type="submit"
+                            className="primary sync-now-btn"
+                            disabled={busy || folder.paused || !connectionReadyByFolder[folder.id]}
+                          >
+                            <RefreshCw size={14} aria-hidden="true" />
+                            <span>Sync now</span>
+                          </button>
+                        </div>
+                      )}
+                    </form>
+                    );
+                  })()}
                 </li>
               ))}
             </ul>

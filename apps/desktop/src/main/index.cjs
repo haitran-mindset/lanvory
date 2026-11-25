@@ -139,6 +139,7 @@ function readPairingRequests() {
 }
 
 let pairingNotification;
+let notifiedOffers = new Set();
 const alertPairing = createPairingAlerts(() => {
   pairingNotification?.close();
   const notice = new Notification({
@@ -724,7 +725,7 @@ if (!app.requestSingleInstanceLock()) {
     ipcMain.handle('lanvory:ping-peer', async (event, adapter, endpoint, pin) => {
       assertTrustedFrame(event);
       if (typeof adapter !== 'string' || !/^[a-zA-Z0-9_.-]{1,32}$/.test(adapter)
-          || typeof endpoint !== 'string' || !/^(?:[0-9]{1,3}\.){3}[0-9]{1,5}$/.test(endpoint)
+          || typeof endpoint !== 'string' || !/^(?:[0-9]{1,3}\.){3}[0-9]{1,3}:[0-9]{1,5}$/.test(endpoint)
           || typeof pin !== 'string' || !/^[a-fA-F0-9]{64}$/.test(pin)) {
         return { verified: false, error: 'Invalid adapter, endpoint, or device ID.' };
       }
@@ -763,7 +764,7 @@ if (!app.requestSingleInstanceLock()) {
     ipcMain.handle('lanvory:clipboard-send', async (event, adapter, endpoint, pin, text) => {
       assertTrustedFrame(event);
       if (typeof adapter !== 'string' || !/^[a-zA-Z0-9_.-]{1,32}$/.test(adapter)
-          || typeof endpoint !== 'string' || !/^(?:[0-9]{1,3}\.){3}[0-9]{1,5}$/.test(endpoint)
+          || typeof endpoint !== 'string' || !/^(?:[0-9]{1,3}\.){3}[0-9]{1,3}:[0-9]{1,5}$/.test(endpoint)
           || typeof pin !== 'string' || !/^[a-fA-F0-9]{64}$/.test(pin)) {
         return { ok: false, error: 'Invalid adapter, endpoint, or peer ID.' };
       }
@@ -843,6 +844,28 @@ if (!app.requestSingleInstanceLock()) {
       return exec(path.join(bundle, 'lanvory'), permissionArgs(allowed ? 'grant' : 'revoke', fingerprint, 'folder-sync', folderId, 'until-revoked'),
         { timeout: 4000, maxBuffer: 4096 }).then(() => true, () => false);
     });
+    ipcMain.handle('lanvory:sync-run', async (event, id, adapter, endpoint, pin, peerLabel) => {
+      assertTrustedFrame(event);
+      if (typeof id !== 'string' || !/^[a-z0-9][a-z0-9_-]{0,63}$/.test(id)
+          || typeof adapter !== 'string' || !/^[a-zA-Z0-9_.-]{1,32}$/.test(adapter)
+          || typeof endpoint !== 'string' || !/^(?:[0-9]{1,3}\.){3}[0-9]{1,3}:[0-9]{1,5}$/.test(endpoint)
+          || typeof pin !== 'string' || !/^[a-fA-F0-9]{64}$/.test(pin)) {
+        return { error: 'Invalid folder ID, adapter, endpoint, or device ID.' };
+      }
+      const args = ['sync', 'run', id, adapter, endpoint, pin];
+      if (typeof peerLabel === 'string' && peerLabel.trim()) {
+        args.push(peerLabel.trim().slice(0, 48));
+      }
+      try {
+        const { stdout } = await exec(path.join(bundle, 'lanvory'), args, { timeout: 125000, maxBuffer: 524288 });
+        return JSON.parse(stdout);
+      } catch (err) {
+        const detail = typeof err?.stderr === 'string' && err.stderr.trim()
+          ? err.stderr.trim().replace(/^lanvory:\s*/, '')
+          : 'Unable to sync folder with peer.';
+        return { error: detail };
+      }
+    });
     ipcMain.handle('lanvory:service-snapshot', async (event) => {
       assertTrustedFrame(event);
       const commands = [['services', 'list'], ['tunnels', 'list'], ['permissions', 'list'], ['peer', 'trusted']];
@@ -900,6 +923,23 @@ if (!app.requestSingleInstanceLock()) {
           void readPairingRequests().then((requests) => {
             if (!stopping && !window?.isVisible() && pairingAlertsEnabled()) alertPairing(requests);
           });
+          void exec(path.join(bundle, 'lanvory'), ['files', 'incoming'], { timeout: 3000, maxBuffer: 16384 })
+            .then(({ stdout }) => JSON.parse(stdout), () => null)
+            .then((offers) => {
+              if (stopping || window?.isVisible() || !Array.isArray(offers) || !pairingAlertsEnabled()) return;
+              const unseen = offers.filter((offer) => offer?.id && !notifiedOffers.has(offer.id));
+              if (!unseen.length) return;
+              for (const offer of unseen) notifiedOffers.add(offer.id);
+              const notice = new Notification({
+                title: unseen.length === 1 ? `File request: ${unseen[0].name}` : `${unseen.length} incoming file requests`,
+                body: 'Open Lanvory to approve or decline.',
+              });
+              notice.once('click', () => {
+                openWindow();
+                window?.webContents.send('lanvory:navigate', 'Sharing');
+              });
+              notice.show();
+            });
         }
       }, 8000);
     }

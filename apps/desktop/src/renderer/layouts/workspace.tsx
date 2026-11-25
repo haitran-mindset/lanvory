@@ -10,6 +10,8 @@ import {
   Settings,
 } from "lucide-react";
 
+import { NotificationBell } from "../components/notifications";
+
 const navigation = [
   ["Devices", Monitor],
   ["Sharing", Layers],
@@ -94,6 +96,7 @@ export function Workspace({
         <div className="workspace-header">
           {onOpenPalette && (
             <div className="command-bar-row">
+              <div className="command-bar-spacer" aria-hidden="true" />
               <button
                 type="button"
                 className="header-palette-btn"
@@ -107,6 +110,9 @@ export function Workspace({
                 </span>
                 <kbd>⌘K</kbd>
               </button>
+              <div className="command-bar-actions">
+                <NotificationBell onNavigate={onNavigate} />
+              </div>
             </div>
           )}
           <header className="workspace-topbar">

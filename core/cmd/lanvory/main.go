@@ -85,7 +85,8 @@ func main() {
 		len(arguments) == 6 && arguments[0] == "clipboard" && arguments[1] == "send",
 		slices.Equal(arguments, []string{"sync", "list"}),
 		(len(arguments) == 4 || len(arguments) == 5) && arguments[0] == "sync" && arguments[1] == "add",
-		len(arguments) == 3 && arguments[0] == "sync" && (arguments[1] == "remove" || arguments[1] == "scan" || arguments[1] == "pause" || arguments[1] == "resume"):
+		len(arguments) == 3 && arguments[0] == "sync" && (arguments[1] == "remove" || arguments[1] == "scan" || arguments[1] == "pause" || arguments[1] == "resume"),
+		(len(arguments) == 6 || len(arguments) == 7) && arguments[0] == "sync" && arguments[1] == "run":
 		if err := run(arguments); err != nil {
 			fmt.Fprintln(os.Stderr, "lanvory:", err)
 			os.Exit(1)
@@ -190,6 +191,16 @@ func run(arguments []string) error {
 				return err
 			}
 			return output.Encode(folder)
+		case "run":
+			peerLabel := ""
+			if len(arguments) == 7 {
+				peerLabel = arguments[6]
+			}
+			result, err := local.SyncFolderWithPeer(ctx, dir, arguments[2], arguments[3], arguments[4], arguments[5], peerLabel)
+			if err != nil {
+				return err
+			}
+			return output.Encode(result)
 		}
 	}
 	if arguments[0] == "services" {

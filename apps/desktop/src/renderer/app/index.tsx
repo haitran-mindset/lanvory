@@ -10,6 +10,7 @@ import { NetworkPanel } from '../features/network/network';
 import { SyncPanel } from '../features/sync/sync';
 import { Workspace, type Page } from '../layouts/workspace';
 import { CommandPalette, type PaletteCommand } from '../components/command-palette';
+import { NotificationsProvider, useNotifications } from '../components/notifications';
 import { DevicesPage } from '../pages/devices';
 import { identitySchema, readIdentity, type IdentityResponse } from '../services/identity';
 import '../styles/app.css';
@@ -78,11 +79,51 @@ function savePreference(key: string, value: string) {
 
 const trustedRows = z.array(z.object({ fingerprint: z.string() }));
 const serviceRows = z.object({ services: z.array(z.unknown()) });
-const incomingRows = z.object({ offers: z.array(z.unknown()) });
+const incomingRows = z.object({
+  offers: z.array(z.object({ id: z.string(), name: z.string(), size: z.number().nonnegative() }).passthrough()),
+  transfers: z.array(z.object({ id: z.string(), name: z.string(), state: z.string(), direction: z.string() }).passthrough()).optional(),
+});
 const transferRows = z.object({ transfers: z.array(z.object({ state: z.string() })) });
+const pairingRows = z.array(z.object({ id: z.string(), direction: z.string() }).passthrough());
+const clipboardRow = z.object({
+  enabled: z.boolean(),
+  latest: z.object({ sha256: z.string(), text: z.string() }).optional(),
+});
 const listenerRow = z.object({ state: z.literal('listening'), pairing: z.boolean().optional() });
 
+function formatBytesShort(value: number) {
+  if (value < 1024) return `${value} B`;
+  if (value < 1024 ** 2) return `${(value / 1024).toFixed(1)} KiB`;
+  return `${(value / 1024 ** 2).toFixed(1)} MiB`;
+}
+
 function App() {
+  const [page, setPage] = useState<Page>('Devices');
+  const [openedSharing, setOpenedSharing] = useState(false);
+
+  function navigate(next: Page) {
+    if (next === 'Sharing') setOpenedSharing(true);
+    setPage(next);
+  }
+
+  return (
+    <NotificationsProvider onNavigate={navigate}>
+      <AppContent page={page} openedSharing={openedSharing} navigate={navigate} />
+    </NotificationsProvider>
+  );
+}
+
+function AppContent({
+  page,
+  openedSharing,
+  navigate,
+}: {
+  page: Page;
+  openedSharing: boolean;
+  navigate(next: Page): void;
+}) {
+  const { notify } = useNotifications();
+  const seededTransfers = useRef<Set<string> | null>(null);
   const [textSize, setTextSize] = useState(readTextSize);
   const [theme, setTheme] = useState(readTheme);
   const [density, setDensity] = useState(readDensity);
@@ -145,8 +186,6 @@ function App() {
   }
   const [pairingTarget, setPairingTarget] = useState<{ revision: number; target?: PairingTarget }>({ revision: 0 });
   const [trustRevision, setTrustRevision] = useState(0);
-  const [openedSharing, setOpenedSharing] = useState(false);
-  const [page, setPage] = useState<Page>('Devices');
   const [paletteOpen, setPaletteOpen] = useState(false);
 
   useEffect(() => {
@@ -195,9 +234,8 @@ function App() {
   }, []);
 
   useEffect(() => window.lanvory.onNavigate?.((target) => {
-    if (target === 'Sharing') setOpenedSharing(true);
-    setPage(target);
-  }), []);
+    navigate(target);
+  }), [navigate]);
 
   useEffect(() => {
     if (!windowVisible) return;
@@ -243,6 +281,43 @@ function App() {
       setListener(listenerRow.safeParse(listenerStatus).data);
       const fileActivity = page === 'Sharing'
         ? undefined : window.lanvory.fileSnapshot().catch(() => null);
+      const [pairingList, clipboardInfo] = await Promise.all([
+        window.lanvory.pairingRequests().catch(() => null),
+        window.lanvory.clipboardState().catch(() => null),
+      ]);
+      if (!active) return;
+
+      const parsedPairing = pairingRows.safeParse(pairingList);
+      if (parsedPairing.success) {
+        for (const req of parsedPairing.data) {
+          if (req.direction === 'incoming') {
+            notify({
+              category: 'pairing',
+              tone: 'warning',
+              title: 'Incoming pairing request',
+              body: 'Compare the verification code on both devices to pair.',
+              targetPage: 'Devices',
+              actionLabel: 'Review pairing',
+              dedupeKey: `pairing:${req.id}`,
+            });
+          }
+        }
+      }
+
+      const parsedClipboard = clipboardRow.safeParse(clipboardInfo);
+      if (parsedClipboard.success && parsedClipboard.data.enabled && parsedClipboard.data.latest) {
+        const snippet = parsedClipboard.data.latest;
+        notify({
+          category: 'clipboard',
+          tone: 'info',
+          title: 'Shared clipboard updated',
+          body: snippet.text.length > 60 ? `${snippet.text.slice(0, 60)}…` : snippet.text,
+          targetPage: 'Sharing',
+          actionLabel: 'Open Sharing',
+          dedupeKey: `clipboard:${snippet.sha256}`,
+        });
+      }
+
       if (page === 'Devices') {
         const [trust, services, activity] = await Promise.all([
           window.lanvory.trustedPeers().catch(() => null),
@@ -259,18 +334,50 @@ function App() {
       if (fileActivity) {
         const incoming = incomingRows.safeParse(await fileActivity);
         if (!active) return;
-        setPendingFiles(incoming.data?.offers.length ?? 0);
+        const offers = incoming.data?.offers ?? [];
+        setPendingFiles(offers.length);
+        for (const offer of offers) {
+          notify({
+            category: 'sharing',
+            tone: 'info',
+            title: `File request: ${offer.name}`,
+            body: `${formatBytesShort(offer.size)} waiting for your approval.`,
+            targetPage: 'Sharing',
+            actionLabel: 'Review file',
+            dedupeKey: `offer:${offer.id}`,
+          });
+        }
+        const transfers = incoming.data?.transfers ?? [];
+        if (seededTransfers.current === null) {
+          seededTransfers.current = new Set(
+            transfers
+              .filter((item) => item.state === 'completed' || item.state === 'failed')
+              .map((item) => `${item.id}:${item.state}`),
+          );
+        } else {
+          for (const item of transfers) {
+            if (item.state === 'completed' || item.state === 'failed') {
+              const key = `${item.id}:${item.state}`;
+              if (!seededTransfers.current.has(key)) {
+                seededTransfers.current.add(key);
+                notify({
+                  category: 'sharing',
+                  tone: item.state === 'completed' ? 'success' : 'error',
+                  title: item.state === 'completed' ? `Transfer completed: ${item.name}` : `Transfer failed: ${item.name}`,
+                  targetPage: 'Sharing',
+                  actionLabel: 'View history',
+                  dedupeKey: `transfer:${key}`,
+                });
+              }
+            }
+          }
+        }
       }
       timer = setTimeout(poll, 5000);
     }
     void poll();
     return () => { active = false; clearTimeout(timer); };
-  }, [windowVisible, identity?.id, page, trustRevision]);
-
-  function navigate(next: Page) {
-    if (next === 'Sharing') setOpenedSharing(true);
-    setPage(next);
-  }
+  }, [windowVisible, identity?.id, page, trustRevision, notify]);
 
   function discover() {
     setScanRevision((value) => value + 1);
@@ -283,7 +390,7 @@ function App() {
     : response === undefined || response.startupPending ? 'Starting Lanvory…'
     : 'Lanvory unavailable';
   function findDeviceToPair() {
-    setPage('Devices');
+    navigate('Devices');
     setScanRevision((value) => value + 1);
   }
 
@@ -306,7 +413,7 @@ function App() {
             setResponse({ device: result.data });
             return true;
           }} />
-        ) : page === 'Network' ? <NetworkPanel visible={windowVisible} deviceName={identity?.name} /> : page === 'Sync' ? <SyncPanel visible={windowVisible} ownerId={identity?.id} /> : page === 'Services' ? <Services key={identity?.id} ownerId={identity?.id} visible={windowVisible} routes={peerRoutes} onPair={findDeviceToPair} onRoute={rememberRoute} /> : page === 'Sharing' ? null : (
+        ) : page === 'Network' ? <NetworkPanel visible={windowVisible} deviceName={identity?.name} routes={peerRoutes} onRoute={rememberRoute} /> : page === 'Sync' ? <SyncPanel visible={windowVisible} ownerId={identity?.id} routes={peerRoutes} onRoute={rememberRoute} /> : page === 'Services' ? <Services key={identity?.id} ownerId={identity?.id} visible={windowVisible} routes={peerRoutes} onPair={findDeviceToPair} onRoute={rememberRoute} /> : page === 'Sharing' ? null : (
           <DevicesPage incomingPairingEnabled={listener?.pairing === true} response={response} retrying={retrying} visible={windowVisible} scanRevision={scanRevision}
             nearbyCount={nearbyCount} counts={counts} trustRevision={trustRevision} pairingTarget={pairingTarget}
             onDiscover={discover} onShare={() => navigate('Sharing')} onServices={() => navigate('Services')} onNetwork={() => navigate('Network')} onRetry={() => void retry()}

@@ -168,6 +168,26 @@ func (m *Manager) SetPaused(id string, paused bool) (Folder, error) {
 	return *f, nil
 }
 
+func (m *Manager) GetFolder(id string) (Folder, bool) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	f, exists := m.folders[id]
+	if !exists {
+		return Folder{}, false
+	}
+	return *f, true
+}
+
+func (m *Manager) RecordConflict(id string, c Conflict) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	f, exists := m.folders[id]
+	if !exists {
+		return
+	}
+	f.Conflicts = append(f.Conflicts, c)
+}
+
 func (m *Manager) List() []Folder {
 	m.mu.RLock()
 	defer m.mu.RUnlock()

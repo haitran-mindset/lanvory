@@ -23,6 +23,7 @@ import (
 	"lanvory.local/core/internal/pairing"
 	"lanvory.local/core/internal/permissions"
 	"lanvory.local/core/internal/storage"
+	syncengine "lanvory.local/core/internal/sync"
 )
 
 var buildVersion = "development"
@@ -90,7 +91,8 @@ func run(peerInterface string, peerBind netip.AddrPort, advertise, enableQUIC, e
 		return storage.SetPeerTrust(dir, device.ID, pin, true)
 	})
 	clipBuf := clipboard.NewBuffer()
-	lan := &lanListener{parent: ctx, dir: dir, device: device, key: key, receiver: receiver, pairs: pairs, clipboard: clipBuf}
+	syncMgr := syncengine.NewManager()
+	lan := &lanListener{parent: ctx, dir: dir, device: device, key: key, receiver: receiver, pairs: pairs, clipboard: clipBuf, syncMgr: syncMgr}
 	defer lan.stop()
 	if peerInterface != "" {
 		if err := lan.start(peerInterface, peerBind, advertise, enableQUIC, enablePairing); err != nil {
@@ -101,6 +103,7 @@ func run(peerInterface string, peerBind netip.AddrPort, advertise, enableQUIC, e
 	defer tunnels.Close()
 	handler := local.WithListenerStatus(local.HandlerWithResources(device, dir, receiver, tunnels, key, pairs, lan.status), lan.status, lan.start, lan.stop)
 	handler = local.WithClipboard(handler, clipBuf, device, dir, key)
+	handler = local.WithSync(handler, syncMgr, device, dir, key)
 	server := &http.Server{
 		Handler:           handler,
 		ReadHeaderTimeout: 2 * time.Second,
