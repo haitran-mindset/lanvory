@@ -202,8 +202,13 @@ func migrate(db *C.sqlite3) error {
 		}
 		fallthrough
 	case 6:
-		return command(db, schemaV7)
+		if err := command(db, schemaV7); err != nil {
+			return err
+		}
+		fallthrough
 	case 7:
+		return command(db, schemaV8)
+	case 8:
 		return nil
 	default:
 		return fmt.Errorf("unsupported local database schema version %d", version)

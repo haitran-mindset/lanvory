@@ -1,6 +1,6 @@
 const { app, BrowserWindow, clipboard, dialog, ipcMain, Notification, shell } = require('electron');
 const { execFile, spawn } = require('node:child_process');
-const { existsSync, lstatSync, writeFileSync, rmSync } = require('node:fs');
+const { existsSync, lstatSync, readdirSync, writeFileSync, rmSync } = require('node:fs');
 const { promisify } = require('node:util');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
@@ -60,7 +60,19 @@ async function daemonStatus(retry = false) {
   try {
     const device = await readIdentity();
     if (daemon === observedDaemon) daemonStartedAt = undefined;
-    if (!stopping) menuBar?.setStatus('online');
+    if (!stopping && menuBar) {
+      const [listener, trusted, transfers] = await Promise.all([
+        readListener().catch(() => null),
+        exec(path.join(bundle, 'lanvory'), ['peer', 'trusted'], { timeout: 2000, maxBuffer: 65536 })
+          .then(({ stdout }) => JSON.parse(stdout).length).catch(() => undefined),
+        exec(path.join(bundle, 'lanvory'), ['files', 'transfers'], { timeout: 2000, maxBuffer: 65536 })
+          .then(({ stdout }) => JSON.parse(stdout).transfers?.filter((t) => t.state === 'streaming' || t.state === 'waiting').length).catch(() => undefined),
+      ]);
+      if (!stopping) {
+        menuBar.setStatus(listener?.state === 'listening' ? 'listening' : 'online');
+        menuBar.setDetails({ endpoint: listener?.state === 'listening' ? listener.endpoint : undefined, trusted, transfers });
+      }
+    }
     return { device };
   } catch {
     if (retry) startDaemon();
@@ -603,6 +615,36 @@ if (!app.requestSingleInstanceLock()) {
         filePickerOpen = false;
       }
     });
+    ipcMain.handle('lanvory:select-folder', async (event) => {
+      assertTrustedFrame(event);
+      if (activeSend || filePickerOpen) return null;
+      filePickerOpen = true;
+      try {
+        const result = await dialog.showOpenDialog(window, { properties: ['openDirectory'] });
+        if (result.canceled || !result.filePaths[0] || !window || event.sender !== window.webContents) return null;
+        const rootDir = result.filePaths[0];
+        const collected = [];
+        const walk = (dir) => {
+          if (collected.length >= 50) return;
+          let entries;
+          try { entries = readdirSync(dir, { withFileTypes: true }); } catch { return; }
+          for (const entry of entries) {
+            if (collected.length >= 50) break;
+            if (entry.name.startsWith('.') || entry.isSymbolicLink()) continue;
+            const fullPath = path.join(dir, entry.name);
+            if (Buffer.byteLength(fullPath) > 1000) continue;
+            if (entry.isDirectory()) walk(fullPath);
+            else if (entry.isFile()) collected.push(fullPath);
+          }
+        };
+        walk(rootDir);
+        if (!collected.length) return null;
+        selectedFiles = collected;
+        return collected.map((filePath) => path.relative(rootDir, filePath) || path.basename(filePath));
+      } finally {
+        filePickerOpen = false;
+      }
+    });
     ipcMain.handle('lanvory:clear-selected-file', (event) => {
       assertTrustedFrame(event);
       if (activeSend || filePickerOpen) return false;
@@ -679,6 +721,128 @@ if (!app.requestSingleInstanceLock()) {
       assertTrustedFrame(event);
       activeSend?.abort();
     });
+    ipcMain.handle('lanvory:ping-peer', async (event, adapter, endpoint, pin) => {
+      assertTrustedFrame(event);
+      if (typeof adapter !== 'string' || !/^[a-zA-Z0-9_.-]{1,32}$/.test(adapter)
+          || typeof endpoint !== 'string' || !/^(?:[0-9]{1,3}\.){3}[0-9]{1,5}$/.test(endpoint)
+          || typeof pin !== 'string' || !/^[a-fA-F0-9]{64}$/.test(pin)) {
+        return { verified: false, error: 'Invalid adapter, endpoint, or device ID.' };
+      }
+      try {
+        const { stdout } = await exec(path.join(bundle, 'lanvory'), ['peer', 'ping', adapter, endpoint, pin, '--json'],
+          { timeout: 7000, maxBuffer: 4096 });
+        const parsed = JSON.parse(stdout);
+        return { verified: Boolean(parsed.verified), latencyMs: typeof parsed.latencyMs === 'number' ? parsed.latencyMs : undefined };
+      } catch (err) {
+        const detail = typeof err?.stderr === 'string' && err.stderr.trim() ? err.stderr.trim().replace(/^lanvory:\s*/, '') : 'Peer unreachable or verification failed.';
+        return { verified: false, error: detail };
+      }
+    });
+    ipcMain.handle('lanvory:clipboard-state', async (event) => {
+      assertTrustedFrame(event);
+      return exec(path.join(bundle, 'lanvory'), ['clipboard', 'status'], { timeout: 3000, maxBuffer: 131072 })
+        .then(({ stdout }) => JSON.parse(stdout), () => null);
+    });
+    ipcMain.handle('lanvory:clipboard-policy', async (event, enabled) => {
+      assertTrustedFrame(event);
+      if (typeof enabled !== 'boolean') return null;
+      return exec(path.join(bundle, 'lanvory'), ['clipboard', enabled ? 'enable' : 'disable'], { timeout: 3000, maxBuffer: 131072 })
+        .then(({ stdout }) => JSON.parse(stdout), () => null);
+    });
+    ipcMain.handle('lanvory:set-clipboard-access', async (event, fingerprint, allowed, duration) => {
+      assertTrustedFrame(event);
+      if (typeof fingerprint !== 'string' || !/^[a-fA-F0-9]{64}$/.test(fingerprint) || typeof allowed !== 'boolean') return false;
+      return exec(path.join(bundle, 'lanvory'), permissionArgs(allowed ? 'grant' : 'revoke', fingerprint, 'clipboard-share', 'clipboard', duration),
+        { timeout: 4000, maxBuffer: 4096 }).then(() => true, () => false);
+    });
+    ipcMain.handle('lanvory:clipboard-clear', async (event) => {
+      assertTrustedFrame(event);
+      return exec(path.join(bundle, 'lanvory'), ['clipboard', 'clear'], { timeout: 3000, maxBuffer: 4096 })
+        .then(() => true, () => false);
+    });
+    ipcMain.handle('lanvory:clipboard-send', async (event, adapter, endpoint, pin, text) => {
+      assertTrustedFrame(event);
+      if (typeof adapter !== 'string' || !/^[a-zA-Z0-9_.-]{1,32}$/.test(adapter)
+          || typeof endpoint !== 'string' || !/^(?:[0-9]{1,3}\.){3}[0-9]{1,5}$/.test(endpoint)
+          || typeof pin !== 'string' || !/^[a-fA-F0-9]{64}$/.test(pin)) {
+        return { ok: false, error: 'Invalid adapter, endpoint, or peer ID.' };
+      }
+      const payload = typeof text === 'string' && text.length ? text : clipboard.readText();
+      if (!payload || Buffer.byteLength(payload, 'utf8') > 65536) {
+        return { ok: false, error: 'Clipboard text must be between 1 byte and 64 KiB.' };
+      }
+      try {
+        await exec(path.join(bundle, 'lanvory'), ['clipboard', 'send', adapter, endpoint, pin, payload], { timeout: 4000, maxBuffer: 4096 });
+        return { ok: true };
+      } catch (err) {
+        const detail = typeof err?.stderr === 'string' && err.stderr.trim() ? err.stderr.trim().replace(/^lanvory:\s*/, '') : 'Clipboard send failed.';
+        return { ok: false, error: detail };
+      }
+    });
+    ipcMain.handle('lanvory:clipboard-copy-latest', (event, text) => {
+      assertTrustedFrame(event);
+      if (typeof text !== 'string' || !text.length || Buffer.byteLength(text, 'utf8') > 65536) return false;
+      clipboard.writeText(text);
+      return true;
+    });
+    ipcMain.handle('lanvory:sync-folders', async (event) => {
+      assertTrustedFrame(event);
+      return exec(path.join(bundle, 'lanvory'), ['sync', 'list'], { timeout: 4000, maxBuffer: 131072 })
+        .then(({ stdout }) => JSON.parse(stdout), () => null);
+    });
+    ipcMain.handle('lanvory:sync-pick-dir', async (event) => {
+      assertTrustedFrame(event);
+      if (filePickerOpen) return null;
+      filePickerOpen = true;
+      try {
+        const result = await dialog.showOpenDialog(window, { properties: ['openDirectory'] });
+        if (result.canceled || !result.filePaths[0] || !window || event.sender !== window.webContents) return null;
+        return result.filePaths[0];
+      } finally {
+        filePickerOpen = false;
+      }
+    });
+    ipcMain.handle('lanvory:sync-add', async (event, id, folderPath, mode) => {
+      assertTrustedFrame(event);
+      if (typeof id !== 'string' || !/^[a-z0-9][a-z0-9_-]{0,63}$/.test(id)
+          || typeof folderPath !== 'string' || !path.isAbsolute(folderPath)
+          || !['send-only', 'receive-only', 'bidirectional'].includes(mode)) {
+        return { error: 'Enter a valid lowercase folder ID and directory path.' };
+      }
+      try {
+        const { stdout } = await exec(path.join(bundle, 'lanvory'), ['sync', 'add', id, folderPath, mode], { timeout: 4000, maxBuffer: 131072 });
+        return JSON.parse(stdout);
+      } catch (err) {
+        const detail = typeof err?.stderr === 'string' && err.stderr.trim() ? err.stderr.trim().replace(/^lanvory:\s*/, '') : 'Unable to register sync folder.';
+        return { error: detail };
+      }
+    });
+    ipcMain.handle('lanvory:sync-remove', async (event, id) => {
+      assertTrustedFrame(event);
+      if (typeof id !== 'string' || !/^[a-z0-9][a-z0-9_-]{0,63}$/.test(id)) return false;
+      return exec(path.join(bundle, 'lanvory'), ['sync', 'remove', id], { timeout: 4000, maxBuffer: 4096 })
+        .then(() => true, () => false);
+    });
+    ipcMain.handle('lanvory:sync-scan', async (event, id) => {
+      assertTrustedFrame(event);
+      if (typeof id !== 'string' || !/^[a-z0-9][a-z0-9_-]{0,63}$/.test(id)) return null;
+      return exec(path.join(bundle, 'lanvory'), ['sync', 'scan', id], { timeout: 10000, maxBuffer: 524288 })
+        .then(({ stdout }) => JSON.parse(stdout), () => null);
+    });
+    ipcMain.handle('lanvory:sync-pause', async (event, id, paused) => {
+      assertTrustedFrame(event);
+      if (typeof id !== 'string' || !/^[a-z0-9][a-z0-9_-]{0,63}$/.test(id) || typeof paused !== 'boolean') return null;
+      return exec(path.join(bundle, 'lanvory'), ['sync', paused ? 'pause' : 'resume', id], { timeout: 4000, maxBuffer: 131072 })
+        .then(({ stdout }) => JSON.parse(stdout), () => null);
+    });
+    ipcMain.handle('lanvory:set-sync-access', async (event, fingerprint, folderId, allowed) => {
+      assertTrustedFrame(event);
+      if (typeof fingerprint !== 'string' || !/^[a-fA-F0-9]{64}$/.test(fingerprint)
+          || typeof folderId !== 'string' || !/^[a-z0-9][a-z0-9_-]{0,63}$/.test(folderId)
+          || typeof allowed !== 'boolean') return false;
+      return exec(path.join(bundle, 'lanvory'), permissionArgs(allowed ? 'grant' : 'revoke', fingerprint, 'folder-sync', folderId, 'until-revoked'),
+        { timeout: 4000, maxBuffer: 4096 }).then(() => true, () => false);
+    });
     ipcMain.handle('lanvory:service-snapshot', async (event) => {
       assertTrustedFrame(event);
       const commands = [['services', 'list'], ['tunnels', 'list'], ['permissions', 'list'], ['peer', 'trusted']];
@@ -720,6 +884,12 @@ if (!app.requestSingleInstanceLock()) {
     if (process.platform === 'darwin') {
       menuBar = createMenuBar({
         open: openWindow,
+        navigate: (targetPage) => {
+          openWindow();
+          if (['Devices', 'Sharing', 'Services', 'Network', 'Settings'].includes(targetPage)) {
+            window?.webContents.send('lanvory:navigate', targetPage);
+          }
+        },
         retry: () => { void daemonStatus(true); },
         quit: () => app.quit(),
       });

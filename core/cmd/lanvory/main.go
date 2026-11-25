@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"lanvory.local/core/internal/local"
+	syncengine "lanvory.local/core/internal/sync"
 )
 
 var buildVersion = "development"
@@ -76,7 +77,15 @@ func main() {
 		(len(arguments) == 5 || (len(arguments) == 6 && arguments[5] == "--json")) && arguments[0] == "peer" && arguments[1] == "ping",
 		(len(arguments) == 4 || len(arguments) == 5) && arguments[0] == "discover" && arguments[1] == "resolve",
 		len(arguments) == 4 && arguments[0] == "network" && arguments[1] == "check",
-		len(arguments) == 3 && arguments[0] == "network" && (arguments[1] == "approve" || arguments[1] == "revoke"):
+		len(arguments) == 3 && arguments[0] == "network" && (arguments[1] == "approve" || arguments[1] == "revoke"),
+		slices.Equal(arguments, []string{"clipboard", "status"}),
+		slices.Equal(arguments, []string{"clipboard", "enable"}),
+		slices.Equal(arguments, []string{"clipboard", "disable"}),
+		slices.Equal(arguments, []string{"clipboard", "clear"}),
+		len(arguments) == 6 && arguments[0] == "clipboard" && arguments[1] == "send",
+		slices.Equal(arguments, []string{"sync", "list"}),
+		(len(arguments) == 4 || len(arguments) == 5) && arguments[0] == "sync" && arguments[1] == "add",
+		len(arguments) == 3 && arguments[0] == "sync" && (arguments[1] == "remove" || arguments[1] == "scan" || arguments[1] == "pause" || arguments[1] == "resume"):
 		if err := run(arguments); err != nil {
 			fmt.Fprintln(os.Stderr, "lanvory:", err)
 			os.Exit(1)
@@ -115,6 +124,72 @@ func run(arguments []string) error {
 			return output.Encode(result)
 		case "stop":
 			return local.StopTunnel(ctx, dir, arguments[2])
+		}
+	}
+	if arguments[0] == "clipboard" {
+		switch arguments[1] {
+		case "status":
+			state, err := local.ClipboardState(ctx, dir)
+			if err != nil {
+				return err
+			}
+			return output.Encode(state)
+		case "enable":
+			state, err := local.SetClipboardPolicy(ctx, dir, true, false)
+			if err != nil {
+				return err
+			}
+			return output.Encode(state)
+		case "disable":
+			state, err := local.SetClipboardPolicy(ctx, dir, false, false)
+			if err != nil {
+				return err
+			}
+			return output.Encode(state)
+		case "clear":
+			return local.ClearClipboard(ctx, dir)
+		case "send":
+			return local.SendClipboard(ctx, dir, arguments[2], arguments[3], arguments[4], arguments[5])
+		}
+	}
+	if arguments[0] == "sync" {
+		switch arguments[1] {
+		case "list":
+			folders, err := local.ListSyncFolders(ctx, dir)
+			if err != nil {
+				return err
+			}
+			return output.Encode(folders)
+		case "add":
+			mode := syncengine.ModeBidirectional
+			if len(arguments) == 5 {
+				mode = syncengine.Mode(arguments[4])
+			}
+			folder, err := local.AddSyncFolder(ctx, dir, arguments[2], arguments[3], mode)
+			if err != nil {
+				return err
+			}
+			return output.Encode(folder)
+		case "remove":
+			return local.RemoveSyncFolder(ctx, dir, arguments[2])
+		case "scan":
+			folder, err := local.ScanSyncFolder(ctx, dir, arguments[2])
+			if err != nil {
+				return err
+			}
+			return output.Encode(folder)
+		case "pause":
+			folder, err := local.SetSyncFolderPaused(ctx, dir, arguments[2], true)
+			if err != nil {
+				return err
+			}
+			return output.Encode(folder)
+		case "resume":
+			folder, err := local.SetSyncFolderPaused(ctx, dir, arguments[2], false)
+			if err != nil {
+				return err
+			}
+			return output.Encode(folder)
 		}
 	}
 	if arguments[0] == "services" {

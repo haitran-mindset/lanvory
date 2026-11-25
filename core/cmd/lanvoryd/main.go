@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"lanvory.local/core/internal/bridge"
+	"lanvory.local/core/internal/clipboard"
 	"lanvory.local/core/internal/drop"
 	"lanvory.local/core/internal/identity"
 	"lanvory.local/core/internal/local"
@@ -88,7 +89,8 @@ func run(peerInterface string, peerBind netip.AddrPort, advertise, enableQUIC, e
 		}
 		return storage.SetPeerTrust(dir, device.ID, pin, true)
 	})
-	lan := &lanListener{parent: ctx, dir: dir, device: device, key: key, receiver: receiver, pairs: pairs}
+	clipBuf := clipboard.NewBuffer()
+	lan := &lanListener{parent: ctx, dir: dir, device: device, key: key, receiver: receiver, pairs: pairs, clipboard: clipBuf}
 	defer lan.stop()
 	if peerInterface != "" {
 		if err := lan.start(peerInterface, peerBind, advertise, enableQUIC, enablePairing); err != nil {
@@ -97,8 +99,10 @@ func run(peerInterface string, peerBind netip.AddrPort, advertise, enableQUIC, e
 	}
 	tunnels := bridge.NewTunnels()
 	defer tunnels.Close()
+	handler := local.WithListenerStatus(local.HandlerWithResources(device, dir, receiver, tunnels, key, pairs, lan.status), lan.status, lan.start, lan.stop)
+	handler = local.WithClipboard(handler, clipBuf, device, dir, key)
 	server := &http.Server{
-		Handler:           local.WithListenerStatus(local.HandlerWithResources(device, dir, receiver, tunnels, key, pairs, lan.status), lan.status, lan.start, lan.stop),
+		Handler:           handler,
 		ReadHeaderTimeout: 2 * time.Second,
 		ReadTimeout:       3 * time.Second,
 		WriteTimeout:      3 * time.Second,

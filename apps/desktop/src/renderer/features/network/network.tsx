@@ -6,6 +6,7 @@ import { ChevronDown, Copy, Network, RefreshCw, Wifi, SlidersHorizontal, ShieldC
 import { z } from 'zod';
 import { readInterfaces, type Interfaces } from '../../services/network-interfaces';
 import { PanelHeading } from '../../components/panel-heading';
+import { NetworkExplorer } from './explorer';
 
 const listenerSchema = z.discriminatedUnion('state', [
   z.object({ state: z.literal('local-only') }),
@@ -45,15 +46,18 @@ function readConnectionSettings(): ConnectionSettings {
   }
 }
 
-export function NetworkPanel({ visible }: { visible: boolean }) {
+export function NetworkPanel({ visible, deviceName }: { visible: boolean; deviceName?: string }) {
   const [interfaces, setInterfaces] = useState<Interfaces | null>();
   const [listener, setListener] = useState<z.infer<typeof listenerSchema> | null>();
+  const [trustedPeers, setTrustedPeers] = useState<Array<{ fingerprint: string; verifiedAt: string }> | null>();
   const [listenerBusy, setListenerBusy] = useState(false);
   const [listenerMessage, setListenerMessage] = useState('');
   const [copyingAddress, setCopyingAddress] = useState(false);
   const [connectionSettings, setConnectionSettings] = useState(readConnectionSettings);
   const [checking, setChecking] = useState(false);
   const [checkResult, setCheckResult] = useState('');
+  const [pinging, setPinging] = useState(false);
+  const [pingResult, setPingResult] = useState('');
   const [copyingReport, setCopyingReport] = useState(false);
   const [reportMessage, setReportMessage] = useState('');
   const [updating, setUpdating] = useState<string>();
@@ -65,10 +69,16 @@ export function NetworkPanel({ visible }: { visible: boolean }) {
     let active = true;
     let timer: ReturnType<typeof setTimeout>;
     async function poll() {
-      const [currentInterfaces, currentListener] = await Promise.all([readInterfaces(), readListenerStatus()]);
+      const [currentInterfaces, currentListener, peers] = await Promise.all([
+        readInterfaces(),
+        readListenerStatus(),
+        window.lanvory.trustedPeers().catch(() => null),
+      ]);
       if (!active) return;
       setInterfaces(currentInterfaces);
       setListener(currentListener);
+      const parsedPeers = z.array(z.object({ fingerprint: z.string(), verifiedAt: z.string() })).safeParse(peers);
+      setTrustedPeers(parsedPeers.success ? parsedPeers.data : null);
       timer = setTimeout(poll, 4000);
     }
     void poll();
@@ -169,6 +179,27 @@ export function NetworkPanel({ visible }: { visible: boolean }) {
     setChecking(false);
   }
 
+  async function pingPeer(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const adapter = String(form.get('pingAdapter') ?? '').trim();
+    const endpoint = String(form.get('pingEndpoint') ?? '').trim();
+    const fingerprint = String(form.get('pingFingerprint') ?? '').trim();
+    if (!adapter || !/^(?:[0-9]{1,3}\.){3}[0-9]{1,5}$/.test(endpoint) || !/^[a-fA-F0-9]{64}$/.test(fingerprint)) {
+      setPingResult('Enter an approved adapter, IPv4:port endpoint, and 64-character device ID.');
+      return;
+    }
+    setPinging(true);
+    setPingResult('');
+    const result = await window.lanvory.pingPeer(adapter, endpoint, fingerprint).catch(() => ({ verified: false, latencyMs: undefined, error: 'Unable to reach peer.' }));
+    if (result.verified) {
+      setPingResult(`Authenticated peer ${endpoint} responded (${result.latencyMs ?? 0} ms RTT).`);
+    } else {
+      setPingResult(result.error ?? 'Peer unreachable or identity verification failed.');
+    }
+    setPinging(false);
+  }
+
   async function update(adapter: string, approved: boolean) {
     setUpdating(adapter);
     setCheckResult('');
@@ -234,6 +265,23 @@ export function NetworkPanel({ visible }: { visible: boolean }) {
         {listenerBusy && <p role="status">Updating the LAN listener…</p>}
         {listenerMessage && <p role="status">{listenerMessage}</p>}
       </section>
+      <NetworkExplorer
+        deviceName={deviceName}
+        listenerState={listener?.state ?? 'checking'}
+        listenerEndpoint={listener?.state === 'listening' ? listener.endpoint : undefined}
+        interfaces={interfaces}
+        trustedPeers={trustedPeers}
+        onPingPeer={(fingerprint) => {
+          const scopeDetails = document.querySelector<HTMLDetailsElement>('[aria-labelledby=scope-heading]');
+          if (scopeDetails) scopeDetails.open = true;
+          const fpInput = document.querySelector<HTMLInputElement>('input[name="pingFingerprint"]');
+          if (fpInput) {
+            fpInput.value = fingerprint;
+            fpInput.scrollIntoView({ behavior: 'smooth' });
+            fpInput.focus();
+          }
+        }}
+      />
       <details className="operation-card operation-disclosure network-advanced">
         <summary>
           <SlidersHorizontal size={17} aria-hidden="true" />
@@ -304,6 +352,22 @@ export function NetworkPanel({ visible }: { visible: boolean }) {
             <button type="submit" className="refresh" disabled={checking || updating !== undefined}>{checking ? 'Checking…' : 'Check address'}</button>
           </form>
           <p className="scope-result" role="status">{checkResult}</p>
+          <div className="network-ping-section">
+            <h4>Authenticated peer ping</h4>
+            <p>Measure round-trip latency and verify a peer’s Ed25519 identity without exchanging data.</p>
+            <form className="trust-form network-ping-form" onSubmit={(event) => void pingPeer(event)}>
+              <SelectField label="Adapter" name="pingAdapter" required placeholder="Select an approved adapter"
+                defaultValue={approvedAdapters?.length === 1 ? approvedAdapters[0].name : undefined}
+                disabled={pinging || !approvedAdapters?.length}
+                options={(approvedAdapters ?? []).map((nic) => ({ value: nic.name, label: nic.name }))} />
+              <label>Peer endpoint<input name="pingEndpoint" required maxLength={21} placeholder="192.168.1.42:43110" disabled={pinging} /></label>
+              <label>Peer device ID<input name="pingFingerprint" required maxLength={64} placeholder="64-character hex fingerprint" disabled={pinging} /></label>
+              <button type="submit" className="refresh" disabled={pinging || updating !== undefined || !approvedAdapters?.length}>
+                {pinging ? 'Pinging…' : 'Ping peer'}
+              </button>
+            </form>
+            <p className="ping-result" role="status">{pingResult}</p>
+          </div>
         </>}
       </details>
     </section>

@@ -21,10 +21,11 @@ const resolutionSchema = z.object({
 
 export type PairingTarget = { name: string; endpoints: string[] };
 
-export function NearbyServices({ ready, scanRevision, trustRevision, onCount, onNetwork, onPair, onManualPair, onVerified }: {
+export function NearbyServices({ ready, scanRevision, trustRevision, searchQuery = '', onCount, onNetwork, onPair, onManualPair, onVerified }: {
   ready: boolean;
   scanRevision: number;
   trustRevision: number;
+  searchQuery?: string;
   onVerified(route: PeerRoute): void;
   onCount(count?: number): void;
   onNetwork(): void;
@@ -98,12 +99,16 @@ export function NearbyServices({ ready, scanRevision, trustRevision, onCount, on
     void discover();
   }, [ready, scanRevision]);
 
-  const devices = scan?.services.filter((service) => service.transport !== 'udp') ?? [];
-  const heading = devices.length === 0 ? 'Device discovery'
-    : devices.length === 1 ? '1 device found' : `${devices.length} devices found`;
+  const allDevices = scan?.services.filter((service) => service.transport !== 'udp') ?? [];
+  const query = searchQuery.trim().toLocaleLowerCase();
+  const devices = query
+    ? allDevices.filter((service) => service.name.toLocaleLowerCase().includes(query) || service.interface.toLocaleLowerCase().includes(query))
+    : allDevices;
+  const heading = allDevices.length === 0 ? 'Device discovery'
+    : allDevices.length === 1 ? '1 device found' : `${allDevices.length} devices found`;
   const needsNetwork = scan?.interfaces.length === 0;
   const showManualPair = ready && !needsNetwork && !scanning && !resolving &&
-    (scan === null || (scan !== undefined && devices.length === 0) || Boolean(resolutionError));
+    (scan === null || (scan !== undefined && allDevices.length === 0) || Boolean(resolutionError));
 
   return (
     <section className="nearby directory-discovery" aria-labelledby="nearby-title" aria-busy={scanning}>
@@ -119,7 +124,10 @@ export function NearbyServices({ ready, scanRevision, trustRevision, onCount, on
         {scan === undefined && !scanning && <p className="directory-empty"><Radar size={18} aria-hidden="true" /> Use Pair Device to find another device on this network.</p>}
         {scan === null && <p>Discovery failed. Check the daemon and try again.</p>}
         {scan?.unavailable && !needsNetwork && <p className="directory-empty">Automatic discovery isn’t available here. You can pair using the other device’s address.</p>}
-        {scan && !scan.unavailable && !needsNetwork && devices.length === 0 && (
+        {scan && !scan.unavailable && !needsNetwork && allDevices.length > 0 && devices.length === 0 && (
+          <p className="directory-empty">No nearby devices match “{searchQuery.trim()}”.</p>
+        )}
+        {scan && !scan.unavailable && !needsNetwork && allDevices.length === 0 && (
           <div className="discovery-empty-guide">
             <div className="discovery-empty-hero">
               <div className="discovery-radar-graphic">

@@ -14,6 +14,7 @@ contextBridge.exposeInMainWorld('lanvory', {
   clearTransferHistory: () => ipcRenderer.invoke('lanvory:clear-transfer-history'),
   decideFile: (id, allow) => ipcRenderer.invoke('lanvory:decide-file', id, allow),
   selectFile: () => ipcRenderer.invoke('lanvory:select-file'),
+  selectFolder: () => ipcRenderer.invoke('lanvory:select-folder'),
   selectDroppedFile: async (file) => {
     const filename = webUtils.getPathForFile(file);
     return filename ? ipcRenderer.invoke('lanvory:select-dropped-file', filename) : null;
@@ -53,5 +54,26 @@ contextBridge.exposeInMainWorld('lanvory', {
   renameDevice: (name) => ipcRenderer.invoke('lanvory:rename-device', name),
   copyFingerprint: (expected) => ipcRenderer.invoke('lanvory:copy-fingerprint', expected),
   copyPairingDetails: (expected) => ipcRenderer.invoke('lanvory:copy-pairing-details', expected),
+  pingPeer: (adapter, endpoint, pin) => ipcRenderer.invoke('lanvory:ping-peer', adapter, endpoint, pin),
+  clipboardState: () => ipcRenderer.invoke('lanvory:clipboard-state'),
+  setClipboardPolicy: (enabled) => ipcRenderer.invoke('lanvory:clipboard-policy', enabled),
+  setClipboardAccess: (fingerprint, allowed, duration) => ipcRenderer.invoke('lanvory:set-clipboard-access', fingerprint, allowed, duration),
+  clearClipboard: () => ipcRenderer.invoke('lanvory:clipboard-clear'),
+  sendClipboard: (adapter, endpoint, pin, text) => ipcRenderer.invoke('lanvory:clipboard-send', adapter, endpoint, pin, text),
+  copyReceivedClipboard: (text) => ipcRenderer.invoke('lanvory:clipboard-copy-latest', text),
+  syncFolders: () => ipcRenderer.invoke('lanvory:sync-folders'),
+  pickSyncDirectory: () => ipcRenderer.invoke('lanvory:sync-pick-dir'),
+  addSyncFolder: (id, folderPath, mode) => ipcRenderer.invoke('lanvory:sync-add', id, folderPath, mode),
+  removeSyncFolder: (id) => ipcRenderer.invoke('lanvory:sync-remove', id),
+  scanSyncFolder: (id) => ipcRenderer.invoke('lanvory:sync-scan', id),
+  setSyncFolderPaused: (id, paused) => ipcRenderer.invoke('lanvory:sync-pause', id, paused),
+  setSyncAccess: (fingerprint, folderId, allowed) => ipcRenderer.invoke('lanvory:set-sync-access', fingerprint, folderId, allowed),
   identity: (retry) => ipcRenderer.invoke('lanvory:identity', retry === true),
+  onNavigate: (callback) => {
+    const listener = (_event, page) => {
+      if (typeof page === 'string') callback(page);
+    };
+    ipcRenderer.on('lanvory:navigate', listener);
+    return () => ipcRenderer.removeListener('lanvory:navigate', listener);
+  },
 });

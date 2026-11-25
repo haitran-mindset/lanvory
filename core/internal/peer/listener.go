@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"lanvory.local/core/internal/bridge"
+	"lanvory.local/core/internal/clipboard"
 	"lanvory.local/core/internal/drop"
 	"lanvory.local/core/internal/networking"
 	"lanvory.local/core/internal/pairing"
@@ -29,9 +30,11 @@ type Listener struct {
 	inventory func() ([]networking.Interface, error)
 	config    *tls.Config
 	trusted   func(string) (bool, error)
-	receiver  *drop.Receiver
-	services  bridge.Lookup
-	pairs     *pairing.Manager
+	receiver         *drop.Receiver
+	services         bridge.Lookup
+	pairs            *pairing.Manager
+	clipboardBuf     *clipboard.Buffer
+	clipboardAllowed func(string) bool
 }
 
 func Listen(ctx context.Context, name string, bind netip.AddrPort, key ed25519.PrivateKey, inventory func() ([]networking.Interface, error), trusted func(string) (bool, error), receiver *drop.Receiver, services bridge.Lookup, pairs *pairing.Manager) (*Listener, error) {
@@ -56,7 +59,18 @@ func Listen(ctx context.Context, name string, bind netip.AddrPort, key ed25519.P
 	if pairs != nil {
 		config = enablePairingTLS(config)
 	}
-	return &Listener{listener, bind.Addr(), name, index, inventory, config, trusted, receiver, services, pairs}, nil
+	return &Listener{
+		Listener:  listener,
+		source:    bind.Addr(),
+		name:      name,
+		index:     index,
+		inventory: inventory,
+		config:    config,
+		trusted:   trusted,
+		receiver:  receiver,
+		services:  services,
+		pairs:     pairs,
+	}, nil
 }
 
 func identityTLS(key ed25519.PrivateKey) (*tls.Config, error) {
@@ -164,6 +178,25 @@ func (l *Listener) Serve(ctx context.Context) error {
 					return
 				}
 				l.receiveFile(ctx, session, remote, pin.String())
+			case clipboard.Protocol:
+				if l.clipboardBuf == nil {
+					return
+				}
+				pin, err := certificateFingerprint(session.ConnectionState(), clipboard.Protocol)
+				if err != nil {
+					return
+				}
+				if l.clipboardAllowed != nil && !l.clipboardAllowed(pin.String()) {
+					_ = clipboard.WriteAck(session, false)
+					return
+				}
+				text, err := clipboard.ReadPacket(session)
+				if err != nil {
+					_ = clipboard.WriteAck(session, false)
+					return
+				}
+				_, recvErr := l.clipboardBuf.Receive(pin.String(), text)
+				_ = clipboard.WriteAck(session, recvErr == nil)
 			}
 		})
 	}

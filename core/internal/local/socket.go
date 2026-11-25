@@ -23,12 +23,14 @@ import (
 	"time"
 
 	"lanvory.local/core/internal/bridge"
+	"lanvory.local/core/internal/clipboard"
 	"lanvory.local/core/internal/discovery"
 	"lanvory.local/core/internal/drop"
 	"lanvory.local/core/internal/networking"
 	"lanvory.local/core/internal/pairing"
 	"lanvory.local/core/internal/peer"
 	"lanvory.local/core/internal/storage"
+	syncengine "lanvory.local/core/internal/sync"
 )
 
 func Dir() (string, error) {
@@ -186,6 +188,8 @@ func handlerWithReceiverAndVerifier(device Device, dir string, receiver *drop.Re
 	registerTunnels(mux, device, dir, tunnels, key)
 	registerPairing(mux, device, dir, key, pairs)
 	registerProfile(mux, dir, device)
+	registerClipboard(mux, device, dir, clipboard.NewBuffer(), key)
+	registerSync(mux, device, dir, syncengine.NewManager())
 	mux.HandleFunc("GET "+networkRoute, func(w http.ResponseWriter, r *http.Request) {
 		interfaces, err := approvedInventory(dir)
 		if err != nil {
@@ -567,10 +571,18 @@ func SetInterfaceApproval(ctx context.Context, dir, name string, approved bool) 
 }
 
 func requestLocal(ctx context.Context, dir, method, route string, destination any) error {
-	return requestLocalTimed(ctx, dir, method, route, destination, 3*time.Second)
+	return requestLocalTimedBody(ctx, dir, method, route, nil, destination, 3*time.Second)
+}
+
+func requestLocalBody(ctx context.Context, dir, method, route string, body io.Reader, destination any) error {
+	return requestLocalTimedBody(ctx, dir, method, route, body, destination, 3*time.Second)
 }
 
 func requestLocalTimed(ctx context.Context, dir, method, route string, destination any, timeout time.Duration) error {
+	return requestLocalTimedBody(ctx, dir, method, route, nil, destination, timeout)
+}
+
+func requestLocalTimedBody(ctx context.Context, dir, method, route string, body io.Reader, destination any, timeout time.Duration) error {
 	if err := checkPrivateDir(dir); err != nil {
 		return err
 	}
@@ -591,9 +603,12 @@ func requestLocalTimed(ctx context.Context, dir, method, route string, destinati
 		Timeout:       timeout,
 		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 	}
-	request, err := http.NewRequestWithContext(ctx, method, "http://lanvory"+route, nil)
+	request, err := http.NewRequestWithContext(ctx, method, "http://lanvory"+route, body)
 	if err != nil {
 		return err
+	}
+	if body != nil {
+		request.Header.Set("Content-Type", "application/json")
 	}
 	response, err := client.Do(request)
 	if err != nil {

@@ -640,6 +640,50 @@ Implemented batch multi-file selection, drag-and-drop, queue management, and seq
 
 `pnpm typecheck`, `make build`, `make verify` (with `BypassSandbox: true` for UDP/Unix socket tests), and `sh scripts/smoke-native.sh pnpm` all passed with exit code 0.
 
+## Group 1 MVP polish: Tray navigation, Devices search/filter, Network Peer Ping, Folder selection & Transfer retry
+
+- **Menu Bar / System Tray (§48)** (`apps/desktop/src/main/native-lifecycle.cjs`, `apps/desktop/src/main/index.cjs`, `apps/desktop/src/preload/index.cjs`, `apps/desktop/src/renderer/app/index.tsx`):
+  - Extended macOS Menu Bar context menu with live Local IP/endpoint, trusted device count, active transfer count, and quick navigation items (`Send Files…`, `Manage Services`, `Network`, `Settings`) routed securely via `lanvory:navigate`.
+- **Devices Search & Category Filters (§39)** (`apps/desktop/src/renderer/pages/devices.tsx`, `nearby.tsx`, `trusted-peers.tsx`, `app.css`):
+  - Added `.devices-toolbar` with live search across device names, interfaces, and fingerprints, plus category filter buttons (`All`, `Nearby`, `Trusted`).
+- **Network Peer Ping Diagnostics (§26)** (`apps/desktop/src/renderer/features/network/network.tsx`, `apps/desktop/src/main/index.cjs`, `preload/index.cjs`, `shared/desktop-api.ts`):
+  - Added `lanvory:ping-peer` IPC backing an authenticated Peer Ping form inside Connection diagnostics to test peer identity and measure TLS round-trip latency (`latencyMs`) directly from the desktop UI.
+- **Folder Selection & Transfer Retry (§18, §40)** (`apps/desktop/src/main/index.cjs`, `apps/desktop/src/renderer/features/sharing/sharing.tsx`, `app.css`):
+  - Added `lanvory:select-folder` ("Choose folder") recursively collecting regular non-symlink, non-hidden files (up to the 50-file batch cap).
+  - Added a quick `Retry` action on failed or cancelled outgoing entries in Transfer history to pre-select the recipient and prompt resending.
+
+`pnpm typecheck`, `pnpm build`, `make verify`, and both app-owned and external daemon passes of `sh scripts/smoke-native.sh pnpm` passed with exit code 0.
+
+## POST_MVP slice: Command Palette, Shared Clipboard, Folder Sync, Network Explorer
+
+Implemented the requested `POST_MVP` expansion across Go core, CLI, Electron IPC, and renderer UI:
+- **Command Palette (`Cmd+K` / `Ctrl+K`, §44)** (`apps/desktop/src/renderer/components/command-palette.tsx`, `app/index.tsx`):
+  - Keyboard-accessible modal dialog (`role="dialog"`, `role="listbox"`) for instant navigation (`Devices`, `Sharing`, `Sync`, `Services`, `Network`, `Settings`) and common actions (`Scan nearby devices`, `Open file inbox`, `Copy device ID`, `Copy diagnostic report`, `Switch theme`).
+- **Shared Clipboard (§20, Phase 8)** (`core/internal/clipboard/`, `core/internal/local/clipboard.go`, `core/internal/permissions/resource.go`, `apps/desktop/src/renderer/features/sharing/clipboard-card.tsx`):
+  - Disabled by default (`clipboard-share` capability required), 64 KiB text limit, SHA-256 loop/duplicate prevention, explicit send & explicit copy (never auto-pastes or auto-broadcasts).
+  - CLI commands: `lanvory clipboard status|enable|disable|clear|send`.
+- **Folder Synchronization — Lanvory Sync (§19, Phase 7)** (`core/internal/sync/`, `core/internal/local/sync.go`, `apps/desktop/src/renderer/features/sync/sync.tsx`, `layouts/workspace.tsx`):
+  - Enabled the `Sync` workspace view (`Cmd+6`) with explicit folder registration (`send-only`, `receive-only`, `bidirectional`), SHA-256 content hashing, symlink/hidden-file exclusion, version tracking, pause/resume, and conflict-safe copy naming (`ConflictFilename`).
+  - CLI commands: `lanvory sync list|add|remove|scan|pause|resume`.
+- **Network Explorer (§25, Phase 9)** (`apps/desktop/src/renderer/features/network/explorer.tsx`, `network.tsx`):
+  - Factual local topology visualization displaying approved adapters, local node listener state, and trusted peers without inferred hops or fabricated links.
+
+`go test -race ./...` (including `internal/clipboard` and `internal/sync`), `pnpm typecheck`, `make build`, `make verify`, and `sh scripts/smoke-native.sh pnpm` all passed with exit code 0.
+
+## POST_MVP enhancements: SQLite Sync persistence, Clipboard wire protocol, Permission UI, Explorer actions & Header ⌘K
+
+- **SQLite Persistence for Sync Folders (Schema v8)** (`core/internal/storage/sync_unix.go`, `sync_unavailable.go`, `sync_unix_test.go`, `profile_unix.go`, `core/internal/local/sync.go`):
+  - Added `sync_folders` table (schema v8) persisting registered folder IDs, absolute paths, sync modes, and pause flags across daemon restarts.
+- **Shared Clipboard Wire Protocol (`lanvory-clipboard/1`)** (`core/internal/clipboard/clipboard.go`, `core/internal/peer/clipboard.go`, `peer/listener.go`, `cmd/lanvoryd/`, `local/clipboard.go`):
+  - Implemented mTLS ALPN `lanvory-clipboard/1` packet framing (`WritePacket`/`ReadPacket` + 1-byte ack) over approved adapters, checking `clipboard-share` grants on the receiving peer and sharing the `clipboard.Buffer` with `lanvoryd`.
+- **UI Controls & Polish**:
+  - [clipboard-card.tsx](apps/desktop/src/renderer/features/sharing/clipboard-card.tsx): Added inline `Allow peer` / `Revoke` buttons for `clipboard-share` permission.
+  - [sync.tsx](apps/desktop/src/renderer/features/sync/sync.tsx): Added expandable `Indexed files` preview list and per-peer `folder-sync` `Allow` / `Revoke` controls, plus tone-coded `SyncBanner` feedback.
+  - [explorer.tsx](apps/desktop/src/renderer/features/network/explorer.tsx) & [network.tsx](apps/desktop/src/renderer/features/network/network.tsx): Added `Ping peer` quick action in the Explorer inspector to prefill and focus the authenticated Ping form.
+  - [workspace.tsx](apps/desktop/src/renderer/layouts/workspace.tsx): Added a `⌘K` Command Palette trigger button in the workspace header.
+
+`pnpm typecheck`, `make build`, `make verify`, and both app-owned and external daemon passes of `sh scripts/smoke-native.sh pnpm` passed with exit code 0.
+
 ## Open verification gates
 
 | Task | Available evidence | Missing evidence and prerequisites |

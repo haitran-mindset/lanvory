@@ -20,6 +20,7 @@ import {
   FolderOpen,
   Inbox,
   Radio,
+  RotateCcw,
   ShieldCheck,
   Trash2,
   X,
@@ -27,6 +28,7 @@ import {
 import { pairedDeviceName, readPairedNames } from "../../services/paired-names";
 import { PanelHeading } from "../../components/panel-heading";
 import { InboxAccess } from "./inbox-access";
+import { ClipboardCard } from "./clipboard-card";
 
 const offerSchema = z.object({
   id: z.string(),
@@ -129,6 +131,7 @@ function TransferRow({
   item,
   peerName,
   onRemove,
+  onRetry,
   onConfirm,
   onCancel,
   busy,
@@ -136,6 +139,7 @@ function TransferRow({
   item: Transfer;
   peerName?: string;
   onRemove?(): void;
+  onRetry?(): void;
   onConfirm?(): void;
   onCancel?(): void;
   busy?: boolean;
@@ -179,18 +183,34 @@ function TransferRow({
             </div>
           </div>
         </div>
-        {onRemove && (
-          <button
-            type="button"
-            className="refresh sharing-history-remove"
-            title="Remove from history"
-            aria-label={`Remove ${item.name} from history`}
-            disabled={busy}
-            onClick={onRemove}
-          >
-            <Trash2 size={15} aria-hidden="true" />
-          </button>
-        )}
+        <div className="sharing-history-row-actions">
+          {onRetry &&
+            (item.state === "failed" || item.state === "cancelled") &&
+            item.direction === "outgoing" && (
+              <button
+                type="button"
+                className="refresh sharing-history-retry"
+                title="Retry transfer"
+                aria-label={`Retry ${item.name}`}
+                disabled={busy}
+                onClick={onRetry}
+              >
+                <RotateCcw size={15} aria-hidden="true" />
+              </button>
+            )}
+          {onRemove && (
+            <button
+              type="button"
+              className="refresh sharing-history-remove"
+              title="Remove from history"
+              aria-label={`Remove ${item.name} from history`}
+              disabled={busy}
+              onClick={onRemove}
+            >
+              <Trash2 size={15} aria-hidden="true" />
+            </button>
+          )}
+        </div>
       </div>
       {onConfirm && (
         <div className="sharing-actions transfer-confirm-box">
@@ -417,6 +437,38 @@ export function Sharing({
     } finally {
       setSelecting(false);
     }
+  }
+
+  async function selectFolder() {
+    setSelecting(true);
+    setSendMessage("");
+    try {
+      const result = await window.lanvory.selectFolder();
+      if (Array.isArray(result) && result.length) {
+        setSelectedFiles(result);
+      } else if (result !== null) {
+        setSendMessage("No regular files found in the selected folder.");
+      }
+    } catch {
+      setSendMessage("Unable to open the folder picker.");
+    } finally {
+      setSelecting(false);
+    }
+  }
+
+  function retryTransfer(item: Transfer) {
+    if (
+      item.fingerprint &&
+      recipients?.some((peer) => peer.fingerprint === item.fingerprint)
+    ) {
+      setRecipient(item.fingerprint);
+    }
+    setSendMessage(
+      `Select “${item.name}” to resend${item.fingerprint ? ` to ${pairedDeviceName(item.fingerprint, names)}` : ""}.`,
+    );
+    document
+      .querySelector(".sharing-grid .operation-highlight")
+      ?.scrollIntoView({ behavior: "smooth" });
   }
 
   async function removeFile() {
@@ -689,6 +741,16 @@ export function Sharing({
                         ? "Change file"
                         : "Choose file"}
                   </button>
+                  {!selected && (
+                    <button
+                      type="button"
+                      className="refresh"
+                      disabled={!canSelectFile}
+                      onClick={() => void selectFolder()}
+                    >
+                      Choose folder
+                    </button>
+                  )}
                   {selected && (
                     <button
                       type="button"
@@ -918,6 +980,14 @@ export function Sharing({
         </section>
       </div>
       {visible && <InboxAccess ownerId={ownerId} />}
+      {visible && (
+        <ClipboardCard
+          ownerId={ownerId}
+          visible={visible}
+          recipients={recipients}
+          routes={routes}
+        />
+      )}
       {activeTransfers.length > 0 && (
         <section
           className="operation-card"
@@ -1059,6 +1129,7 @@ export function Sharing({
                 key={item.id}
                 peerName={transferPeerName(item)}
                 busy={removingHistory}
+                onRetry={() => retryTransfer(item)}
                 onRemove={() => setPendingHistoryRemoval(item.id)}
                 onConfirm={
                   pendingHistoryRemoval === item.id

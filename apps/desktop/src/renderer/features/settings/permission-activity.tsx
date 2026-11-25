@@ -29,16 +29,7 @@ export function PermissionActivity({ ownerId }: { ownerId?: string }) {
       if (event.currentTarget.open && !loading && events === undefined) void refresh();
     }}>
       <summary>
-        <span className="panel-icon"><ShieldCheck size={20} aria-hidden="true" /></span>
-        <div className="settings-activity-title-wrap">
-          <span className="settings-activity-title">Permission activity</span>
-          <span className="settings-activity-desc">Audit log of resource and capability authorizations for paired devices.</span>
-        </div>
-        {events !== undefined && events !== null && (
-          <span className="state-pill settings-activity-pill">
-            {events.length} {events.length === 1 ? 'event' : 'events'}
-          </span>
-        )}
+        Permission activity
         <ChevronDown className="settings-activity-chevron" size={18} aria-hidden="true" />
       </summary>
       <div className="settings-activity-body">

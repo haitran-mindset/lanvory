@@ -39,6 +39,7 @@ export interface DesktopApi {
   serviceAction(action: string, input: Record<string, string>): Promise<boolean>;
   decideFile(id: string, allow: boolean): Promise<boolean>;
   selectFile(): Promise<string | string[] | null>;
+  selectFolder(): Promise<string[] | null>;
   selectDroppedFile(file: File): Promise<string | null>;
   selectDroppedFiles(files: FileList | File[]): Promise<string[] | null>;
   clearSelectedFile(): Promise<boolean>;
@@ -46,6 +47,21 @@ export interface DesktopApi {
   getSelectedFiles(): Promise<string[]>;
   sendFile(adapter: string, endpoint: string, pin: string): Promise<'completed' | 'cancelled' | 'failed'>;
   cancelFileSend(): Promise<void>;
+  pingPeer(adapter: string, endpoint: string, pin: string): Promise<{ verified: boolean; latencyMs?: number; error?: string }>;
+  clipboardState(): Promise<unknown>;
+  setClipboardPolicy(enabled: boolean): Promise<unknown>;
+  setClipboardAccess(fingerprint: string, allowed: boolean, duration?: 'until-revoked' | 'hour' | 'day'): Promise<boolean>;
+  clearClipboard(): Promise<boolean>;
+  sendClipboard(adapter: string, endpoint: string, pin: string, text?: string): Promise<{ ok: boolean; error?: string }>;
+  copyReceivedClipboard(text: string): Promise<boolean>;
+  syncFolders(): Promise<unknown>;
+  pickSyncDirectory(): Promise<string | null>;
+  addSyncFolder(id: string, folderPath: string, mode: 'send-only' | 'receive-only' | 'bidirectional'): Promise<unknown>;
+  removeSyncFolder(id: string): Promise<boolean>;
+  scanSyncFolder(id: string): Promise<unknown>;
+  setSyncFolderPaused(id: string, paused: boolean): Promise<unknown>;
+  setSyncAccess(fingerprint: string, folderId: string, allowed: boolean): Promise<boolean>;
   trustPeer(adapter: string, endpoint: string, fingerprint: string): Promise<boolean>;
   revokePeer(fingerprint: string): Promise<boolean>;
+  onNavigate(callback: (page: 'Devices' | 'Sharing' | 'Sync' | 'Services' | 'Network' | 'Settings') => void): () => void;
 }

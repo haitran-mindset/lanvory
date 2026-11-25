@@ -14,12 +14,14 @@ import (
 	"time"
 
 	"lanvory.local/core/internal/bridge"
+	"lanvory.local/core/internal/clipboard"
 	"lanvory.local/core/internal/discovery"
 	"lanvory.local/core/internal/drop"
 	"lanvory.local/core/internal/local"
 	"lanvory.local/core/internal/networking"
 	"lanvory.local/core/internal/pairing"
 	"lanvory.local/core/internal/peer"
+	"lanvory.local/core/internal/permissions"
 	"lanvory.local/core/internal/storage"
 )
 
@@ -28,8 +30,9 @@ type lanListener struct {
 	dir      string
 	device   local.Device
 	key      ed25519.PrivateKey
-	receiver *drop.Receiver
-	pairs    *pairing.Manager
+	receiver  *drop.Receiver
+	pairs     *pairing.Manager
+	clipboard *clipboard.Buffer
 
 	mu      sync.Mutex
 	current local.ListenerStatus
@@ -105,6 +108,16 @@ func (l *lanListener) start(adapter string, bind netip.AddrPort, advertise, enab
 	if err != nil {
 		cancel()
 		return fmt.Errorf("start peer listener: %w", err)
+	}
+	if l.clipboard != nil {
+		tcp.EnableClipboard(l.clipboard, func(fingerprint string) bool {
+			allowed, err := storage.HasGrant(l.dir, l.device.ID, storage.Grant{
+				Fingerprint: fingerprint,
+				Capability:  permissions.ClipboardShare,
+				Resource:    "clipboard",
+			}, time.Now())
+			return err == nil && allowed
+		})
 	}
 	address := netip.MustParseAddrPort(tcp.Addr().String())
 	var udpDone chan struct{}

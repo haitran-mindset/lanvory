@@ -13,10 +13,11 @@ const peersSchema = z.array(z.object({
 
 type Peers = z.infer<typeof peersSchema>;
 
-export function TrustedPeers({ ownerId, externalRevision = 0, visible = true }: {
+export function TrustedPeers({ ownerId, externalRevision = 0, visible = true, searchQuery = '' }: {
   ownerId: string;
   externalRevision?: number;
   visible?: boolean;
+  searchQuery?: string;
 }) {
   const [peers, setPeers] = useState<Peers | null>();
   const [revision, setRevision] = useState(0);
@@ -102,6 +103,13 @@ export function TrustedPeers({ ownerId, externalRevision = 0, visible = true }: 
     if (saved) { form.reset(); setFormRevision((value) => value + 1); }
   }
 
+  const query = searchQuery.trim().toLocaleLowerCase();
+  const filteredPeers = peers?.filter((item) =>
+    !query
+    || pairedDeviceName(item.fingerprint, names).toLocaleLowerCase().includes(query)
+    || item.fingerprint.toLocaleLowerCase().includes(query),
+  );
+
   return (
     <section className="nearby trusted-panel" aria-labelledby="trusted-heading" aria-busy={busy}>
       <PanelHeading icon={ShieldCheck} id="trusted-heading" title="Paired devices"
@@ -109,9 +117,10 @@ export function TrustedPeers({ ownerId, externalRevision = 0, visible = true }: 
       {peers === undefined && <p>Loading paired devices…</p>}
       {peers === null && <p>Unable to load paired devices. <button type="button" className="refresh" onClick={() => setRevision(revision + 1)}>Retry</button></p>}
       {peers?.length === 0 && <p>No paired devices yet.</p>}
-      {!!peers?.length && (
+      {!!peers?.length && filteredPeers?.length === 0 && <p className="panel-empty">No paired devices match “{searchQuery.trim()}”.</p>}
+      {!!filteredPeers?.length && (
         <ul className="interface-list paired-device-list">
-          {peers.map((item) => (
+          {filteredPeers.map((item) => (
             <li key={item.fingerprint} className="trusted-row">
               <div className="paired-device-main">
                 <div className="paired-device-identity">

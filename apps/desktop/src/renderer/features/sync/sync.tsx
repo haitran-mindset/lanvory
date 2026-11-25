@@ -1,0 +1,360 @@
+import { type FormEvent, useEffect, useState } from 'react';
+import { AlertCircle, CheckCircle2, FolderSync, Info, Pause, Play, Plus, RefreshCw, Trash2 } from 'lucide-react';
+import { z } from 'zod';
+import { PanelHeading } from '../../components/panel-heading';
+import { SelectField } from '../../components/ui/select';
+import { pairedDeviceName, readPairedNames } from '../../services/paired-names';
+
+const folderSchema = z.object({
+  id: z.string(),
+  path: z.string(),
+  mode: z.enum(['send-only', 'receive-only', 'bidirectional']),
+  paused: z.boolean(),
+  fileCount: z.number().nonnegative(),
+  totalBytes: z.number().nonnegative(),
+  lastScanAt: z.string().optional(),
+  files: z
+    .array(
+      z.object({
+        relativePath: z.string(),
+        size: z.number(),
+        sha256: z.string(),
+        version: z.number(),
+      }),
+    )
+    .optional(),
+  conflicts: z
+    .array(
+      z.object({
+        relativePath: z.string(),
+        conflictCopy: z.string(),
+        detectedAt: z.string(),
+      }),
+    )
+    .optional(),
+});
+
+const foldersSchema = z.array(folderSchema);
+type SyncFolder = z.infer<typeof folderSchema>;
+
+const modeOptions = [
+  { value: 'bidirectional', label: 'Bidirectional' },
+  { value: 'send-only', label: 'Send only' },
+  { value: 'receive-only', label: 'Receive only' },
+] as const;
+
+function formatBytes(value: number) {
+  if (value < 1024) return `${value} B`;
+  if (value < 1024 ** 2) return `${(value / 1024).toFixed(1)} KiB`;
+  return `${(value / 1024 ** 2).toFixed(1)} MiB`;
+}
+
+type SyncFeedback = { tone: 'success' | 'info' | 'error'; text: string } | null;
+
+function SyncBanner({ feedback }: { feedback: SyncFeedback }) {
+  if (!feedback) return null;
+  const Icon = feedback.tone === 'success' ? CheckCircle2 : feedback.tone === 'error' ? AlertCircle : Info;
+  return (
+    <div className={`sync-feedback-banner is-${feedback.tone}`} role="status">
+      <Icon size={15} aria-hidden="true" />
+      <span>{feedback.text}</span>
+    </div>
+  );
+}
+
+export function SyncPanel({ visible, ownerId }: { visible: boolean; ownerId?: string }) {
+  const [folders, setFolders] = useState<SyncFolder[] | null>();
+  const [peers, setPeers] = useState<Array<{ fingerprint: string }>>([]);
+  const [selectedPeerByFolder, setSelectedPeerByFolder] = useState<Record<string, string>>({});
+  const [pickedPath, setPickedPath] = useState('');
+  const [mode, setMode] = useState<'send-only' | 'receive-only' | 'bidirectional'>('bidirectional');
+  const [busy, setBusy] = useState(false);
+  const [addMessage, setAddMessage] = useState<SyncFeedback>(null);
+  const [listMessage, setListMessage] = useState<SyncFeedback>(null);
+  const names = ownerId ? readPairedNames(ownerId) : {};
+
+  async function refresh() {
+    const [rawFolders, rawPeers] = await Promise.all([
+      window.lanvory.syncFolders().catch(() => null),
+      window.lanvory.trustedPeers().catch(() => null),
+    ]);
+    const parsed = foldersSchema.safeParse(rawFolders);
+    setFolders(parsed.success ? parsed.data : null);
+    const parsedPeers = z.array(z.object({ fingerprint: z.string() })).safeParse(rawPeers);
+    if (parsedPeers.success) setPeers(parsedPeers.data);
+  }
+
+  useEffect(() => {
+    if (!visible) return;
+    void refresh();
+  }, [visible]);
+
+  async function pickDirectory() {
+    const chosen = await window.lanvory.pickSyncDirectory().catch(() => null);
+    if (chosen) setPickedPath(chosen);
+  }
+
+  async function addFolder(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const formEl = event.currentTarget;
+    const form = new FormData(formEl);
+    const id = String(form.get('id') ?? '').trim();
+    if (!/^[a-z0-9][a-z0-9_-]{0,63}$/.test(id) || !pickedPath) {
+      setAddMessage({ tone: 'error', text: 'Enter a lowercase folder ID and choose a local directory.' });
+      return;
+    }
+    setBusy(true);
+    setAddMessage(null);
+    try {
+      const raw = await window.lanvory.addSyncFolder(id, pickedPath, mode).catch(() => null);
+      const created = folderSchema.safeParse(raw);
+      if (created.success) {
+        formEl.reset();
+        setPickedPath('');
+        await refresh();
+        setAddMessage({ tone: 'success', text: `Registered sync folder “${created.data.id}”.` });
+        setListMessage(null);
+      } else {
+        const errText = raw && typeof raw === 'object' && 'error' in raw && typeof raw.error === 'string'
+          ? raw.error
+          : 'Unable to register folder. Check that the ID is unique and the daemon is up to date.';
+        setAddMessage({ tone: 'error', text: errText });
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function scanFolder(id: string) {
+    setBusy(true);
+    setListMessage(null);
+    const scanned = folderSchema.safeParse(await window.lanvory.scanSyncFolder(id).catch(() => null));
+    if (scanned.success) {
+      setFolders((prev) => prev?.map((f) => (f.id === id ? scanned.data : f)) ?? [scanned.data]);
+      setListMessage({ tone: 'success', text: `Scanned “${id}”: ${scanned.data.fileCount} files indexed (${formatBytes(scanned.data.totalBytes)}).` });
+    } else {
+      setListMessage({ tone: 'error', text: `Unable to scan “${id}”.` });
+    }
+    setBusy(false);
+  }
+
+  async function togglePause(folder: SyncFolder) {
+    setBusy(true);
+    setListMessage(null);
+    const updated = folderSchema.safeParse(
+      await window.lanvory.setSyncFolderPaused(folder.id, !folder.paused).catch(() => null),
+    );
+    if (updated.success) {
+      setFolders((prev) => prev?.map((f) => (f.id === folder.id ? updated.data : f)) ?? null);
+      setListMessage({
+        tone: 'info',
+        text: updated.data.paused ? `Paused sync for “${folder.id}”.` : `Resumed sync for “${folder.id}”.`,
+      });
+    }
+    setBusy(false);
+  }
+
+  async function removeFolder(id: string) {
+    setBusy(true);
+    setListMessage(null);
+    const ok = await window.lanvory.removeSyncFolder(id).catch(() => false);
+    if (ok) {
+      setFolders((prev) => prev?.filter((f) => f.id !== id) ?? null);
+      setListMessage({ tone: 'info', text: `Removed sync folder “${id}” (local files preserved).` });
+    }
+    setBusy(false);
+  }
+
+  return (
+    <section className="network-panel sync-panel" aria-labelledby="sync-heading">
+      <h2 id="sync-heading" className="sr-only">Sync</h2>
+      <div className="operation-grid">
+        <section className="operation-card operation-highlight">
+          <PanelHeading
+            icon={FolderSync}
+            title="Add sync folder"
+            description="Only user-selected folders are indexed with SHA-256 content hashes and version tracking. Symlinks and hidden metadata are excluded."
+          />
+          <form className="trust-form" onSubmit={(e) => void addFolder(e)}>
+            <label>
+              Folder ID
+              <input name="id" required maxLength={64} placeholder="project-docs" disabled={busy} />
+            </label>
+            <label>
+              Local directory
+              <div className="sync-path-row">
+                <input
+                  type="text"
+                  readOnly
+                  value={pickedPath}
+                  placeholder="No directory selected"
+                  aria-label="Selected directory path"
+                />
+                <button type="button" className="refresh" disabled={busy} onClick={() => void pickDirectory()}>
+                  Choose folder
+                </button>
+              </div>
+            </label>
+            <SelectField
+              label="Sync mode"
+              name="mode"
+              value={mode}
+              disabled={busy}
+              options={modeOptions}
+              onValueChange={(v) => {
+                if (v === 'send-only' || v === 'receive-only' || v === 'bidirectional') setMode(v);
+              }}
+            />
+            <button type="submit" className="primary" disabled={busy || !pickedPath}>
+              <Plus size={16} aria-hidden="true" /> Add folder
+            </button>
+          </form>
+          <SyncBanner feedback={addMessage} />
+        </section>
+
+        <section className="operation-card">
+          <PanelHeading
+            icon={RefreshCw}
+            title="Registered folders"
+            description="Scan directories locally to compute content digests and detect concurrent changes without overwriting files."
+          />
+          <SyncBanner feedback={listMessage} />
+          {folders === undefined && <p>Loading sync folders…</p>}
+          {folders === null && <p role="status">Sync service unavailable.</p>}
+          {folders?.length === 0 && <p className="panel-empty">No sync folders configured yet.</p>}
+          {!!folders?.length && (
+            <ul className="sync-folder-list">
+              {folders.map((folder) => (
+                <li key={folder.id} className="sync-folder-card">
+                  <div className="sync-folder-header">
+                    <div className="sync-folder-identity">
+                      <span className="sync-folder-icon">
+                        <FolderSync size={17} aria-hidden="true" />
+                      </span>
+                      <div className="sync-folder-title">
+                        <strong>{folder.id}</strong>
+                        <span className={folder.paused ? 'state-pill' : 'state-pill is-active'}>
+                          {folder.paused ? 'Paused' : folder.mode}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="sync-folder-actions">
+                      <button type="button" className="refresh" disabled={busy} onClick={() => void scanFolder(folder.id)}>
+                        <RefreshCw size={14} aria-hidden="true" />
+                        <span>Scan</span>
+                      </button>
+                      <button
+                        type="button"
+                        className="refresh sync-icon-btn"
+                        disabled={busy}
+                        title={folder.paused ? 'Resume sync' : 'Pause sync'}
+                        aria-label={folder.paused ? `Resume ${folder.id}` : `Pause ${folder.id}`}
+                        onClick={() => void togglePause(folder)}
+                      >
+                        {folder.paused ? <Play size={14} aria-hidden="true" /> : <Pause size={14} aria-hidden="true" />}
+                      </button>
+                      <button
+                        type="button"
+                        className="refresh sync-icon-btn"
+                        disabled={busy}
+                        title="Remove folder"
+                        aria-label={`Remove ${folder.id}`}
+                        onClick={() => void removeFolder(folder.id)}
+                      >
+                        <Trash2 size={14} aria-hidden="true" />
+                      </button>
+                    </div>
+                  </div>
+                  <code className="sync-folder-path-pill" title={folder.path}>
+                    {folder.path}
+                  </code>
+                  <div className="sync-folder-meta">
+                    <span>{folder.fileCount} {folder.fileCount === 1 ? 'file' : 'files'}</span>
+                    <span>·</span>
+                    <span>{formatBytes(folder.totalBytes)}</span>
+                    {folder.lastScanAt && (
+                      <>
+                        <span>·</span>
+                        <span>Scanned {new Date(folder.lastScanAt).toLocaleTimeString()}</span>
+                      </>
+                    )}
+                  </div>
+                  {!!folder.files?.length && (
+                    <details className="sync-files-details">
+                      <summary>Indexed files ({folder.files.length})</summary>
+                      <ul className="sync-files-list">
+                        {folder.files.slice(0, 50).map((file) => (
+                          <li key={file.relativePath}>
+                            <code title={file.relativePath}>{file.relativePath}</code>
+                            <span>{formatBytes(file.size)} · v{file.version}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </details>
+                  )}
+                  {peers.length > 0 && (
+                    <div className="sync-peer-access">
+                      <SelectField
+                        label="Peer access"
+                        name={`syncPeer-${folder.id}`}
+                        placeholder="Select paired peer"
+                        value={selectedPeerByFolder[folder.id] ?? ''}
+                        disabled={busy}
+                        onValueChange={(val) => setSelectedPeerByFolder((prev) => ({ ...prev, [folder.id]: val }))}
+                        options={peers.map((p) => ({ value: p.fingerprint, label: pairedDeviceName(p.fingerprint, names) }))}
+                      />
+                      <button
+                        type="button"
+                        className="refresh"
+                        disabled={busy || !selectedPeerByFolder[folder.id]}
+                        onClick={() => {
+                          const fp = selectedPeerByFolder[folder.id];
+                          if (!fp) return;
+                          setBusy(true);
+                          void window.lanvory
+                            .setSyncAccess(fp, folder.id, true)
+                            .then((ok) => {
+                              setListMessage(
+                                ok
+                                  ? { tone: 'success', text: `Granted sync access on “${folder.id}” to ${pairedDeviceName(fp, names)}.` }
+                                  : { tone: 'error', text: 'Unable to grant folder sync permission.' },
+                              );
+                            })
+                            .finally(() => setBusy(false));
+                        }}
+                      >
+                        Allow
+                      </button>
+                      <button
+                        type="button"
+                        className="refresh"
+                        disabled={busy || !selectedPeerByFolder[folder.id]}
+                        onClick={() => {
+                          const fp = selectedPeerByFolder[folder.id];
+                          if (!fp) return;
+                          setBusy(true);
+                          void window.lanvory
+                            .setSyncAccess(fp, folder.id, false)
+                            .then((ok) => {
+                              setListMessage(
+                                ok
+                                  ? { tone: 'info', text: `Revoked sync access on “${folder.id}” for ${pairedDeviceName(fp, names)}.` }
+                                  : { tone: 'error', text: 'Unable to revoke folder sync permission.' },
+                              );
+                            })
+                            .finally(() => setBusy(false));
+                        }}
+                      >
+                        Revoke
+                      </button>
+                    </div>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      </div>
+    </section>
+  );
+}

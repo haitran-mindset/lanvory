@@ -11,7 +11,7 @@ const statusLabels = {
   unavailable: 'Daemon unavailable',
 };
 
-function createMenuBar({ open, retry, quit }) {
+function createMenuBar({ open, navigate, retry, quit }) {
   const trayPath = path.join(__dirname, '../../assets/trayTemplate.png');
   let icon = existsSync(trayPath) ? nativeImage.createFromPath(trayPath) : nativeImage.createEmpty();
   if (icon.isEmpty()) {
@@ -22,22 +22,49 @@ function createMenuBar({ open, retry, quit }) {
   icon.setTemplateImage(true);
   const tray = new Tray(icon);
   let shown;
-  const setStatus = (status) => {
-    if (shown === status) return;
-    shown = status;
+  let details = {};
+  const rebuild = () => {
+    const status = shown ?? 'checking';
     const label = statusLabels[status] ?? 'Lanvory ready';
     tray.setToolTip(`Lanvory — ${label}`);
+    const infoItems = [];
+    if (details.endpoint) infoItems.push({ label: `Local IP: ${details.endpoint}`, enabled: false });
+    if (typeof details.trusted === 'number') infoItems.push({ label: `Trusted devices: ${details.trusted}`, enabled: false });
+    if (typeof details.transfers === 'number' && details.transfers > 0) {
+      infoItems.push({ label: `Active transfers: ${details.transfers}`, enabled: false });
+    }
+    const navAvailable = status === 'online' || status === 'listening';
     tray.setContextMenu(Menu.buildFromTemplate([
       { label: 'Open Lanvory', click: open },
       { type: 'separator' },
       { label, enabled: false },
+      ...infoItems,
       { label: 'Retry daemon connection', enabled: status === 'unavailable', click: retry },
+      ...(navigate ? [
+        { type: 'separator' },
+        { label: 'Send Files…', enabled: navAvailable, click: () => navigate('Sharing') },
+        { label: 'Manage Services', enabled: navAvailable, click: () => navigate('Services') },
+        { label: 'Network', click: () => navigate('Network') },
+        { label: 'Settings', click: () => navigate('Settings') },
+      ] : []),
       { type: 'separator' },
       { label: 'Quit Lanvory', click: quit },
     ]));
   };
+  const setStatus = (status) => {
+    if (shown === status) return;
+    shown = status;
+    rebuild();
+  };
+  const setDetails = (next = {}) => {
+    if (next.endpoint === details.endpoint && next.trusted === details.trusted && next.transfers === details.transfers) {
+      return;
+    }
+    details = next;
+    rebuild();
+  };
   setStatus('checking');
-  return { setStatus, destroy: () => tray.destroy() };
+  return { setStatus, setDetails, destroy: () => tray.destroy() };
 }
 
 function createPairingAlerts(show) {

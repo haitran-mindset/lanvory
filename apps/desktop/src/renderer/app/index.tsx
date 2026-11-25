@@ -7,7 +7,9 @@ import { Sharing, type PeerRoute } from '../features/sharing/sharing';
 import type { PairingTarget } from '../features/devices/nearby';
 import { SettingsPanel, type TextSize, type Theme, type Density } from '../features/settings/settings';
 import { NetworkPanel } from '../features/network/network';
+import { SyncPanel } from '../features/sync/sync';
 import { Workspace, type Page } from '../layouts/workspace';
+import { CommandPalette, type PaletteCommand } from '../components/command-palette';
 import { DevicesPage } from '../pages/devices';
 import { identitySchema, readIdentity, type IdentityResponse } from '../services/identity';
 import '../styles/app.css';
@@ -145,11 +147,15 @@ function App() {
   const [trustRevision, setTrustRevision] = useState(0);
   const [openedSharing, setOpenedSharing] = useState(false);
   const [page, setPage] = useState<Page>('Devices');
+  const [paletteOpen, setPaletteOpen] = useState(false);
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
       if ((event.metaKey || event.ctrlKey) && !event.shiftKey && !event.altKey) {
-        if (event.key === '1') {
+        if (event.key.toLowerCase() === 'k') {
+          event.preventDefault();
+          setPaletteOpen((open) => !open);
+        } else if (event.key === '1') {
           event.preventDefault();
           navigate('Devices');
         } else if (event.key === '2') {
@@ -164,9 +170,15 @@ function App() {
         } else if (event.key === '5') {
           event.preventDefault();
           navigate('Settings');
+        } else if (event.key === '6') {
+          event.preventDefault();
+          navigate('Sync');
         }
       } else if (event.key === 'Escape') {
-        if (pairingTarget.target) {
+        if (paletteOpen) {
+          event.preventDefault();
+          setPaletteOpen(false);
+        } else if (pairingTarget.target) {
           event.preventDefault();
           setPairingTarget(({ revision }) => ({ revision: revision + 1 }));
         }
@@ -174,13 +186,18 @@ function App() {
     }
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [pairingTarget.target]);
+  }, [pairingTarget.target, paletteOpen]);
 
   useEffect(() => {
     const update = () => setWindowVisible(!document.hidden);
     document.addEventListener('visibilitychange', update);
     return () => document.removeEventListener('visibilitychange', update);
   }, []);
+
+  useEffect(() => window.lanvory.onNavigate?.((target) => {
+    if (target === 'Sharing') setOpenedSharing(true);
+    setPage(target);
+  }), []);
 
   useEffect(() => {
     if (!windowVisible) return;
@@ -273,6 +290,7 @@ function App() {
   return (
     <Workspace page={page} status={status} online={Boolean(identity)} lanActive={Boolean(identity) && lanActive}
       onNavigate={navigate}
+      onOpenPalette={() => setPaletteOpen(true)}
       pendingFiles={identity ? pendingFiles : 0}
       action={page === 'Devices' && <div className="page-heading-actions">
         <button type="button" className="primary" disabled={!identity} onClick={discover}>
@@ -288,7 +306,7 @@ function App() {
             setResponse({ device: result.data });
             return true;
           }} />
-        ) : page === 'Network' ? <NetworkPanel visible={windowVisible} /> : page === 'Services' ? <Services key={identity?.id} ownerId={identity?.id} visible={windowVisible} routes={peerRoutes} onPair={findDeviceToPair} onRoute={rememberRoute} /> : page === 'Sharing' ? null : (
+        ) : page === 'Network' ? <NetworkPanel visible={windowVisible} deviceName={identity?.name} /> : page === 'Sync' ? <SyncPanel visible={windowVisible} ownerId={identity?.id} /> : page === 'Services' ? <Services key={identity?.id} ownerId={identity?.id} visible={windowVisible} routes={peerRoutes} onPair={findDeviceToPair} onRoute={rememberRoute} /> : page === 'Sharing' ? null : (
           <DevicesPage incomingPairingEnabled={listener?.pairing === true} response={response} retrying={retrying} visible={windowVisible} scanRevision={scanRevision}
             nearbyCount={nearbyCount} counts={counts} trustRevision={trustRevision} pairingTarget={pairingTarget}
             onDiscover={discover} onShare={() => navigate('Sharing')} onServices={() => navigate('Services')} onNetwork={() => navigate('Network')} onRetry={() => void retry()}
@@ -298,6 +316,23 @@ function App() {
             onTrustChange={() => setTrustRevision((value) => value + 1)} />
         )}
         {openedSharing && <div hidden={page !== 'Sharing'}><Sharing ownerId={identity?.id} onPendingFilesChange={setPendingFiles} visible={windowVisible && page === 'Sharing'} routes={peerRoutes} onPair={findDeviceToPair} onRoute={rememberRoute} /></div>}
+        <CommandPalette
+          open={paletteOpen}
+          onClose={() => setPaletteOpen(false)}
+          commands={[
+            { id: 'nav-devices', category: 'Navigate', label: 'Go to Devices', shortcut: '⌘1', run: () => navigate('Devices') },
+            { id: 'nav-sharing', category: 'Navigate', label: 'Go to Sharing', shortcut: '⌘2', run: () => navigate('Sharing') },
+            { id: 'nav-sync', category: 'Navigate', label: 'Go to Sync', shortcut: '⌘6', run: () => navigate('Sync') },
+            { id: 'nav-services', category: 'Navigate', label: 'Go to Services', shortcut: '⌘3', run: () => navigate('Services') },
+            { id: 'nav-network', category: 'Navigate', label: 'Go to Network', shortcut: '⌘4', run: () => navigate('Network') },
+            { id: 'nav-settings', category: 'Navigate', label: 'Go to Settings', shortcut: '⌘5', run: () => navigate('Settings') },
+            { id: 'act-scan', category: 'Devices', label: 'Scan nearby devices', disabled: !identity, run: findDeviceToPair },
+            { id: 'act-inbox', category: 'Sharing', label: 'Open file inbox folder', run: () => { void window.lanvory.openInbox(); } },
+            { id: 'act-fp', category: 'Identity', label: 'Copy local device ID', disabled: !identity, run: () => { if (identity) void window.lanvory.copyFingerprint(identity.fingerprint); } },
+            { id: 'act-diag', category: 'Network', label: 'Copy network diagnostic report', run: () => { void window.lanvory.copyNetworkReport(); } },
+            { id: 'act-theme', category: 'Appearance', label: `Switch theme (current: ${theme})`, run: () => { void changeTheme(theme === 'dark' ? 'light' : 'dark'); } },
+          ] satisfies PaletteCommand[]}
+        />
     </Workspace>
   );
 }
