@@ -1,5 +1,59 @@
+# Dependencies
 node_modules/
+.pnpm-store/
+
+# Build outputs & binaries
 dist/
 bin/
+out/
+release/
+*.tsbuildinfo
+*.dmg
+*.dmg.sha256
+*.app/
+*.cdx.json
+
+# Go
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+*.prof
 coverage/
+
+# Logs & runtime state
+logs/
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.lanvory/
+*.sock
+*.pid
+
+# Environment & local secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+*.p12
+*.mobileprovision
+
+# OS & Editor files
 .DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+._*
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
