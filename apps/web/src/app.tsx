@@ -1,0 +1,404 @@
+import { useEffect, useState } from 'react'
+import {
+  ArrowDownToLine, ArrowRight, ArrowUpRight, Check, ChevronDown, Github,
+  Layers3, Play, ShieldCheck, Square, Star, Zap,
+} from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { copy, features, securityControls } from './content'
+
+const sectionIds = ['why', 'features', 'how', 'security', 'roadmap']
+const githubRepository = 'haitran-mindset/lanvory'
+const githubUrl = `https://github.com/${githubRepository}`
+const starCountFormat = new Intl.NumberFormat('en')
+const downloadUrl: string | undefined = undefined
+
+function Brand() {
+  return (
+    <a href="#top" className="inline-flex items-center gap-2.5 text-xl font-bold tracking-tight">
+      <span className="brand-mark" aria-hidden="true" />
+      Lanvory
+    </a>
+  )
+}
+
+function GitHubStar() {
+  const [stars, setStars] = useState<number | null>(null)
+
+  useEffect(() => {
+    const controller = new AbortController()
+
+    async function loadStars() {
+      try {
+        const response = await fetch(`https://api.github.com/repos/${githubRepository}`, {
+          signal: controller.signal,
+        })
+        if (!response.ok) return
+
+        const repository = await response.json()
+        const count: unknown = repository?.stargazers_count
+        if (!controller.signal.aborted && typeof count === 'number' && Number.isSafeInteger(count) && count >= 0) {
+          setStars(count)
+        }
+      } catch {
+        // The GitHub link remains usable if the count is unavailable.
+      }
+    }
+
+    void loadStars()
+    return () => controller.abort()
+  }, [])
+
+  const count = stars === null ? null : starCountFormat.format(stars)
+
+  return (
+    <Button asChild variant="outline" className="min-h-9 gap-1.5 px-2.5 text-xs">
+      <a href={githubUrl} aria-label={count === null ? 'Star Lanvory on GitHub' : `Star Lanvory on GitHub (${count} ${stars === 1 ? 'star' : 'stars'})`}>
+        <Star data-icon="inline-start" aria-hidden="true" />
+        Star
+        {count !== null && <span className="border-l border-border pl-1.5 tabular-nums">{count}</span>}
+      </a>
+    </Button>
+  )
+}
+
+function DemoMedia({
+  demo, title, alt, width, height, isPlaying, onToggle,
+}: {
+  demo: string
+  title: string
+  alt: string
+  width: number
+  height: number
+  isPlaying: boolean
+  onToggle: () => void
+}) {
+  const imageUrl = `${import.meta.env.BASE_URL}demos/${demo}.${isPlaying ? 'gif' : 'png'}`
+  const PlaybackIcon = isPlaying ? Square : Play
+
+  return (
+    <>
+      <img
+        src={imageUrl}
+        alt={alt}
+        width={width}
+        height={height}
+        loading="lazy"
+        className="h-auto w-full rounded-lg border border-border"
+      />
+      <Button
+        type="button"
+        variant="outline"
+        className="mt-3"
+        aria-label={`${isPlaying ? 'Stop' : 'Play'} demo: ${title}`}
+        onClick={onToggle}
+      >
+        <PlaybackIcon data-icon="inline-start" aria-hidden="true" />
+        {isPlaying ? 'Stop demo' : 'Play demo'}
+      </Button>
+    </>
+  )
+}
+
+export function App() {
+  const [activeDemo, setActiveDemo] = useState<string | null>(null)
+
+  function toggleDemo(demo: string) {
+    setActiveDemo((current) => current === demo ? null : demo)
+  }
+
+  return (
+    <div id="top">
+      <a className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-10 focus:bg-background focus:p-3" href="#main">
+        {copy.skip}
+      </a>
+      <a className="announcement flex flex-wrap items-center justify-center gap-x-3 gap-y-1 px-4 py-2.5 text-center text-xs" href="#roadmap">
+        <span className="size-1.5 rounded-full bg-primary" aria-hidden="true" />
+        <span>{copy.update}</span>
+        <span className="inline-flex items-center gap-1 text-foreground underline underline-offset-4">
+          {copy.nav[4]} <ArrowUpRight size={13} aria-hidden="true" />
+        </span>
+      </a>
+
+      <header className="shell site-header">
+        <Brand />
+        <nav aria-label="Main navigation" className="site-nav">
+          {copy.nav.map((label, index) => <a key={sectionIds[index]} href={`#${sectionIds[index]}`}>{label}</a>)}
+        </nav>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+          <a className="inline-flex items-center gap-2 text-sm hover:text-primary" href={githubUrl}>
+            <Github size={16} aria-hidden="true" /> GitHub
+          </a>
+          <GitHubStar />
+        </div>
+      </header>
+
+      <main id="main" tabIndex={-1} className="shell">
+        <section className="hero" aria-labelledby="hero-title">
+          <div className="hero-kicker flex flex-wrap items-baseline gap-x-4 gap-y-2 text-sm text-muted-foreground">
+            <span className="font-bold text-primary">lanvory</span>
+            <span>{copy.tagline}</span>
+          </div>
+          <div className="hero-grid">
+            <h1 id="hero-title">
+              {copy.headline[0]} <em>{copy.headline[1]}</em>
+            </h1>
+            <div className="hero-copy">
+              <p>{copy.intro}</p>
+              <ul className="mt-5 grid gap-2 text-sm">
+                {copy.checks.map((item) => (
+                  <li key={item} className="flex items-start gap-3">
+                    <Check size={17} className="shrink-0 text-primary" aria-hidden="true" />
+                    {item}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+          <div className="mt-8 flex flex-wrap items-center gap-3">
+            {downloadUrl ? (
+              <Button asChild>
+                <a href={downloadUrl}><ArrowDownToLine data-icon="inline-start" aria-hidden="true" /> {copy.download}</a>
+              </Button>
+            ) : (
+              <Button asChild>
+                <a href="#download"><ArrowDownToLine data-icon="inline-start" aria-hidden="true" /> Download info</a>
+              </Button>
+            )}
+            <Button asChild variant="outline">
+              <a href="#how">{copy.nav[2]} <ArrowRight data-icon="inline-end" aria-hidden="true" /></a>
+            </Button>
+          </div>
+          {!downloadUrl && <p className="mt-2.5 text-xs text-muted-foreground">{copy.downloadStatus}</p>}
+
+          <ul className="mt-7 flex flex-wrap gap-2.5 text-xs">
+            {features.slice(0, 5).map(({ id, title }) => (
+              <li key={id}>
+                <a className="feature-tag inline-block hover:border-primary hover:text-primary" href={`#${id}`}>{title}</a>
+              </li>
+            ))}
+          </ul>
+
+          <figure className="mt-10 sm:mt-12">
+            <img
+              src={`${import.meta.env.BASE_URL}images/desktop-preview-1440.webp`}
+              srcSet={`${import.meta.env.BASE_URL}images/desktop-preview-768.webp 768w, ${import.meta.env.BASE_URL}images/desktop-preview-1440.webp 1440w`}
+              sizes="(max-width: 28rem) calc(100vw - 2rem), (max-width: 79rem) calc(100vw - 3rem), 76rem"
+              width={1440}
+              height={838}
+              alt="A MacBook displaying the Lanvory desktop concept with a nearby devices panel."
+              decoding="async"
+              className="h-auto w-full rounded-xl border border-border"
+            />
+          </figure>
+        </section>
+
+        <section id="why" className="principles" aria-label={copy.nav[0]}>
+          {copy.why.map(([title, description], index) => {
+            const Icon = [Layers3, ShieldCheck, Zap][index]
+            return (
+              <article key={title} className="principle">
+                <span className="icon-box"><Icon size={20} aria-hidden="true" /></span>
+                <div><h2>{title}</h2><p>{description}</p></div>
+              </article>
+            )
+          })}
+        </section>
+
+        <section id="features" className="detail-section">
+          <h2>{copy.nav[1]}</h2>
+          <p>{copy.featureIntro}</p>
+          <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {features.map((feature) => (
+              <article id={feature.id} key={feature.id} className="detail-card scroll-mt-8 target:border-primary">
+                <div className="mb-4 flex items-center justify-between gap-3">
+                  <feature.icon className="text-primary" size={22} aria-hidden="true" />
+                  {'status' in feature && <span className="text-xs text-primary">{feature.status}</span>}
+                </div>
+                <h3>{feature.title}</h3>
+                <p>{feature.description}</p>
+              </article>
+            ))}
+          </div>
+        </section>
+
+        <section id="how" className="detail-section">
+          <h2>{copy.nav[2]}</h2>
+          <p>See what it’s like to send a file to another device with Lanvory.</p>
+          <figure className="detail-card mt-6">
+            <figcaption className="mb-4">
+              <h3>From discovery to delivery</h3>
+              <p>Follow Machine A and Machine B as they pair, approve a file, and transfer it over the local network.</p>
+            </figcaption>
+            <picture>
+              <source media="(prefers-reduced-motion: reduce)" srcSet={`${import.meta.env.BASE_URL}demos/overview.png`} />
+              <img
+                src={`${import.meta.env.BASE_URL}demos/overview.gif`}
+                alt="Machine A and Machine B discover each other, pair, approve a file, and verify it after transfer."
+                width={960}
+                height={384}
+                loading="lazy"
+                className="h-auto w-full rounded-lg border border-border"
+              />
+            </picture>
+          </figure>
+          <ol className="steps mt-6 grid gap-4 md:grid-cols-3">
+            {copy.steps.map(({ demo, title, description, alt }, index) => (
+              <li key={demo} className="detail-card flex flex-col">
+                <span className="step-number" aria-hidden="true">0{index + 1}</span>
+                <h3>{title}</h3>
+                <p>{description}</p>
+                <div className="mt-auto pt-4">
+                  <DemoMedia
+                    demo={demo}
+                    title={title}
+                    alt={alt}
+                    width={600}
+                    height={344}
+                    isPlaying={activeDemo === demo}
+                    onToggle={() => toggleDemo(demo)}
+                  />
+                </div>
+              </li>
+            ))}
+          </ol>
+        </section>
+
+        <section id="quick-start" className="detail-section" aria-labelledby="quick-start-title">
+          <div className="quick-start-layout">
+            <div className="quick-start-intro">
+              <h2 id="quick-start-title">Quick Start</h2>
+              <p>Send your first file between two devices.</p>
+              <Button asChild variant="outline" className="mt-5">
+                <a href="#how"><Play data-icon="inline-start" aria-hidden="true" /> See the demo</a>
+              </Button>
+              <img
+                src={`${import.meta.env.BASE_URL}images/quick-start.webp`}
+                alt="A file travels directly between two laptops."
+                width={900}
+                height={600}
+                loading="lazy"
+                decoding="async"
+                className="mt-6 h-auto w-full rounded-xl border border-border"
+              />
+            </div>
+            <ol className="quick-start-steps" role="list">
+              {copy.quickStart.map(([title, description], index) => (
+                <li key={title} className="quick-start-step">
+                  <span className="quick-start-number" aria-hidden="true">
+                    {String(index + 1).padStart(2, '0')}
+                  </span>
+                  <div>
+                    <h3>{title}</h3>
+                    <p>{description}</p>
+                  </div>
+                </li>
+              ))}
+            </ol>
+          </div>
+        </section>
+
+        <section id="security" className="detail-section">
+          <h2>{copy.nav[3]}</h2>
+          <p className="max-w-3xl">{copy.securityIntro}</p>
+          <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {securityControls.map(({ title, icon: Icon, description }) => (
+              <article key={title} className="detail-card">
+                <Icon className="mb-4 text-primary" size={22} aria-hidden="true" />
+                <h3>{title}</h3>
+                <p>{description}</p>
+              </article>
+            ))}
+          </div>
+        </section>
+
+        <section id="roadmap" className="detail-section">
+          <h2>{copy.nav[4]}</h2>
+          <ol className="roadmap-timeline mt-8" role="list">
+            {copy.roadmap.map(({ phase, title, description, icon: Icon }, index) => (
+              <li key={title} className="roadmap-milestone" aria-current={index === 0 ? 'step' : undefined}>
+                <span className="roadmap-node" aria-hidden="true"><Icon size={20} /></span>
+                <article className="detail-card roadmap-card">
+                  <span className="roadmap-phase">{phase}</span>
+                  <h3>{title}</h3>
+                  <p>{description}</p>
+                </article>
+              </li>
+            ))}
+          </ol>
+        </section>
+
+        <section id="download" className="detail-section" aria-labelledby="download-title">
+          <h2 id="download-title">Download &amp; Compatibility</h2>
+          <div className="mt-6 grid gap-4 md:grid-cols-3">
+            {copy.platforms.map(({ id, name, description }) => (
+              <article key={id} className="flex flex-col overflow-hidden rounded-xl border border-border bg-card">
+                <img
+                  src={`${import.meta.env.BASE_URL}images/platform-${id}.webp`}
+                  alt=""
+                  width={720}
+                  height={480}
+                  loading="lazy"
+                  decoding="async"
+                  className="h-auto w-full border-b border-border"
+                />
+                <div className="flex flex-1 flex-col p-5">
+                  <h3 className="text-xl">{name}</h3>
+                  <p>{description}</p>
+                  <div className="mt-auto pt-4">
+                    {id === 'macos' ? (
+                      downloadUrl ? (
+                        <div className="flex flex-wrap items-center gap-4">
+                          <Button asChild>
+                            <a href={downloadUrl}><ArrowDownToLine data-icon="inline-start" aria-hidden="true" /> {copy.download}</a>
+                          </Button>
+                          <a className="text-sm underline underline-offset-4 hover:text-primary" href={`${githubUrl}/releases`}>
+                            Release notes
+                          </a>
+                        </div>
+                      ) : (
+                        <span className="inline-block rounded-full border border-border px-3 py-2 text-xs text-muted-foreground">
+                          {copy.downloadStatus}
+                        </span>
+                      )
+                    ) : (
+                      <a className="inline-flex items-center gap-2 text-sm underline underline-offset-4 hover:text-primary" href="#roadmap">
+                        View roadmap <ArrowUpRight size={15} aria-hidden="true" />
+                      </a>
+                    )}
+                  </div>
+                </div>
+              </article>
+            ))}
+          </div>
+        </section>
+
+        <section id="faq" className="detail-section" aria-labelledby="faq-title">
+          <h2 id="faq-title">Frequently asked questions</h2>
+          <div className="mt-6 max-w-3xl divide-y divide-border rounded-xl border border-border bg-card">
+            {copy.faq.map(([question, answer]) => (
+              <details key={question} className="group">
+                <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-semibold hover:text-primary [&::-webkit-details-marker]:hidden">
+                  {question}
+                  <ChevronDown className="shrink-0 text-muted-foreground motion-safe:transition-transform group-open:rotate-180" size={17} aria-hidden="true" />
+                </summary>
+                <p className="px-4 pb-4">{answer}</p>
+              </details>
+            ))}
+          </div>
+        </section>
+      </main>
+
+      <footer className="shell flex flex-wrap items-center justify-between gap-4 border-t border-border py-7">
+        <Brand />
+        <nav className="site-nav" aria-label="Support and resources">
+          <a href={githubUrl}>GitHub</a>
+          <a href={`${githubUrl}#readme`}>Documentation</a>
+          <a href={`${githubUrl}/issues`}>Report an issue</a>
+          <a href={`${githubUrl}/blob/main/docs/security/threat-model.md`}>Security model</a>
+          <a href="#faq">FAQ</a>
+        </nav>
+        <a className="text-sm text-muted-foreground hover:text-primary" href="#top">{copy.back} ↑</a>
+      </footer>
+    </div>
+  )
+}
