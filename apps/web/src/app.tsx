@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import {
   ArrowDownToLine, ArrowRight, ArrowUpRight, Check, ChevronDown, Github,
-  Layers3, Play, ShieldCheck, Square, Star, Zap,
+  Layers3, Play, ShieldCheck, Square, Star, Zap, ZoomIn,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { copy, features, securityControls } from './content'
@@ -11,6 +11,7 @@ const githubRepository = 'haitran-mindset/lanvory'
 const githubUrl = `https://github.com/${githubRepository}`
 const starCountFormat = new Intl.NumberFormat('en')
 const downloadUrl: string | undefined = undefined
+const desktopPreviewUrl = `${import.meta.env.BASE_URL}images/desktop-preview-1644.webp`
 
 function Brand() {
   return (
@@ -179,16 +180,32 @@ export function App() {
           </ul>
 
           <figure className="mt-10 sm:mt-12">
-            <img
-              src={`${import.meta.env.BASE_URL}images/desktop-preview-1440.webp`}
-              srcSet={`${import.meta.env.BASE_URL}images/desktop-preview-768.webp 768w, ${import.meta.env.BASE_URL}images/desktop-preview-1440.webp 1440w`}
-              sizes="(max-width: 28rem) calc(100vw - 2rem), (max-width: 79rem) calc(100vw - 3rem), 76rem"
-              width={1440}
-              height={838}
-              alt="A MacBook displaying the Lanvory desktop concept with a nearby devices panel."
-              decoding="async"
-              className="h-auto w-full rounded-xl border border-border"
-            />
+            <svg width="0" height="0" className="absolute" aria-hidden="true">
+              <filter id="desktop-preview-sharpen" colorInterpolationFilters="sRGB">
+                <feConvolveMatrix order={3} kernelMatrix="0 -.18 0 -.18 1.72 -.18 0 -.18 0" preserveAlpha />
+              </filter>
+            </svg>
+            <a
+              href={desktopPreviewUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="Open the Lanvory desktop preview at full size in a new tab"
+              className="group relative block cursor-zoom-in overflow-hidden rounded-xl border border-border"
+            >
+              <img
+                src={desktopPreviewUrl}
+                srcSet={`${import.meta.env.BASE_URL}images/desktop-preview-768.webp 768w, ${desktopPreviewUrl} 1644w`}
+                sizes="(max-width: 28rem) calc(100vw - 2rem), (max-width: 79rem) calc(100vw - 3rem), 76rem"
+                width={1644}
+                height={957}
+                alt="A MacBook displaying the Lanvory desktop concept with a nearby devices panel."
+                decoding="async"
+                className="desktop-preview-image h-auto w-full"
+              />
+              <span className="absolute right-3 bottom-3 grid size-9 place-items-center rounded-lg border border-border bg-background/85 text-muted-foreground group-hover:text-foreground">
+                <ZoomIn size={17} aria-hidden="true" />
+              </span>
+            </a>
           </figure>
         </section>
 
