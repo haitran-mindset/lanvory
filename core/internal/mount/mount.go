@@ -383,10 +383,10 @@ type davPropstat struct {
 }
 
 type davProp struct {
-	DisplayName      string            `xml:"displayname,omitempty"`
-	GetContentLength *int64            `xml:"getcontentlength,omitempty"`
-	GetLastModified  string            `xml:"getlastmodified,omitempty"`
-	ResourceType     *davResourceType  `xml:"resourcetype"`
+	DisplayName      string           `xml:"displayname,omitempty"`
+	GetContentLength *int64           `xml:"getcontentlength,omitempty"`
+	GetLastModified  string           `xml:"getlastmodified,omitempty"`
+	ResourceType     *davResourceType `xml:"resourcetype"`
 }
 
 type davResourceType struct {
