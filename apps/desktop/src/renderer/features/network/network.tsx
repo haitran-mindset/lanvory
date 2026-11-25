@@ -192,7 +192,11 @@ export function NetworkPanel({ visible }: { visible: boolean }) {
         {listener?.state === 'local-only' && <p className="state-pill">Local-only mode</p>}
         {listener?.state === 'stopped' && <p className="state-pill">LAN off</p>}
         {listener?.state === 'listening' && (
-          <div className="network-active"><span className="state-pill is-active">LAN on</span>
+          <div className="network-active">
+            <div className="network-status-row">
+              <span className="state-pill is-active">LAN on</span>
+              <span className="state-pill network-adapter-pill">Adapter <code>{listener.adapter}</code></span>
+            </div>
             <div className="network-address">
               <p>Device address <code>{listener.endpoint}</code></p>
               <button type="button" className="refresh" aria-label="Copy LAN address" title="Copy LAN address"

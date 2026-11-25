@@ -22,7 +22,7 @@ let discoveryRequest;
 let trustRequest;
 let activePair;
 let pairingSnapshot;
-let selectedFile;
+let selectedFiles = [];
 let filePickerOpen = false;
 let activeSend;
 let fileSnapshot;
@@ -204,7 +204,7 @@ function createWindow(show = true) {
       window.hide();
     }
   });
-  window.on('closed', () => { window = undefined; selectedFile = undefined; activeSend?.abort(); });
+  window.on('closed', () => { window = undefined; selectedFiles = []; activeSend?.abort(); });
   return window.loadFile(index);
 }
 
@@ -578,6 +578,11 @@ if (!app.requestSingleInstanceLock()) {
       return exec(path.join(bundle, 'lanvory'), ['files', 'remove-history', id],
         { timeout: 4000, maxBuffer: 4096 }).then(() => true, () => false);
     });
+    ipcMain.handle('lanvory:clear-transfer-history', async (event) => {
+      assertTrustedFrame(event);
+      return exec(path.join(bundle, 'lanvory'), ['files', 'clear-history'],
+        { timeout: 4000, maxBuffer: 4096 }).then(() => true, () => false);
+    });
     ipcMain.handle('lanvory:decide-file', async (event, id, allow) => {
       assertTrustedFrame(event);
       if (typeof id !== 'string' || !/^[a-f0-9]{32}$/.test(id) || typeof allow !== 'boolean') return false;
@@ -589,10 +594,11 @@ if (!app.requestSingleInstanceLock()) {
       if (activeSend || filePickerOpen) return null;
       filePickerOpen = true;
       try {
-        const result = await dialog.showOpenDialog(window, { properties: ['openFile'] });
-        if (result.canceled || !result.filePaths[0] || !window || event.sender !== window.webContents) return null;
-        selectedFile = result.filePaths[0];
-        return path.basename(selectedFile);
+        const result = await dialog.showOpenDialog(window, { properties: ['openFile', 'multiSelections'] });
+        if (result.canceled || !result.filePaths.length || !window || event.sender !== window.webContents) return null;
+        const paths = result.filePaths.slice(0, 50);
+        selectedFiles = paths;
+        return paths.length === 1 ? path.basename(paths[0]) : paths.map((filePath) => path.basename(filePath));
       } finally {
         filePickerOpen = false;
       }
@@ -600,8 +606,19 @@ if (!app.requestSingleInstanceLock()) {
     ipcMain.handle('lanvory:clear-selected-file', (event) => {
       assertTrustedFrame(event);
       if (activeSend || filePickerOpen) return false;
-      selectedFile = undefined;
+      selectedFiles = [];
       return true;
+    });
+    ipcMain.handle('lanvory:remove-selected-file', (event, index) => {
+      assertTrustedFrame(event);
+      if (activeSend || filePickerOpen || typeof index !== 'number' || !Number.isInteger(index)
+          || index < 0 || index >= selectedFiles.length) return null;
+      selectedFiles = selectedFiles.filter((_, currentIndex) => currentIndex !== index);
+      return selectedFiles.map((filePath) => path.basename(filePath));
+    });
+    ipcMain.handle('lanvory:selected-files', (event) => {
+      assertTrustedFrame(event);
+      return selectedFiles.map((filePath) => path.basename(filePath));
     });
     ipcMain.handle('lanvory:select-dropped-file', (event, filename) => {
       assertTrustedFrame(event);
@@ -609,23 +626,48 @@ if (!app.requestSingleInstanceLock()) {
           || Buffer.byteLength(filename) > 1000) return null;
       try {
         if (!lstatSync(filename).isFile()) return null;
-        selectedFile = filename;
+        selectedFiles = [filename];
         return path.basename(filename);
       } catch {
         return null;
       }
     });
+    ipcMain.handle('lanvory:select-dropped-files', (event, filenames) => {
+      assertTrustedFrame(event);
+      if (activeSend || filePickerOpen || !Array.isArray(filenames) || !filenames.length) return null;
+      const valid = [];
+      const seen = new Set();
+      for (const filename of filenames) {
+        if (valid.length >= 50) break;
+        if (typeof filename !== 'string' || !path.isAbsolute(filename) || Buffer.byteLength(filename) > 1000 || seen.has(filename)) continue;
+        try {
+          if (lstatSync(filename).isFile()) {
+            seen.add(filename);
+            valid.push(filename);
+          }
+        } catch {
+          // Ignore non-regular or unreadable dropped entries.
+        }
+      }
+      if (!valid.length) return null;
+      selectedFiles = valid;
+      return valid.map((filePath) => path.basename(filePath));
+    });
     ipcMain.handle('lanvory:send-file', async (event, adapter, endpoint, pin) => {
       assertTrustedFrame(event);
-      if (activeSend || filePickerOpen || !selectedFile || typeof adapter !== 'string' || !/^[a-zA-Z0-9_.-]{1,32}$/.test(adapter)
+      if (activeSend || filePickerOpen || !selectedFiles.length || typeof adapter !== 'string' || !/^[a-zA-Z0-9_.-]{1,32}$/.test(adapter)
           || typeof endpoint !== 'string' || !/^(?:[0-9]{1,3}\.){3}[0-9]{1,3}:[0-9]{1,5}$/.test(endpoint)
           || typeof pin !== 'string' || !/^[a-fA-F0-9]{64}$/.test(pin)) return 'failed';
       const controller = new AbortController();
       activeSend = controller;
       try {
-        await exec(path.join(bundle, 'lanvory'), ['files', 'send', adapter, endpoint, pin, selectedFile],
-          { timeout: 245000, maxBuffer: 4096, signal: controller.signal });
-        selectedFile = undefined;
+        const queue = [...selectedFiles];
+        for (const filePath of queue) {
+          if (controller.signal.aborted) return 'cancelled';
+          await exec(path.join(bundle, 'lanvory'), ['files', 'send', adapter, endpoint, pin, filePath],
+            { timeout: 245000, maxBuffer: 4096, signal: controller.signal });
+          selectedFiles = selectedFiles.filter((item) => item !== filePath);
+        }
         return 'completed';
       } catch {
         return controller.signal.aborted ? 'cancelled' : 'failed';

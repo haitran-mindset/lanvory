@@ -543,6 +543,22 @@ async function verify() {
     await eventually(() => clickPicker('Remove selected file'), 'remove reselected file');
     await eventually(() => evaluate('!document.querySelector(".sharing-remove-file")'), 'reselected file cleared');
     console.log('Sharing cleared and reselected a file through desktop IPC while preserving the source file');
+    const fixtureTwo = path.join(profile, 'native-smoke-file-2.txt');
+    writeFileSync(fixtureTwo, 'native smoke fixture 2');
+    dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [fixture, fixtureTwo] });
+    await eventually(() => clickPicker('Choose file'), 'open multi-file picker');
+    await eventually(() => evaluate(`
+      document.querySelector('.file-selection span')?.textContent === '2 files selected' &&
+      document.querySelectorAll('.selected-files-list li').length === 2
+    `), 'multi-file selection appears');
+    await evaluate('document.querySelector(".selected-files-list li button[aria-label=\\"Remove native-smoke-file-2.txt\\"]")?.click()');
+    await eventually(() => evaluate(`
+      document.querySelector('.file-selection span')?.textContent === 'native-smoke-file.txt' &&
+      !document.querySelector('.selected-files-list')
+    `), 'individual file removed from multi-file selection');
+    await eventually(() => clickPicker('Remove selected file'), 'remove remaining file');
+    await eventually(() => evaluate('!document.querySelector(".sharing-remove-file")'), 'multi-file selection cleared');
+    dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [fixture] });
     assert.equal(await evaluate('window.lanvory.selectDroppedFile(new File(["test"], "fake.txt"))'), null,
       'a script-created file has no selectable local path');
     await evaluate(`

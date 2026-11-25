@@ -25,8 +25,8 @@ export async function readIdentity(retry = false): Promise<IdentityResponse> {
 
 export function daemonNotice(response?: IdentityResponse) {
   if (!response) return 'Reading the local device identity…';
-  if (response.startupFailed) return 'Lanvory could not start the local daemon. Check the installation and login Keychain access.';
-  if (response.startupSlow) return 'The daemon is taking longer than expected to start. On macOS, check for a Keychain access prompt.';
+  if (response.startupFailed) return 'Lanvory could not start the local daemon. Check the installation and local state directory permissions.';
+  if (response.startupSlow) return 'The daemon is taking longer than expected to start.';
   return 'Waiting for the local daemon.';
 }
 

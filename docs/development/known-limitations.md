@@ -35,8 +35,8 @@ This document records the known technical limitations, architectural boundaries,
 ### macOS Code Signing & Notarization
 - Local and CI-built macOS disk images (`.dmg`) are signed with ad-hoc certificates. Running on another Mac requires removing the quarantine attribute (`xattr -cr /Applications/Lanvory.app`) or manual Gatekeeper approval until Developer ID credentials and Apple Notarization are configured.
 
-### Keychain Prompts
-- On macOS, access to the Ed25519 device identity seed requires access to the user's login Keychain. If the system Keychain prompts for permission, daemon initialization waits up to the 8-second slow-start threshold before alerting the user.
+### Local Device Identity Storage
+- The Ed25519 device identity seed is stored directly in `<state-dir>/identity.key` (default `~/.lanvory/identity.key`) with strict owner-only (`0600`) permissions inside an owner-only (`0700`) directory, avoiding macOS Keychain authorization prompts during installation and startup.
 
 ### Windows & Linux Desktop Status
 - Linux core verification (SQLite migrations, Unix IPC, interface binding, and GNOME Keyring identity persistence) has been validated in containers.

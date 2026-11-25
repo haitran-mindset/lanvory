@@ -623,6 +623,23 @@ Task CORE-02 is now marked DONE. All MVP settings across General, Appearance, Ne
 
 `make verify` and both app-owned and external daemon passes of `sh scripts/smoke-native.sh pnpm` passed with code 0.
 
+## Multi-file transfer support (PROJECT_SPEC.md §18)
+
+Implemented batch multi-file selection, drag-and-drop, queue management, and sequential verified sending across Go CLI, Electron Main/Preload IPC, and Sharing UI:
+- **Go CLI (`core/cmd/lanvory/main.go`)**:
+  - Extended `lanvory files send NAME IPv4:PORT FINGERPRINT PATH...` to accept one or more file paths and send them sequentially over authenticated peer connections.
+- **Electron Main & Preload (`apps/desktop/src/main/index.cjs`, `apps/desktop/src/preload/index.cjs`, `apps/desktop/src/shared/desktop-api.ts`)**:
+  - Enabled `multiSelections` in `dialog.showOpenDialog` (capped at 50 files per batch per §18 maximum file count).
+  - Added `lanvory:select-dropped-files` validating regular files (`lstatSync().isFile()`), absolute paths, and path length limits while rejecting symlinks and directories.
+  - Added `lanvory:remove-selected-file` and `lanvory:selected-files` to allow removing individual files from a batch and syncing state after partial failure or cancellation.
+  - Updated `lanvory:send-file` to send each queued file sequentially and remove completed items from the queue as they succeed.
+- **Sharing UI (`apps/desktop/src/renderer/features/sharing/sharing.tsx`, `apps/desktop/src/renderer/styles/app.css`)**:
+  - Displays selected file count (`N files selected`), a scrollable `.selected-files-list` with per-file remove buttons when multiple files are selected, and batch action labels (`Send N files`), while preserving exact single-file DOM locators.
+- **Smoke Test (`apps/desktop/tests/native-smoke.cjs`)**:
+  - Added automated coverage for multi-file picker selection, `.selected-files-list` rendering, individual item removal, and batch clearing.
+
+`pnpm typecheck`, `make build`, `make verify` (with `BypassSandbox: true` for UDP/Unix socket tests), and `sh scripts/smoke-native.sh pnpm` all passed with exit code 0.
+
 ## Open verification gates
 
 | Task | Available evidence | Missing evidence and prerequisites |

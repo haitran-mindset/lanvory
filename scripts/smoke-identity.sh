@@ -115,4 +115,4 @@ const key = Buffer.from(identity.publicKey, "base64");
 const fingerprint = createHash("sha256").update(key).digest("hex");
 if (key.length !== 32 || fingerprint !== identity.fingerprint || identity.id !== "ed25519-v1:" + fingerprint) process.exit(1);
 ' "$smoke_home/second.json"
-echo "Verified Keychain identity persistence, fingerprint, scope rejection, default-deny permissions, and duplicate daemon rejection"
+echo "Verified local file identity persistence, fingerprint, scope rejection, default-deny permissions, and duplicate daemon rejection"

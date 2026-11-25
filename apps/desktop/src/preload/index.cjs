@@ -11,13 +11,20 @@ contextBridge.exposeInMainWorld('lanvory', {
   setInboxAccess: (fingerprint, allowed, duration) => ipcRenderer.invoke('lanvory:set-inbox-access', fingerprint, allowed, duration),
   fileSnapshot: () => ipcRenderer.invoke('lanvory:file-snapshot'),
   deleteTransferHistory: (id) => ipcRenderer.invoke('lanvory:delete-transfer-history', id),
+  clearTransferHistory: () => ipcRenderer.invoke('lanvory:clear-transfer-history'),
   decideFile: (id, allow) => ipcRenderer.invoke('lanvory:decide-file', id, allow),
   selectFile: () => ipcRenderer.invoke('lanvory:select-file'),
   selectDroppedFile: async (file) => {
     const filename = webUtils.getPathForFile(file);
     return filename ? ipcRenderer.invoke('lanvory:select-dropped-file', filename) : null;
   },
+  selectDroppedFiles: async (files) => {
+    const filenames = Array.from(files).map((file) => webUtils.getPathForFile(file)).filter(Boolean);
+    return filenames.length ? ipcRenderer.invoke('lanvory:select-dropped-files', filenames) : null;
+  },
   clearSelectedFile: () => ipcRenderer.invoke('lanvory:clear-selected-file'),
+  removeSelectedFile: (index) => ipcRenderer.invoke('lanvory:remove-selected-file', index),
+  getSelectedFiles: () => ipcRenderer.invoke('lanvory:selected-files'),
   sendFile: (adapter, endpoint, pin) => ipcRenderer.invoke('lanvory:send-file', adapter, endpoint, pin),
   cancelFileSend: () => ipcRenderer.invoke('lanvory:cancel-file-send'),
   pairingRequests: () => ipcRenderer.invoke('lanvory:pairing-requests'),

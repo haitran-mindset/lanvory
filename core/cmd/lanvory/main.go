@@ -18,7 +18,7 @@ import (
 
 var buildVersion = "development"
 
-const usage = "Usage: lanvory <identity [fingerprint | rename NAME] | network [listener [start NAME IPv4:PORT [--no-pairing] | stop] | approve NAME | revoke NAME | check NAME IPv4] | discover [resolve NAME SERVICE [tcp|udp]] | peer verify|verify-trusted|verify-quic|trust|ping NAME IPv4:PORT FINGERPRINT [--json] | peer match-trusted NAME IPv4:PORT | peer trusted | peer revoke FINGERPRINT | permissions COMMAND | files incoming | files transfers | files remove-history ID | files approve ID | files decline ID | files send NAME IPv4:PORT FINGERPRINT PATH | services list | services share ID LOOPBACK:PORT | services remove ID | tunnels list | tunnels open NAME ENDPOINT FINGERPRINT SERVICE [LOOPBACK:PORT] | tunnels stop ID | peer pair NAME ENDPOINT FINGERPRINT | pairing list | pairing approve ID CODE | pairing decline ID | devices [--json] | status [--json] | doctor [--json] | version | help>" + "\nPermissions: list | audit | grant FINGERPRINT CAPABILITY RESOURCE [EXPIRES_RFC3339] | revoke FINGERPRINT CAPABILITY RESOURCE | check FINGERPRINT CAPABILITY RESOURCE"
+const usage = "Usage: lanvory <identity [fingerprint | rename NAME] | network [listener [start NAME IPv4:PORT [--no-pairing] | stop] | approve NAME | revoke NAME | check NAME IPv4] | discover [resolve NAME SERVICE [tcp|udp]] | peer verify|verify-trusted|verify-quic|trust|ping NAME IPv4:PORT FINGERPRINT [--json] | peer match-trusted NAME IPv4:PORT | peer trusted | peer revoke FINGERPRINT | permissions COMMAND | files incoming | files transfers | files remove-history ID | files clear-history | files approve ID | files decline ID | files send NAME IPv4:PORT FINGERPRINT PATH... | services list | services share ID LOOPBACK:PORT | services remove ID | tunnels list | tunnels open NAME ENDPOINT FINGERPRINT SERVICE [LOOPBACK:PORT] | tunnels stop ID | peer pair NAME ENDPOINT FINGERPRINT | pairing list | pairing approve ID CODE | pairing decline ID | devices [--json] | status [--json] | doctor [--json] | version | help>" + "\nPermissions: list | audit | grant FINGERPRINT CAPABILITY RESOURCE [EXPIRES_RFC3339] | revoke FINGERPRINT CAPABILITY RESOURCE | check FINGERPRINT CAPABILITY RESOURCE"
 
 func main() {
 	arguments := os.Args[1:]
@@ -57,7 +57,8 @@ func main() {
 		slices.Equal(arguments, []string{"peer", "trusted"}),
 		slices.Equal(arguments, []string{"files", "incoming"}),
 		slices.Equal(arguments, []string{"files", "transfers"}),
-		len(arguments) == 6 && arguments[0] == "files" && arguments[1] == "send",
+		slices.Equal(arguments, []string{"files", "clear-history"}),
+		len(arguments) >= 6 && arguments[0] == "files" && arguments[1] == "send",
 		len(arguments) == 3 && arguments[0] == "files" && (arguments[1] == "approve" || arguments[1] == "decline" || arguments[1] == "remove-history"),
 		slices.Equal(arguments, []string{"services", "list"}),
 		len(arguments) == 4 && arguments[0] == "services" && arguments[1] == "share",
@@ -134,10 +135,17 @@ func run(arguments []string) error {
 		if arguments[1] == "send" {
 			ctx, cancel := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 			defer cancel()
-			if err := local.SendFile(ctx, dir, arguments[2], arguments[3], arguments[4], arguments[5]); err != nil {
-				return err
+			paths := arguments[5:]
+			for _, filePath := range paths {
+				if err := local.SendFile(ctx, dir, arguments[2], arguments[3], arguments[4], filePath); err != nil {
+					return err
+				}
 			}
-			fmt.Println("Peer confirmed the file was received and verified.")
+			if len(paths) == 1 {
+				fmt.Println("Peer confirmed the file was received and verified.")
+			} else {
+				fmt.Printf("Peer confirmed all %d files were received and verified.\n", len(paths))
+			}
 			return nil
 		}
 		if arguments[1] == "transfers" {
@@ -150,6 +158,9 @@ func run(arguments []string) error {
 		}
 		if arguments[1] == "remove-history" {
 			return local.DeleteFileTransfer(ctx, dir, arguments[2])
+		}
+		if arguments[1] == "clear-history" {
+			return local.ClearFileTransfers(ctx, dir)
 		}
 		if arguments[1] == "incoming" {
 			offers, err := local.IncomingOffers(ctx, dir)

@@ -35,6 +35,13 @@ func registerFiles(mux *http.ServeMux, device Device, dir string, receiver *drop
 		response.SetEscapeHTML(false)
 		_ = response.Encode(receiver.Tracker().Snapshot())
 	})
+	mux.HandleFunc("DELETE "+transfersRoute, func(w http.ResponseWriter, _ *http.Request) {
+		if err := receiver.Tracker().ClearHistory(); err != nil {
+			http.Error(w, "Unable to clear transfer history", http.StatusServiceUnavailable)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	})
 	mux.HandleFunc("DELETE "+transfersRoute+"/{id}", func(w http.ResponseWriter, r *http.Request) {
 		id := r.PathValue("id")
 		if !validOfferID(id) {
@@ -177,4 +184,8 @@ func DeleteFileTransfer(ctx context.Context, dir, id string) error {
 		return errors.New("invalid transfer ID")
 	}
 	return requestLocal(ctx, dir, http.MethodDelete, transfersRoute+"/"+id, nil)
+}
+
+func ClearFileTransfers(ctx context.Context, dir string) error {
+	return requestLocal(ctx, dir, http.MethodDelete, transfersRoute, nil)
 }

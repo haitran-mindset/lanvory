@@ -34,12 +34,16 @@ export interface DesktopApi {
   setInboxAccess(fingerprint: string, allowed: boolean, duration?: 'until-revoked' | 'hour' | 'day'): Promise<boolean>;
   fileSnapshot(): Promise<unknown>;
   deleteTransferHistory(id: string): Promise<boolean>;
+  clearTransferHistory(): Promise<boolean>;
   serviceSnapshot(): Promise<unknown>;
   serviceAction(action: string, input: Record<string, string>): Promise<boolean>;
   decideFile(id: string, allow: boolean): Promise<boolean>;
-  selectFile(): Promise<string | null>;
+  selectFile(): Promise<string | string[] | null>;
   selectDroppedFile(file: File): Promise<string | null>;
+  selectDroppedFiles(files: FileList | File[]): Promise<string[] | null>;
   clearSelectedFile(): Promise<boolean>;
+  removeSelectedFile(index: number): Promise<string[] | null>;
+  getSelectedFiles(): Promise<string[]>;
   sendFile(adapter: string, endpoint: string, pin: string): Promise<'completed' | 'cancelled' | 'failed'>;
   cancelFileSend(): Promise<void>;
   trustPeer(adapter: string, endpoint: string, fingerprint: string): Promise<boolean>;

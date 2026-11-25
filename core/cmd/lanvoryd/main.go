@@ -62,7 +62,7 @@ func run(peerInterface string, peerBind netip.AddrPort, advertise, enableQUIC, e
 		return err
 	}
 	defer release()
-	key, err := identity.Load("device")
+	key, err := identity.Load(dir)
 	if err != nil {
 		return err
 	}

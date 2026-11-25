@@ -49,6 +49,7 @@ type HistoryStore interface {
 	Load() ([]Transfer, error)
 	Record(Transfer) error
 	Delete(string) error
+	Clear() error
 }
 
 var ErrActiveTransfer = errors.New("cannot remove an active transfer")
@@ -65,6 +66,19 @@ func (t *Tracker) DeleteHistory(id string) error {
 		}
 	}
 	t.history = slices.DeleteFunc(t.history, func(item Transfer) bool { return item.ID == id })
+	return nil
+}
+
+// ClearHistory removes all completed or failed transfer history entries while keeping active transfers intact.
+func (t *Tracker) ClearHistory() error {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.store != nil {
+		if err := t.store.Clear(); err != nil {
+			return err
+		}
+	}
+	t.history = nil
 	return nil
 }
 

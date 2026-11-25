@@ -68,6 +68,26 @@ func (h TransferHistory) Delete(id string) error {
 	return nil
 }
 
+func (h TransferHistory) Clear() error {
+	db, err := openState(h.dir)
+	if err != nil {
+		return err
+	}
+	defer closeState(db)
+	statement, err := prepare(db, "DELETE FROM transfers WHERE owner_id=?")
+	if err != nil {
+		return err
+	}
+	defer C.sqlite3_finalize(statement)
+	if err := bind(statement, 1, h.owner); err != nil {
+		return err
+	}
+	if code := C.sqlite3_step(statement); code != C.SQLITE_DONE {
+		return fmt.Errorf("clear transfer history: SQLite code %d", code)
+	}
+	return nil
+}
+
 func (h TransferHistory) Record(item drop.Transfer) error {
 	db, err := openState(h.dir)
 	if err != nil {

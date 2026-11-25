@@ -71,3 +71,36 @@ func TestDeleteTransferHistoryPersistsAndStaysOwnerScoped(t *testing.T) {
 		t.Fatalf("other owner's history changed: %+v", history)
 	}
 }
+
+func TestClearTransferHistoryPersistsAndPreservesActiveAndOtherOwner(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := LoadProfile(dir, "owner", "Device"); err != nil {
+		t.Fatal(err)
+	}
+	store := NewTransferHistory(dir, "owner")
+	other := NewTransferHistory(dir, "other")
+	tracker := drop.NewTracker(store)
+	file := drop.Manifest{Name: "demo.txt", Size: 20}
+	done1 := tracker.Start("done-1", "incoming", "peer", file)
+	done1.Finish(nil)
+	done2 := tracker.Start("done-2", "outgoing", "peer", file)
+	done2.Finish(nil)
+	active := tracker.Start("active-1", "incoming", "peer", file)
+	if err := other.Record(tracker.Snapshot().Transfers[0]); err != nil {
+		t.Fatal(err)
+	}
+	if err := tracker.ClearHistory(); err != nil {
+		t.Fatal(err)
+	}
+	snapshot := tracker.Snapshot()
+	if len(snapshot.Transfers) != 1 || snapshot.Transfers[0].ID != "active-1" {
+		t.Fatalf("unexpected transfers after clear: %+v", snapshot)
+	}
+	active.Finish(nil)
+	if reopened := drop.NewTracker(store).Snapshot(); reopened.HistoryUnavailable || len(reopened.Transfers) != 1 || reopened.Transfers[0].ID != "active-1" {
+		t.Fatalf("unexpected reopened history after clear: %+v", reopened)
+	}
+	if otherHistory := drop.NewTracker(other).Snapshot(); len(otherHistory.Transfers) != 1 {
+		t.Fatalf("other owner's history changed: %+v", otherHistory)
+	}
+}

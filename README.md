@@ -4,7 +4,7 @@ Lanvory is a local-first desktop network platform under development. See [HANDOF
 
 ## Go daemon and CLI
 
-Use macOS with a C toolchain, Go 1.26 or later, and an accessible login Keychain. From the repository root:
+Use macOS with a C toolchain and Go 1.26 or later. From the repository root:
 
 ```sh
 cd core
@@ -13,7 +13,7 @@ go build -o ../bin/lanvory ./cmd/lanvory
 ../bin/lanvoryd
 ```
 
-From another shell, run `./bin/lanvory identity` in the repository root. The daemon uses the login Keychain for the Ed25519 seed. The owner-only socket and the SQLite file with public device profile metadata live under `~/.lanvory`. Run `./bin/lanvory network` while the daemon is running to inspect local interfaces and CIDR addresses. Stop the foreground daemon with Ctrl+C.
+From another shell, run `./bin/lanvory identity` in the repository root. The daemon stores the Ed25519 seed in `~/.lanvory/identity.key` (`0600`). The owner-only socket and the SQLite file with public device profile metadata also live under `~/.lanvory`. Run `./bin/lanvory network` while the daemon is running to inspect local interfaces and CIDR addresses. Stop the foreground daemon with Ctrl+C.
 
 Run `./bin/lanvory status` to inspect daemon health, local listener status, and trusted peer/service counts, or `./bin/lanvory doctor` to verify local directories, database integrity, and system readiness. Append `--json` for structured output.
 
@@ -23,7 +23,7 @@ go test -race ./...
 go vet ./...
 ```
 
-For daemon and CLI development on Linux, install a C toolchain, pkg-config, SQLite development headers, and libsecret development headers (`libsqlite3-dev` and `libsecret-1-dev` on Debian/Ubuntu). Use the same Go build commands from a user D-Bus session with an unlocked Secret Service provider. The daemon stores the Ed25519 seed in the provider's default collection and requires a private, writable user cache directory for its initialization lock. TCP and QUIC require a kernel that supports `SO_BINDTOIFINDEX`. The Linux `network listener start` command opens the listener for manual connections by address. LAN discovery and desktop packaging remain pending on Linux.
+For daemon and CLI development on Linux, install a C toolchain and SQLite development headers (`libsqlite3-dev` on Debian/Ubuntu). Use the same Go build commands. The daemon stores the Ed25519 seed in `~/.lanvory/identity.key` with owner-only (`0600`) permissions. TCP and QUIC require a kernel that supports `SO_BINDTOIFINDEX`. The Linux `network listener start` command opens the listener for manual connections by address. LAN discovery and desktop packaging remain pending on Linux.
 
 ## Desktop development build
 
@@ -36,7 +36,7 @@ pnpm build
 pnpm desktop
 ```
 
-Launch from an interactive macOS session with access to the login Keychain. The desktop starts the daemon when needed and reuses an already running local instance. The Devices view shows the local identity and fingerprint. Network shows the current OS interface inventory on demand. Settings saves your device name locally. The same change is available with `./bin/lanvory identity rename "My device"`. The name is stored in SQLite and kept out of Bonjour announcements. Settings also stores the theme and text size in the Electron profile. Choose System to follow macOS appearance changes.
+Launch from an interactive macOS session. The desktop starts the daemon when needed and reuses an already running local instance. The Devices view shows the local identity and fingerprint. Network shows the current OS interface inventory on demand. Settings saves your device name locally. The same change is available with `./bin/lanvory identity rename "My device"`. The name is stored in SQLite and kept out of Bonjour announcements. Settings also stores the theme and text size in the Electron profile. Choose System to follow macOS appearance changes.
 
 The Electron launcher initializes its pinned binary on first use if needed. Run `pnpm --filter @lanvory/desktop exec electron --version` while online to prepare a development checkout before offline testing. The packaged app already includes the Electron runtime.
 
