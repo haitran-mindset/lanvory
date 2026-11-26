@@ -1,13 +1,22 @@
 import { useEffect, useRef, useState } from 'react'
 import {
   ArrowDownToLine, ArrowRight, ArrowUpRight, Check, ChevronDown, Copy, Github,
-  Layers3, Play, ShieldCheck, Square, Star, Terminal, Zap, ZoomIn,
+  Layers3, Play, ShieldCheck, Square, Star, Terminal, X, Zap, ZoomIn,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { fetchMacRelease, githubRepository, githubUrl, latestReleaseUrl } from '@/lib/releases'
-import { copy, features, securityControls, technicalArchitecture } from './content'
+import {
+  fetchMacRelease,
+  githubRepository,
+  githubUrl,
+  isGitHubApiInCooldown,
+  latestReleaseUrl,
+  markGitHubApiCooldown,
+  readCachedJson,
+  writeCachedJson,
+} from '@/lib/releases'
+import { comparison, copy, features, securityControls, technicalArchitecture } from './content'
 
-const sectionIds = ['why', 'features', 'how', 'security', 'architecture', 'roadmap']
+const sectionIds = ['why', 'features', 'compare', 'how', 'security', 'architecture', 'roadmap']
 const macQuarantineCommand = 'xattr -cr /Applications/Lanvory.app'
 const starCountFormat = new Intl.NumberFormat('en')
 const desktopPreviewUrl = `${import.meta.env.BASE_URL}images/desktop-preview-1644.webp`
@@ -22,22 +31,36 @@ function Brand() {
 }
 
 function GitHubStar() {
-  const [stars, setStars] = useState<number | null>(null)
+  const [stars, setStars] = useState<number | null>(() => readCachedJson<number>(`lanvory_gh_stars_${githubRepository}`))
 
   useEffect(() => {
+    const cacheKey = `lanvory_gh_stars_${githubRepository}`
+    const cached = readCachedJson<number>(cacheKey)
+    if (cached !== null) {
+      setStars(cached)
+      return
+    }
+    if (isGitHubApiInCooldown()) return
+
     const controller = new AbortController()
 
     async function loadStars() {
       try {
         const response = await fetch(`https://api.github.com/repos/${githubRepository}`, {
+          credentials: 'omit',
           signal: controller.signal,
         })
+        if (response.status === 403 || response.status === 429) {
+          markGitHubApiCooldown()
+          return
+        }
         if (!response.ok) return
 
         const repository = await response.json()
         const count: unknown = repository?.stargazers_count
         if (!controller.signal.aborted && typeof count === 'number' && Number.isSafeInteger(count) && count >= 0) {
           setStars(count)
+          writeCachedJson(cacheKey, count)
         }
       } catch {
         // The GitHub link remains usable if the count is unavailable.
@@ -123,6 +146,8 @@ function ArchitectureLink({ technology, icon: Icon, description, link }: Archite
 
 export function App() {
   const [activeDemo, setActiveDemo] = useState<string | null>(null)
+  const [activeFeature, setActiveFeature] = useState<string>(features[0].id)
+  const [activeCompare, setActiveCompare] = useState<string>(comparison.versus[0].id)
   const [macRelease, setMacRelease] = useState<Awaited<ReturnType<typeof fetchMacRelease>>>(null)
 
   useEffect(() => {
@@ -197,7 +222,7 @@ export function App() {
         <span className="size-1.5 rounded-full bg-primary" aria-hidden="true" />
         <span>{macRelease ? `Lanvory ${macRelease.tag} is available for macOS` : 'Lanvory for macOS'}</span>
         <span className="inline-flex items-center gap-1 text-foreground underline underline-offset-4">
-          {copy.nav[5]} <ArrowUpRight size={13} aria-hidden="true" />
+          {copy.nav[6]} <ArrowUpRight size={13} aria-hidden="true" />
         </span>
       </a>
 
@@ -251,7 +276,7 @@ export function App() {
               <a href="#download"><ArrowDownToLine data-icon="inline-start" aria-hidden="true" /> {copy.download}</a>
             </Button>
             <Button asChild variant="outline">
-              <a href="#how">{copy.nav[2]} <ArrowRight data-icon="inline-end" aria-hidden="true" /></a>
+              <a href="#how">{copy.nav[3]} <ArrowRight data-icon="inline-end" aria-hidden="true" /></a>
             </Button>
           </div>
           <p className="mt-2.5 text-xs text-muted-foreground">
@@ -261,7 +286,13 @@ export function App() {
           <ul className="mt-7 flex flex-wrap gap-2.5 text-xs">
             {features.slice(0, 5).map(({ id, title }) => (
               <li key={id}>
-                <a className="feature-tag inline-block hover:border-primary hover:text-primary" href={`#${id}`}>{title}</a>
+                <a
+                  className="feature-tag inline-block hover:border-primary hover:text-primary"
+                  href="#features"
+                  onClick={() => setActiveFeature(id)}
+                >
+                  {title}
+                </a>
               </li>
             ))}
           </ul>
@@ -298,11 +329,14 @@ export function App() {
 
         <section id="why" className="principles" aria-label={copy.nav[0]}>
           {copy.why.map(([title, description], index) => {
-            const Icon = [Layers3, ShieldCheck, Zap][index]
+            const Icon = [Zap, Layers3, ShieldCheck][index]
             return (
               <article key={title} className="principle">
                 <span className="icon-box"><Icon size={20} aria-hidden="true" /></span>
-                <div><h2>{title}</h2><p>{description}</p></div>
+                <div>
+                  <h2>{title}</h2>
+                  <p>{description}</p>
+                </div>
               </article>
             )
           })}
@@ -311,27 +345,164 @@ export function App() {
         <section id="features" className="detail-section">
           <h2>{copy.nav[1]}</h2>
           <p>{copy.featureIntro}</p>
-          <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {features.map((feature) => (
-              <article id={feature.id} key={feature.id} className="detail-card target:border-primary">
-                <div className="mb-4 flex items-center justify-between gap-3">
-                  <feature.icon className="text-primary" size={22} aria-hidden="true" />
-                  {'status' in feature && <span className="text-xs text-primary">{feature.status}</span>}
-                </div>
-                <h3>{feature.title}</h3>
-                <p>{feature.description}</p>
-                {'docs' in feature && (
-                  <a className="mt-3 inline-flex items-center gap-2 text-xs underline underline-offset-4 hover:text-primary" href={`${githubUrl}/blob/main/${feature.docs}`}>
-                    Bluetooth + P2P protocol <ArrowUpRight size={14} aria-hidden="true" />
-                  </a>
-                )}
-              </article>
-            ))}
+          <div className="features-showcase mt-7">
+            <div className="features-rail" role="tablist" aria-label="Lanvory features">
+              {features.map((feature, index) => {
+                const selected = activeFeature === feature.id
+                return (
+                  <button
+                    key={feature.id}
+                    id={feature.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={selected}
+                    className={`features-rail-item ${selected ? 'is-active' : ''}`}
+                    onClick={() => setActiveFeature(feature.id)}
+                  >
+                    <span className="features-rail-num">{String(index + 1).padStart(2, '0')}</span>
+                    <span className="features-rail-icon">
+                      <feature.icon size={16} aria-hidden="true" />
+                    </span>
+                    <span className="features-rail-title">{feature.title}</span>
+                    {'status' in feature && <span className="features-rail-badge">{feature.status}</span>}
+                  </button>
+                )
+              })}
+            </div>
+
+            {(() => {
+              const activeIndex = Math.max(0, features.findIndex((f) => f.id === activeFeature))
+              const current = features[activeIndex] ?? features[0]
+              const Icon = current.icon
+              return (
+                <article className="features-stage" role="tabpanel">
+                  <div className="features-stage-chrome">
+                    <span className="features-stage-status">
+                      <span className="features-status-dot" aria-hidden="true" />
+                      Lanvory capability
+                    </span>
+                    <span className="features-stage-counter">
+                      {String(activeIndex + 1).padStart(2, '0')} / {String(features.length).padStart(2, '0')}
+                    </span>
+                  </div>
+
+                  <div className="features-stage-body">
+                    <div className="features-stage-top">
+                      <span className="features-stage-icon">
+                        <Icon size={24} aria-hidden="true" />
+                      </span>
+                      <div>
+                        <div className="flex flex-wrap items-center gap-2.5">
+                          <h3>{current.title}</h3>
+                          {'status' in current && <span className="features-rail-badge">{current.status}</span>}
+                        </div>
+                        <p>{current.description}</p>
+                      </div>
+                    </div>
+
+                    <div className="features-pipeline" aria-label="Workflow">
+                      {current.flow.map((step, idx) => (
+                        <div key={step} className={`features-pipe-node ${idx === current.flow.length - 1 ? 'is-final' : ''}`}>
+                          <span className="features-pipe-index">{String(idx + 1).padStart(2, '0')}</span>
+                          <span className="features-pipe-label">{step}</span>
+                        </div>
+                      ))}
+                    </div>
+
+                    <ul className="features-highlights">
+                      {current.highlights.map((item) => (
+                        <li key={item}>
+                          <span className="features-check-dot" aria-hidden="true">
+                            <Check size={12} />
+                          </span>
+                          <span>{item}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </article>
+              )
+            })()}
           </div>
         </section>
 
+        <section id="compare" className="detail-section" aria-labelledby="compare-title">
+          <h2 id="compare-title">{comparison.title}</h2>
+          <p className="max-w-3xl">{comparison.intro}</p>
+          <div className="compare-metrics mt-5" aria-label="Key advantages">
+            {comparison.metrics.map(({ value, label }) => (
+              <div key={label} className="compare-metric">
+                <strong>{value}</strong>
+                <span>{label}</span>
+              </div>
+            ))}
+          </div>
+
+          <div className="compare-converge mt-6">
+            <div className="compare-stack-list" role="tablist" aria-label="Compare Lanvory against">
+              {comparison.stack.map((item) => {
+                const selected = activeCompare === item.id
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={selected}
+                    className={`compare-stack-item ${selected ? 'is-active' : ''}`}
+                    onClick={() => setActiveCompare(item.id)}
+                  >
+                    <div className="compare-stack-meta">
+                      <div className="compare-stack-top">
+                        <strong>{item.replaces}</strong>
+                        <span className="compare-stack-role">{item.role}</span>
+                      </div>
+                      <small>With Lanvory: {item.capability}</small>
+                    </div>
+                    <ArrowRight size={15} className="compare-stack-arrow" aria-hidden="true" />
+                  </button>
+                )
+              })}
+            </div>
+
+            {(() => {
+              const current = comparison.versus.find((item) => item.id === activeCompare) ?? comparison.versus[0]
+              return (
+                <div className="compare-duel" role="tabpanel">
+                  <div className="compare-duel-head">
+                    <div>
+                      <span className="compare-pane-kicker">Instead of</span>
+                      <h3>{current.name}</h3>
+                    </div>
+                    <span className="compare-vs-pill" aria-hidden="true">VS</span>
+                    <div className="sm:text-right">
+                      <span className="compare-pane-kicker is-emerald">With Lanvory</span>
+                      <h3>One Private Workspace</h3>
+                    </div>
+                  </div>
+
+                  <ul className="compare-duel-rows">
+                    {current.pairs.map(([limitation, upgrade]) => (
+                      <li key={limitation} className="compare-duel-row">
+                        <div className="compare-duel-cell is-them">
+                          <X size={15} className="shrink-0 text-[#c97a7a]" aria-hidden="true" />
+                          <span>{limitation}</span>
+                        </div>
+                        <div className="compare-duel-cell is-lanvory">
+                          <Check size={15} className="shrink-0 text-primary" aria-hidden="true" />
+                          <span>{upgrade}</span>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )
+            })()}
+          </div>
+          <p className="mt-4 text-xs text-muted-foreground">{comparison.note}</p>
+        </section>
+
         <section id="how" className="detail-section">
-          <h2>{copy.nav[2]}</h2>
+          <h2>{copy.nav[3]}</h2>
           <p>See what it’s like to send a file to another device with Lanvory.</p>
           <figure className="detail-card mt-6">
             <figcaption className="mb-4">
@@ -407,7 +578,7 @@ export function App() {
         </section>
 
         <section id="security" className="detail-section">
-          <h2>{copy.nav[3]}</h2>
+          <h2>{copy.nav[4]}</h2>
           <p className="max-w-3xl">{copy.securityIntro}</p>
           <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {securityControls.map(({ title, icon: Icon, description }) => (
@@ -451,7 +622,7 @@ export function App() {
         </section>
 
         <section id="roadmap" className="detail-section">
-          <h2>{copy.nav[5]}</h2>
+          <h2>{copy.nav[6]}</h2>
           <ol className="roadmap-timeline mt-8" role="list">
             {copy.roadmap.map(({ phase, title, description, icon: Icon }) => (
               <li

@@ -6,40 +6,56 @@ export const features = [
   {
     id: 'file-transfer', title: 'File Transfer', icon: FolderUp,
     description: 'Send files to paired devices with recipient approval. Track progress and review completed or failed transfers in your history.',
+    highlights: ['Recipient approves every incoming file', 'Automatic integrity check before saving', 'Cancel anytime & keep local transfer history'],
+    flow: ['Pick file', 'Approve on receiver', 'Saved to Inbox'],
   },
   {
-    id: 'service-bridge', title: 'Service Bridge', icon: Unplug,
-    description: 'Open a service hosted on a trusted device through a local port. Grant and revoke access for each shared service.',
-  },
-  {
-    id: 'device-discovery', title: 'Device Discovery', icon: Radar,
-    description: 'Find Lanvory devices on approved LAN adapters, via Bluetooth + Wi-Fi P2P, or by entering a local endpoint manually.',
-  },
-  {
-    id: 'ble-p2p-nearby', title: 'Bluetooth + Wi-Fi P2P', icon: Bluetooth,
-    description: 'Discover nearby devices over Bluetooth Low Energy and transfer directly over peer-to-peer Wi-Fi without a shared router.',
-  },
-  {
-    id: 'secure-pairing', title: 'Secure Pairing', icon: ShieldCheck,
-    description: 'Verify a device before trusting it. Confirm pairing on both devices and revoke trust whenever you need to.',
+    id: 'live-resource-mount', title: 'Live Resource Mount', icon: HardDrive, status: 'Prototype',
+    description: 'Browse shared folders and stream large videos, audio, or documents on demand—without copying the entire folder.',
+    highlights: ['Stream videos & files instantly on demand', 'Choose view-only or editable access per device', 'Optional Finder integration on macOS'],
+    flow: ['Shared folder', 'Stream on demand', 'Browse / Preview'],
   },
   {
     id: 'folder-sync', title: 'Folder Sync', icon: FolderSync,
     description: 'Register folders for send-only, receive-only, or two-way sync. Choose which trusted devices can sync each folder.',
+    highlights: ['Send-only, receive-only, or two-way modes', 'Preserves conflict copies instead of overwriting', 'Grant & revoke sync per device anytime'],
+    flow: ['Selected folder', 'Detect changes', 'Synced safely'],
+  },
+  {
+    id: 'service-bridge', title: 'Service Bridge', icon: Unplug,
+    description: 'Open a service hosted on a trusted device through a private local port. Grant and revoke access for each shared service.',
+    highlights: ['Share local web apps or DBs privately', 'Never exposes ports to the public network', 'Timed or instant-revoke access per peer'],
+    flow: ['Local app :8080', 'Encrypted tunnel', 'Peer :8080'],
+  },
+  {
+    id: 'ble-p2p-nearby', title: 'Bluetooth + Wi-Fi P2P', icon: Bluetooth,
+    description: 'Discover nearby devices over Bluetooth Low Energy and transfer directly over peer-to-peer Wi-Fi without a shared router.',
+    highlights: ['Works even without a Wi-Fi router', 'Bypasses guest Wi-Fi client isolation', 'Toggle Discoverable on or off anytime'],
+    flow: ['Bluetooth scan', 'Direct Wi-Fi P2P', 'Paired & connected'],
+  },
+  {
+    id: 'device-discovery', title: 'Device Discovery', icon: Radar,
+    description: 'Find Lanvory devices on approved LAN adapters, via Bluetooth + Wi-Fi P2P, or by entering a local address manually.',
+    highlights: ['Scans only adapters you explicitly approve', 'Manual IP fallback when mDNS is blocked', 'Discovered devices stay untrusted until paired'],
+    flow: ['Approved adapter', 'Nearby scan', 'Ready to pair'],
+  },
+  {
+    id: 'secure-pairing', title: 'Secure Pairing', icon: ShieldCheck,
+    description: 'Verify a device before trusting it. Confirm matching codes on both devices and revoke trust whenever you need to.',
+    highlights: ['Both devices confirm matching codes', 'Unique device identity stored locally', 'One-click trust revocation'],
+    flow: ['Match number', 'Confirm on both', 'Trusted peer'],
   },
   {
     id: 'network-explorer', title: 'Network Explorer', icon: Network,
-    description: 'Inspect approved adapters, local listener status, and trusted devices. Ping a peer to verify its identity and check connection latency.',
-  },
-  {
-    id: 'live-resource-mount', title: 'Live Resource Mount', icon: HardDrive, status: 'Prototype',
-    description: 'Open a folder shared by a trusted peer as a live volume on macOS. Shared folders can be configured for read-only access.',
+    description: 'Inspect approved adapters, local listener status, and trusted devices. Ping a peer to verify its identity and check latency.',
+    highlights: ['Live adapter & listener status', 'Real round-trip latency check (ping)', 'No fake metrics or background scanning'],
+    flow: ['Select adapter', 'Ping trusted peer', 'Live RTT'],
   },
 ] as const
 
 export const copy = {
   skip: 'Skip to content',
-  nav: ['Why Lanvory', 'Features', 'How it works', 'Security', 'Architecture', 'Roadmap'],
+  nav: ['Why Lanvory', 'Features', 'Compare', 'How it works', 'Security', 'Architecture', 'Roadmap'],
   tagline: 'Local network, truly yours.',
   headline: ['Your devices,', 'connected locally.'],
   intro: 'Lanvory brings your devices together in a private workspace on your local network.',
@@ -68,9 +84,9 @@ export const copy = {
     },
   ],
   why: [
-    ['Local-first', 'Devices communicate directly over your local network.'],
-    ['Private by default', 'You choose which devices to trust and what to share.'],
-    ['Works offline', 'Use a shared local network without internet access.'],
+    ['No router? Still connected.', 'Use your local Wi-Fi or Ethernet network, or connect nearby devices directly via Bluetooth + Wi-Fi P2P when there’s no router or public Wi-Fi blocks sharing.'],
+    ['Watch & open without waiting.', 'Browse shared folders and stream large videos or files right away—without copying gigabytes onto your drive.'],
+    ['Share local apps, safely.', 'Let a trusted device open an app running on your computer without exposing it to the internet or the rest of the network.'],
   ],
   featureIntro: 'Discover nearby devices, share files and services, and work across your local network.',
   steps: [
@@ -210,6 +226,65 @@ export const technicalArchitecture = {
       technology: 'Per-peer grants + SQLite', icon: SlidersHorizontal,
       description: 'Grant access per peer and resource, with logs stored locally.',
       link: 'docs/security/permissions.md',
+    },
+  ],
+} as const
+
+export const comparison = {
+  title: 'One workspace. Zero compromises.',
+  intro: 'Stop juggling four separate tools, cloud logins, and exposed ports. Lanvory unifies your entire local device workflow.',
+  note: 'Note: Comparison details are for reference only and summarize typical workflows; capabilities of third-party tools may vary by version and platform.',
+  stack: [
+    { id: 'localsend', replaces: 'LocalSend / PairDrop', role: 'File Drop', capability: 'Drop, sync, live mount & tunnels' },
+    { id: 'syncthing', replaces: 'Syncthing', role: 'Folder Sync', capability: 'Stream & browse without copying' },
+    { id: 'tailscale', replaces: 'Tailscale / ZeroTier', role: 'Mesh VPN', capability: 'Zero cloud, zero accounts' },
+    { id: 'airdrop', replaces: 'AirDrop', role: 'Apple Handoff', capability: 'Continuous local workspace' },
+  ],
+  metrics: [
+    { value: '4 → 1', label: 'Apps replaced' },
+    { value: '0', label: 'Cloud accounts needed' },
+    { value: 'LAN + P2P', label: 'Works even without a router' },
+  ],
+  versus: [
+    {
+      id: 'localsend',
+      name: 'LocalSend / PairDrop',
+      summary: 'Great for quick drops, stops there.',
+      pairs: [
+        ['One-off file transfer only', 'Send files, sync folders, stream media & share local apps'],
+        ['Needs shared Wi-Fi router (fails on guest Wi-Fi)', 'Connects nearby devices directly when Wi-Fi blocks peers'],
+        ['No saved permissions or access history', 'Saved device trust with timed access you can revoke anytime'],
+      ],
+    },
+    {
+      id: 'syncthing',
+      name: 'Syncthing',
+      summary: 'Strong folder sync, heavy for daily workflows.',
+      pairs: [
+        ['Must copy entire folders before opening files', 'Stream videos & open remote files right away without copying'],
+        ['Browser-based setup that feels complex', 'Clean desktop app with one-click device pairing'],
+        ['No quick file offers or local app sharing', 'Built-in file drop and private local app sharing'],
+      ],
+    },
+    {
+      id: 'tailscale',
+      name: 'Tailscale / ZeroTier',
+      summary: 'Cloud-managed VPN, built for remote access.',
+      pairs: [
+        ['Requires accounts & cloud servers to coordinate', 'Zero cloud, zero accounts—works completely offline'],
+        ['Exposes your device on a virtual network', 'Shares only the exact app or folder you approve'],
+        ['Needs internet to manage access rules', 'Full control and access history stored right on your device'],
+      ],
+    },
+    {
+      id: 'airdrop',
+      name: 'AirDrop',
+      summary: 'Fast Apple-only handoff, no workspace continuity.',
+      pairs: [
+        ['One-shot transfers only; no ongoing sync', 'Continuous workspace: sync, live folders & local apps'],
+        ['No live folder browsing or media streaming', 'Browse and stream large folders without filling your disk'],
+        ['Apple-only ecosystem lock-in', 'Designed for cross-platform local workflows'],
+      ],
     },
   ],
 } as const
