@@ -17,7 +17,7 @@ export const features = [
   },
   {
     id: 'ble-p2p-nearby', title: 'Bluetooth + Wi-Fi P2P', icon: Bluetooth,
-    description: 'Discover nearby Macs over Bluetooth Low Energy and transfer directly over peer-to-peer Wi-Fi (AWDL) without a shared router.',
+    description: 'Discover nearby devices over Bluetooth Low Energy and transfer directly over peer-to-peer Wi-Fi without a shared router.',
   },
   {
     id: 'secure-pairing', title: 'Secure Pairing', icon: ShieldCheck,
@@ -104,7 +104,7 @@ export const copy = {
   ],
   faq: [
     ['macOS says Lanvory is damaged or from an unidentified developer?', 'Current builds are ad-hoc signed without Apple notarization. Drag Lanvory.app to Applications, then run "xattr -cr /Applications/Lanvory.app" in Terminal before launching it.'],
-    ['Can I connect without a shared Wi-Fi router?', 'Yes. On macOS, enable Bluetooth + P2P in the sidebar to discover nearby Macs over Bluetooth Low Energy and connect directly via peer-to-peer Wi-Fi (AWDL).'],
+    ['Can I connect without a shared Wi-Fi router?', 'Yes. Enable Bluetooth + P2P in the sidebar to discover nearby devices over Bluetooth Low Energy and connect directly via peer-to-peer Wi-Fi.'],
     ['Does Lanvory need internet access?', 'Once installed, Lanvory can discover devices, pair, and transfer files over a shared local network or Bluetooth + P2P without an internet connection.'],
     ['Why can’t I see the other device?', 'Check that both devices have Local Network or Bluetooth + P2P enabled. Some guest Wi-Fi networks isolate devices from each other—in that case, use Bluetooth + P2P.'],
     ['Can I connect if automatic discovery fails?', 'Yes. In the pairing screen, enter the other device’s local address and Device ID. Both devices still need to be reachable on the same local network.'],
@@ -158,24 +158,39 @@ export const securityControls = [
 export const technicalArchitecture = {
   connection: [
     {
-      technology: 'mDNS + DNS-SD', icon: Radar,
-      description: 'Find nearby devices on approved LAN adapters.',
-      link: 'docs/protocols/discovery.md',
+      stage: 'Discovery',
+      nodes: [
+        {
+          technology: 'mDNS + DNS-SD', icon: Radar,
+          description: 'Find nearby devices on approved LAN adapters.',
+          link: 'docs/protocols/discovery.md',
+        },
+        {
+          technology: 'BLE + Wi-Fi P2P', icon: Bluetooth,
+          description: 'Discover nearby devices over BLE and connect directly via peer-to-peer Wi-Fi.',
+          link: 'core/internal/nearby/nearby.go',
+        },
+      ],
     },
     {
-      technology: 'CoreBluetooth + AWDL', icon: Bluetooth,
-      description: 'Discover nearby Macs over BLE and connect directly via peer-to-peer Wi-Fi without a router.',
-      link: 'core/internal/nearby/nearby.go',
+      stage: 'Pairing',
+      nodes: [
+        {
+          technology: 'Ed25519 + TLS exporter', icon: Fingerprint,
+          description: 'Verify device identities and bind pairing to the TLS session.',
+          link: 'docs/protocols/pairing.md',
+        },
+      ],
     },
     {
-      technology: 'Ed25519 + TLS exporter', icon: Fingerprint,
-      description: 'Verify device identities and bind pairing to the TLS session.',
-      link: 'docs/protocols/pairing.md',
-    },
-    {
-      technology: 'QUIC + mutual TLS 1.3', icon: Network,
-      description: 'Encrypt peer traffic, with TCP fallback on handshake timeout.',
-      link: 'docs/protocols/quic.md',
+      stage: 'Transport',
+      nodes: [
+        {
+          technology: 'QUIC + mutual TLS 1.3', icon: Network,
+          description: 'Encrypt peer traffic, with TCP fallback on handshake timeout.',
+          link: 'docs/protocols/quic.md',
+        },
+      ],
     },
   ],
   resources: [
