@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   ArrowDownToLine, ArrowRight, ArrowUpRight, Check, ChevronDown, Copy, Github,
   Layers3, Play, ShieldCheck, Square, Star, Terminal, Zap, ZoomIn,
@@ -131,6 +131,31 @@ function ArchitectureLink({ technology, icon: Icon, description, link }: Archite
 export function App() {
   const [activeDemo, setActiveDemo] = useState<string | null>(null)
   const [copiedQuarantine, setCopiedQuarantine] = useState(false)
+  const headerRef = useRef<HTMLElement>(null)
+
+  useEffect(() => {
+    const header = headerRef.current
+    if (!header) return
+
+    const rootStyle = document.documentElement.style
+    const updateHeaderHeight = () => {
+      rootStyle.setProperty('--site-header-height', `${header.offsetHeight}px`)
+    }
+    const updateHeaderBackdrop = () => {
+      header.toggleAttribute('data-scrolled', window.scrollY > 0)
+    }
+
+    updateHeaderHeight()
+    updateHeaderBackdrop()
+    const observer = new ResizeObserver(updateHeaderHeight)
+    observer.observe(header)
+    window.addEventListener('scroll', updateHeaderBackdrop, { passive: true })
+    return () => {
+      observer.disconnect()
+      window.removeEventListener('scroll', updateHeaderBackdrop)
+      rootStyle.removeProperty('--site-header-height')
+    }
+  }, [])
 
   function toggleDemo(demo: string) {
     setActiveDemo((current) => current === demo ? null : demo)
@@ -148,7 +173,7 @@ export function App() {
 
   return (
     <div id="top">
-      <a className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-10 focus:bg-background focus:p-3" href="#main">
+      <a className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-30 focus:bg-background focus:p-3" href="#main">
         {copy.skip}
       </a>
       <a className="announcement flex flex-wrap items-center justify-center gap-x-3 gap-y-1 px-4 py-2.5 text-center text-xs" href="#roadmap">
@@ -159,16 +184,18 @@ export function App() {
         </span>
       </a>
 
-      <header className="shell site-header">
-        <Brand />
-        <nav aria-label="Main navigation" className="site-nav">
-          {copy.nav.map((label, index) => <a key={sectionIds[index]} href={`#${sectionIds[index]}`}>{label}</a>)}
-        </nav>
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-          <a className="inline-flex items-center gap-2 text-sm hover:text-primary" href={githubUrl}>
-            <Github size={16} aria-hidden="true" /> GitHub
-          </a>
-          <GitHubStar />
+      <header ref={headerRef} className="site-header-bar">
+        <div className="shell site-header">
+          <Brand />
+          <nav aria-label="Main navigation" className="site-nav">
+            {copy.nav.map((label, index) => <a key={sectionIds[index]} href={`#${sectionIds[index]}`}>{label}</a>)}
+          </nav>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+            <a className="inline-flex items-center gap-2 text-sm hover:text-primary" href={githubUrl}>
+              <Github size={16} aria-hidden="true" /> GitHub
+            </a>
+            <GitHubStar />
+          </div>
         </div>
       </header>
 
@@ -274,7 +301,7 @@ export function App() {
           <p>{copy.featureIntro}</p>
           <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {features.map((feature) => (
-              <article id={feature.id} key={feature.id} className="detail-card scroll-mt-8 target:border-primary">
+              <article id={feature.id} key={feature.id} className="detail-card target:border-primary">
                 <div className="mb-4 flex items-center justify-between gap-3">
                   <feature.icon className="text-primary" size={22} aria-hidden="true" />
                   {'status' in feature && <span className="text-xs text-primary">{feature.status}</span>}
