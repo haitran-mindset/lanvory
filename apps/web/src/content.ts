@@ -13,7 +13,11 @@ export const features = [
   },
   {
     id: 'device-discovery', title: 'Device Discovery', icon: Radar,
-    description: 'Find Lanvory devices on approved network adapters, or enter a local endpoint when automatic discovery is unavailable.',
+    description: 'Find Lanvory devices on approved LAN adapters, via Bluetooth + Wi-Fi P2P, or by entering a local endpoint manually.',
+  },
+  {
+    id: 'ble-p2p-nearby', title: 'Bluetooth + Wi-Fi P2P', icon: Bluetooth,
+    description: 'Discover nearby Macs over Bluetooth Low Energy and transfer directly over peer-to-peer Wi-Fi (AWDL) without a shared router.',
   },
   {
     id: 'secure-pairing', title: 'Secure Pairing', icon: ShieldCheck,
@@ -41,8 +45,8 @@ export const copy = {
   headline: ['Your devices,', 'connected locally.'],
   intro: 'Lanvory brings your devices together in a private workspace on your local network.',
   checks: [
-    'Peer-to-peer on your LAN',
-    'Works even when the internet is down',
+    'Peer-to-peer on your LAN or via Bluetooth + Wi-Fi P2P',
+    'Works even when the internet or router is down',
     'No cloud or accounts',
     'Send files and sync selected folders',
     'Access services on trusted devices',
@@ -75,7 +79,7 @@ export const copy = {
     {
       demo: 'discover',
       title: 'Find nearby devices',
-      description: 'Connect both devices to the same Wi-Fi or Ethernet network, enable LAN access, and look for the other device in Nearby. You can also enter its local address manually.',
+      description: 'Connect both devices to the same LAN or enable Bluetooth + P2P on macOS, then look for the other device in Nearby. You can also enter its address manually.',
       alt: 'Machine A finds Machine B in Nearby after LAN access is enabled.',
     },
     {
@@ -93,27 +97,28 @@ export const copy = {
   ],
   securityIntro: 'You approve where Lanvory connects, which devices it trusts, and what each device can access.',
   quickStart: [
-    ['Set up both devices', 'Install and open Lanvory on both devices. Connect them to the same Wi-Fi or Ethernet network.'],
-    ['Enable LAN access', 'Enable LAN access in Lanvory on both devices. If prompted, allow Lanvory to access the local network.'],
+    ['Set up both devices', 'Install and open Lanvory on both devices. Connect them to the same LAN, or keep them nearby with Bluetooth and Wi-Fi turned on.'],
+    ['Enable Local Network or Bluetooth + P2P', 'Turn on Local Network or Bluetooth + P2P in the Lanvory sidebar. Grant macOS network and Bluetooth permissions when prompted.'],
     ['Pair the devices', 'Open Devices and select the other device under Nearby. Choose the matching number, compare the verification code, and approve on both devices.'],
     ['Send your first file', 'Open Sharing, pick a file and a trusted recipient, then send it. On the receiving device, select Accept file and open the Inbox.'],
   ],
   faq: [
     ['macOS says Lanvory is damaged or from an unidentified developer?', 'Current builds are ad-hoc signed without Apple notarization. Drag Lanvory.app to Applications, then run "xattr -cr /Applications/Lanvory.app" in Terminal before launching it.'],
-    ['Does Lanvory need internet access?', 'Once installed, Lanvory can discover devices, pair, and transfer files over a shared local network without an internet connection.'],
-    ['Why can’t I see the other device?', 'Check that both devices are on the same local network and have enabled LAN access. Some guest Wi-Fi networks isolate devices from each other.'],
+    ['Can I connect without a shared Wi-Fi router?', 'Yes. On macOS, enable Bluetooth + P2P in the sidebar to discover nearby Macs over Bluetooth Low Energy and connect directly via peer-to-peer Wi-Fi (AWDL).'],
+    ['Does Lanvory need internet access?', 'Once installed, Lanvory can discover devices, pair, and transfer files over a shared local network or Bluetooth + P2P without an internet connection.'],
+    ['Why can’t I see the other device?', 'Check that both devices have Local Network or Bluetooth + P2P enabled. Some guest Wi-Fi networks isolate devices from each other—in that case, use Bluetooth + P2P.'],
     ['Can I connect if automatic discovery fails?', 'Yes. In the pairing screen, enter the other device’s local address and Device ID. Both devices still need to be reachable on the same local network.'],
     ['Where do received files go?', 'After you accept a file, Lanvory verifies it and saves it to the Inbox. Open Sharing and select Open inbox to find it.'],
     ['When will Windows and Linux be supported?', 'Both are on the roadmap. Release dates for Windows and Linux have yet to be announced.'],
   ],
   roadmap: [
     {
-      phase: 'In progress', title: 'macOS MVP', icon: Laptop,
-      description: 'Support Intel and Apple Silicon Macs. Validate offline pairing, file transfer, and service sharing across two devices, and complete release checks.',
+      phase: 'Available (v0.1.0)', title: 'macOS Desktop & Bluetooth + P2P', icon: Laptop,
+      description: 'Apple Silicon and Intel Macs with LAN discovery, Bluetooth Low Energy + Wi-Fi P2P (AWDL), verified pairing, file transfer, folder sync, and service bridge.',
     },
     {
-      phase: 'Next', title: 'Bluetooth Low Energy (BLE)', icon: Bluetooth,
-      description: 'Use Bluetooth Low Energy to discover nearby devices running Lanvory.',
+      phase: 'In progress', title: 'Live Resource Mount & Signed Releases', icon: HardDrive,
+      description: 'Expand Live Resource Mount workflows and add Apple Developer ID signing and notarization for seamless macOS installation.',
     },
     {
       phase: 'Future', title: 'Windows and Linux', icon: Monitor,
@@ -125,8 +130,8 @@ export const copy = {
 
 export const securityControls = [
   {
-    title: 'Approved LAN connections', icon: Network,
-    description: 'Lanvory communicates through network adapters you approve and checks that peer addresses are reachable on the local link.',
+    title: 'Approved LAN & P2P transports', icon: Network,
+    description: 'Lanvory only listens on network adapters and Bluetooth + P2P transports you explicitly enable, and verifies peer reachability before connecting.',
   },
   {
     title: 'Verified device pairing', icon: Fingerprint,
@@ -156,6 +161,11 @@ export const technicalArchitecture = {
       technology: 'mDNS + DNS-SD', icon: Radar,
       description: 'Find nearby devices on approved LAN adapters.',
       link: 'docs/protocols/discovery.md',
+    },
+    {
+      technology: 'CoreBluetooth + AWDL', icon: Bluetooth,
+      description: 'Discover nearby Macs over BLE and connect directly via peer-to-peer Wi-Fi without a router.',
+      link: 'core/internal/nearby/nearby.go',
     },
     {
       technology: 'Ed25519 + TLS exporter', icon: Fingerprint,

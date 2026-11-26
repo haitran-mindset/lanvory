@@ -411,7 +411,7 @@ export function App() {
           <h2>{copy.nav[5]}</h2>
           <ol className="roadmap-timeline mt-8" role="list">
             {copy.roadmap.map(({ phase, title, description, icon: Icon }, index) => (
-              <li key={title} className="roadmap-milestone" aria-current={index === 0 ? 'step' : undefined}>
+              <li key={title} className="roadmap-milestone" aria-current={index === 1 ? 'step' : undefined}>
                 <span className="roadmap-node" aria-hidden="true"><Icon size={20} /></span>
                 <article className="detail-card roadmap-card">
                   <span className="roadmap-phase">{phase}</span>
