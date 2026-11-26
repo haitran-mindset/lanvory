@@ -80,6 +80,9 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/download-artifact@v4
         with:
           pattern: lanvory-macos-*
@@ -90,17 +93,33 @@ jobs:
         run: |
           cat *.dmg.sha256 > SHA256SUMS.txt
           cat SHA256SUMS.txt
+      - name: Generate release notes
+        run: |
+          prev_tag=$(git describe --tags --abbrev=0 "${GITHUB_REF_NAME}^" 2>/dev/null || true)
+          {
+            echo "### First launch on macOS"
+            echo "Current builds are ad-hoc signed and not yet notarized by Apple. After dragging \`Lanvory.app\` to \`Applications\`, run:"
+            echo '```sh'
+            echo "xattr -cr /Applications/Lanvory.app"
+            echo '```'
+            echo ""
+            echo "### What's Changed"
+            if [ -n "$prev_tag" ]; then
+              git log --no-merges --pretty=format:"- %s (%h)" "${prev_tag}..${GITHUB_REF_NAME}"
+              echo ""
+              echo ""
+              echo "**Full Changelog**: https://github.com/${GITHUB_REPOSITORY}/compare/${prev_tag}...${GITHUB_REF_NAME}"
+            else
+              git log --no-merges -n 30 --pretty=format:"- %s (%h)" "${GITHUB_REF_NAME}"
+              echo ""
+            fi
+          } > release-notes.md
+          cat release-notes.md
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
           name: Lanvory ${{ github.ref_name }}
-          body: |
-            ### First launch on macOS
-            Current builds are ad-hoc signed and not yet notarized by Apple. After dragging `Lanvory.app` to `Applications`, run:
-            ```sh
-            xattr -cr /Applications/Lanvory.app
-            ```
-          generate_release_notes: true
+          body_path: release-notes.md
           prerelease: ${{ contains(github.ref_name, '-') }}
           files: release-assets/*
