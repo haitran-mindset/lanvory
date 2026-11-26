@@ -35,7 +35,7 @@ export const features = [
 
 export const copy = {
   skip: 'Skip to content',
-  update: 'Lanvory is in development',
+  update: 'Lanvory v0.1.0 is available for macOS',
   nav: ['Why Lanvory', 'Features', 'How it works', 'Security', 'Architecture', 'Roadmap'],
   tagline: 'Local network, truly yours.',
   headline: ['Your devices,', 'connected locally.'],
@@ -54,7 +54,7 @@ export const copy = {
   platforms: [
     {
       id: 'macos', name: 'macOS',
-      description: 'Intel and Apple Silicon Macs. The minimum macOS version will be listed with the public release.',
+      description: 'Available for Apple Silicon (arm64) and Intel (x64) Macs.',
     },
     {
       id: 'windows', name: 'Windows',

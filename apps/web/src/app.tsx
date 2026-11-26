@@ -9,8 +9,13 @@ import { copy, features, securityControls, technicalArchitecture } from './conte
 const sectionIds = ['why', 'features', 'how', 'security', 'architecture', 'roadmap']
 const githubRepository = 'haitran-mindset/lanvory'
 const githubUrl = `https://github.com/${githubRepository}`
+const releaseVersion = '0.1.0'
+const releaseTag = `v${releaseVersion}`
+const releaseUrl = `${githubUrl}/releases/tag/${releaseTag}`
+const macArm64DmgUrl = `${githubUrl}/releases/download/${releaseTag}/Lanvory-${releaseVersion}-arm64.dmg`
+const macX64DmgUrl = `${githubUrl}/releases/download/${releaseTag}/Lanvory-${releaseVersion}-x64.dmg`
 const starCountFormat = new Intl.NumberFormat('en')
-const downloadUrl: string | undefined = undefined
+const downloadUrl: string | undefined = releaseUrl
 const desktopPreviewUrl = `${import.meta.env.BASE_URL}images/desktop-preview-1644.webp`
 
 function Brand() {
@@ -417,12 +422,17 @@ export function App() {
                   <div className="mt-auto pt-4">
                     {id === 'macos' ? (
                       downloadUrl ? (
-                        <div className="flex flex-wrap items-center gap-4">
-                          <Button asChild>
-                            <a href={downloadUrl}><ArrowDownToLine data-icon="inline-start" aria-hidden="true" /> {copy.download}</a>
-                          </Button>
-                          <a className="text-sm underline underline-offset-4 hover:text-primary" href={`${githubUrl}/releases`}>
-                            Release notes
+                        <div className="flex flex-col gap-3">
+                          <div className="flex flex-wrap items-center gap-2.5">
+                            <Button asChild>
+                              <a href={macArm64DmgUrl}><ArrowDownToLine data-icon="inline-start" aria-hidden="true" /> Apple Silicon (.dmg)</a>
+                            </Button>
+                            <Button asChild variant="outline">
+                              <a href={macX64DmgUrl}><ArrowDownToLine data-icon="inline-start" aria-hidden="true" /> Intel (.dmg)</a>
+                            </Button>
+                          </div>
+                          <a className="text-sm underline underline-offset-4 hover:text-primary" href={releaseUrl}>
+                            Release notes ({releaseTag})
                           </a>
                         </div>
                       ) : (
