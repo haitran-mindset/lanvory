@@ -38,40 +38,42 @@ Lanvory runs as a local Go daemon (`lanvoryd`), CLI (`lanvory`), and Electron + 
 ```mermaid
 flowchart TB
   subgraph Desktop["Electron Desktop App (apps/desktop)"]
-    Renderer["Sandboxed Renderer (React + Vite)"]
-    Preload["Preload Bridge (contextBridge · window.lanvory)"]
-    Main["Main Process (Electron / Node)"]
-    Renderer <-->|"Typed IPC"| Preload
-    Preload <-->|"ipcMain.handle"| Main
+    direction LR
+    Renderer["Renderer (React · Sandboxed)"]
+    Preload["Preload (window.lanvory)"]
+    Main["Main Process (Electron)"]
+    Renderer <-->|"contextBridge"| Preload <-->|"IPC"| Main
   end
 
   subgraph GoCore["Go Core (core/)"]
-    CLI["lanvory CLI (core/cmd/lanvory)"]
-    Daemon["lanvoryd Daemon (core/cmd/lanvoryd)"]
-    Storage["Local Storage (SQLite · Keychain Ed25519)"]
+    direction TB
+    CLI["lanvory CLI"]
+    Daemon["lanvoryd Daemon"]
+    Storage["Local State (SQLite · Keychain Ed25519)"]
     Resources["Resource Engines (Drop · Sync · Clipboard · Bridge · Mount)"]
-    Transport["Peer Transport (mTLS 1.3 · QUIC · Scoped LAN · Loopback)"]
+    Transport["Peer Transport (mTLS 1.3 · QUIC · LAN · Loopback)"]
 
-    CLI <-->|"Owner-only Unix Socket IPC"| Daemon
+    CLI <-->|"Unix Socket IPC"| Daemon
     Daemon <--> Storage
     Daemon <--> Resources
     Resources <--> Transport
   end
 
-  subgraph NativeHelper["macOS Nearby Helper (lanvory-nearby.swift)"]
-    BLE["CoreBluetooth (BLE Scan & Advertise)"]
-    AWDL["Network.framework (Wi-Fi P2P / AWDL Bridge)"]
+  subgraph NativeHelper["macOS Nearby Helper (lanvory-nearby)"]
+    direction LR
+    BLE["CoreBluetooth (BLE)"]
+    AWDL["Network.framework (Wi-Fi P2P / AWDL)"]
   end
 
   Remote["Remote Lanvory Peer"]
 
-  Main -->|"Spawns & calls CLI"| CLI
+  Main -->|"CLI / Unix Socket"| CLI
   Main <-->|"HTTP over Unix Socket"| Daemon
-  Daemon <-->|"JSON stdin/stdout"| NativeHelper
-  AWDL <-->|"127.0.0.1 Loopback Proxy"| Transport
+  Daemon <-->|"JSON stdio"| NativeHelper
+  AWDL <-->|"127.0.0.1 Loopback"| Transport
   Transport <-->|"Approved LAN (TCP / QUIC)"| Remote
-  AWDL <-->|"Direct Wi-Fi P2P (AWDL)"| Remote
-  BLE -.->|"Nearby Discovery"| Remote
+  AWDL <-->|"Direct Wi-Fi P2P"| Remote
+  BLE -.->|"Discovery"| Remote
 ```
 
 1. **Electron Renderer & Preload (`apps/desktop/src/renderer`, `src/preload`)**: Runs in a sandboxed browser context with no direct filesystem, socket, or shell access. All privileged operations pass through the narrow `window.lanvory` preload API.

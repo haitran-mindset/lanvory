@@ -79,17 +79,17 @@ func quicConfig(server bool) *quic.Config {
 }
 
 type QUICListener struct {
-	listener     *quic.Listener
-	transport    *quic.Transport
-	socket       net.PacketConn
-	current      atomic.Pointer[[]networking.Interface]
-	inventory    func() ([]networking.Interface, error)
-	name         string
-	source       netip.Addr
-	index        int
-	trusted      func(string) (bool, error)
-	receiver     *drop.Receiver
-	services     bridge.Lookup
+	listener         *quic.Listener
+	transport        *quic.Transport
+	socket           net.PacketConn
+	current          atomic.Pointer[[]networking.Interface]
+	inventory        func() ([]networking.Interface, error)
+	name             string
+	source           netip.Addr
+	index            int
+	trusted          func(string) (bool, error)
+	receiver         *drop.Receiver
+	services         bridge.Lookup
 	mountReg         *mount.Registry
 	mountAllowed     func(string, string) bool
 	clipboardBuf     *clipboard.Buffer
