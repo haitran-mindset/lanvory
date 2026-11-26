@@ -85,6 +85,11 @@ contextBridge.exposeInMainWorld('lanvory', {
   pollResourceEvents: (id, since) => ipcRenderer.invoke('lanvory:mount-events', id, since),
   closeMount: (id) => ipcRenderer.invoke('lanvory:mount-close', id),
   openMountInFinder: (target) => ipcRenderer.invoke('lanvory:mount-open-finder', target),
+  nearbyStatus: () => ipcRenderer.invoke('lanvory:nearby-status'),
+  nearbyAdvertise: (enabled) => ipcRenderer.invoke('lanvory:nearby-advertise', enabled === true),
+  nearbyScan: () => ipcRenderer.invoke('lanvory:nearby-scan'),
+  nearbyConnect: (serviceName) => ipcRenderer.invoke('lanvory:nearby-connect', serviceName),
+  nearbyPair: (endpoint, fingerprint) => ipcRenderer.invoke('lanvory:nearby-pair', endpoint, fingerprint),
   identity: (retry) => ipcRenderer.invoke('lanvory:identity', retry === true),
   onNavigate: (callback) => {
     const listener = (_event, page) => {

@@ -93,7 +93,11 @@ func main() {
 		slices.Equal(arguments, []string{"mounts", "list"}),
 		len(arguments) == 5 && arguments[0] == "mounts" && arguments[1] == "discover",
 		(len(arguments) == 3 || len(arguments) == 4) && arguments[0] == "mounts" && (arguments[1] == "browse" || arguments[1] == "native"),
-		(len(arguments) == 6 || len(arguments) == 7) && arguments[0] == "mounts" && arguments[1] == "open":
+		(len(arguments) == 6 || len(arguments) == 7) && arguments[0] == "mounts" && arguments[1] == "open",
+		slices.Equal(arguments, []string{"nearby", "status"}),
+		slices.Equal(arguments, []string{"nearby", "scan"}),
+		len(arguments) == 3 && arguments[0] == "nearby" && arguments[1] == "advertise" && (arguments[2] == "on" || arguments[2] == "off"),
+		len(arguments) == 3 && arguments[0] == "nearby" && arguments[1] == "connect":
 		if err := run(arguments); err != nil {
 			fmt.Fprintln(os.Stderr, "lanvory:", err)
 			os.Exit(1)
@@ -271,6 +275,34 @@ func run(arguments []string) error {
 			return output.Encode(rec)
 		case "close":
 			return local.CloseMount(ctx, dir, arguments[2])
+		}
+	}
+	if arguments[0] == "nearby" {
+		switch arguments[1] {
+		case "status":
+			res, err := local.NearbyStatus(ctx, dir)
+			if err != nil {
+				return err
+			}
+			return output.Encode(res)
+		case "scan":
+			res, err := local.ScanNearby(ctx, dir, 4500)
+			if err != nil {
+				return err
+			}
+			return output.Encode(res)
+		case "advertise":
+			st, err := local.SetNearbyAdvertising(ctx, dir, arguments[2] == "on")
+			if err != nil {
+				return err
+			}
+			return output.Encode(st)
+		case "connect":
+			ep, err := local.ConnectNearbyP2P(ctx, dir, arguments[2])
+			if err != nil {
+				return err
+			}
+			return output.Encode(ep)
 		}
 	}
 	if arguments[0] == "services" {

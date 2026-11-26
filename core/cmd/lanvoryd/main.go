@@ -21,6 +21,7 @@ import (
 	"lanvory.local/core/internal/identity"
 	"lanvory.local/core/internal/local"
 	"lanvory.local/core/internal/mount"
+	"lanvory.local/core/internal/nearby"
 	"lanvory.local/core/internal/pairing"
 	"lanvory.local/core/internal/permissions"
 	"lanvory.local/core/internal/storage"
@@ -94,6 +95,8 @@ func run(peerInterface string, peerBind netip.AddrPort, advertise, enableQUIC, e
 	clipBuf := clipboard.NewBuffer()
 	syncMgr := syncengine.NewManager()
 	mountReg := mount.NewRegistry()
+	nearbyMgr := nearby.NewManager(device.Name, device.Fingerprint[:12])
+	defer nearbyMgr.Close()
 	lan := &lanListener{parent: ctx, dir: dir, device: device, key: key, receiver: receiver, pairs: pairs, clipboard: clipBuf, syncMgr: syncMgr, mountReg: mountReg}
 	defer lan.stop()
 	if peerInterface != "" {
@@ -106,7 +109,8 @@ func run(peerInterface string, peerBind netip.AddrPort, advertise, enableQUIC, e
 	handler := local.WithListenerStatus(local.HandlerWithResources(device, dir, receiver, tunnels, key, pairs, lan.status), lan.status, lan.start, lan.stop)
 	handler = local.WithClipboard(handler, clipBuf, device, dir, key)
 	handler = local.WithSync(handler, syncMgr, device, dir, key)
-	handler = local.WithMounts(handler, mountReg, device, dir, key)
+	handler = local.WithMountsWithNearby(handler, mountReg, device, dir, key, nearbyMgr)
+	handler = local.WithNearby(handler, nearbyMgr, lan.ensureP2PPort, device, dir, key, pairs)
 	server := &http.Server{
 		Handler:           handler,
 		ReadHeaderTimeout: 2 * time.Second,

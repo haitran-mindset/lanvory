@@ -257,6 +257,35 @@ type MountSession struct {
 	done      chan struct{}
 }
 
+// DiscoverResourcesLoopback queries a peer over an active loopback Wi-Fi P2P bridge.
+func DiscoverResourcesLoopback(
+	ctx context.Context,
+	endpoint netip.AddrPort,
+	expected Fingerprint,
+	key ed25519.PrivateKey,
+) ([]mount.ResourceDescriptor, error) {
+	if !endpoint.Addr().IsLoopback() || endpoint.Port() == 0 {
+		return nil, ErrPeerScope
+	}
+	tlsConfig, err := clientIdentity(expected, key, mount.Protocol)
+	if err != nil {
+		return nil, err
+	}
+	return discoverResources(ctx, func(dialCtx context.Context) (net.Conn, error) {
+		var d net.Dialer
+		raw, err := d.DialContext(dialCtx, "tcp4", endpoint.String())
+		if err != nil {
+			return nil, err
+		}
+		conn := tls.Client(raw, tlsConfig)
+		if err := conn.HandshakeContext(dialCtx); err != nil {
+			raw.Close()
+			return nil, err
+		}
+		return conn, nil
+	})
+}
+
 // StartMountSession starts a local loopback WebDAV HTTP server that proxies all
 // WebDAV and HTTP Range requests over lanvory-mount/1 mTLS to a paired peer.
 func StartMountSession(
@@ -275,6 +304,37 @@ func StartMountSession(
 	}
 	return startMountSession(ctx, remoteMountID, localBind, func(dialCtx context.Context) (net.Conn, error) {
 		return dialResource(dialCtx, adapter, endpoint, inventory, tlsConfig)
+	})
+}
+
+// StartMountSessionLoopback starts a Resource Session over an active loopback Wi-Fi P2P bridge.
+func StartMountSessionLoopback(
+	ctx context.Context,
+	endpoint netip.AddrPort,
+	expected Fingerprint,
+	key ed25519.PrivateKey,
+	remoteMountID string,
+	localBind string,
+) (*MountSession, error) {
+	if !endpoint.Addr().IsLoopback() || endpoint.Port() == 0 {
+		return nil, ErrPeerScope
+	}
+	tlsConfig, err := clientIdentity(expected, key, mount.Protocol)
+	if err != nil {
+		return nil, err
+	}
+	return startMountSession(ctx, remoteMountID, localBind, func(dialCtx context.Context) (net.Conn, error) {
+		var d net.Dialer
+		raw, err := d.DialContext(dialCtx, "tcp4", endpoint.String())
+		if err != nil {
+			return nil, err
+		}
+		conn := tls.Client(raw, tlsConfig)
+		if err := conn.HandshakeContext(dialCtx); err != nil {
+			raw.Close()
+			return nil, err
+		}
+		return conn, nil
 	})
 }
 

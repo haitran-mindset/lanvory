@@ -121,7 +121,7 @@ async function verify() {
   }
   await eventually(() => evaluate('Boolean(document.querySelector(".workspace-header"))'), 'workspace rendered');
   assert.equal(await evaluate(`[...document.querySelectorAll('nav button')].some(button => button.textContent === 'Terminal')`), false);
-  assert.equal(await evaluate(`Boolean([...document.querySelectorAll('.page-heading button')].find(button => button.textContent === ' Pair Device' || button.textContent === 'Pair Device'))`), true);
+  await eventually(() => evaluate(`Boolean(document.querySelector('.ble-scan-options'))`), 'scan options rendered');
   const originalBounds = window.getBounds();
   window.setSize(780, 540);
   try {

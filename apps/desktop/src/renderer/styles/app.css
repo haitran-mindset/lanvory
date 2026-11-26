@@ -3349,3 +3349,317 @@ button.pairing-number:not(:disabled):hover, .pairing-number[aria-pressed="true"]
   justify-content: space-between;
   gap: 10px;
 }
+
+/* Nearby Discovery (BLE + Wi-Fi P2P) */
+.ble-nearby-card {
+  margin-top: 0;
+  margin-bottom: 20px;
+  padding: 18px 20px;
+  border: 1px solid var(--line);
+  border-radius: 19px;
+  background: var(--inset);
+  display: grid;
+  gap: 14px;
+}
+
+.ble-nearby-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.ble-nearby-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.ble-nearby-copy {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.ble-nearby-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.ble-nearby-title-row h3 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.ble-nearby-copy p {
+  margin: 0;
+  font-size: .82rem;
+  color: var(--muted);
+}
+
+.ble-controls {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.ble-switch-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  padding: 6px 12px 6px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--muted);
+  font-size: .82rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: border-color .15s ease, color .15s ease, background .15s ease;
+}
+
+.ble-switch-btn:hover:not(:disabled) {
+  color: var(--foreground);
+  border-color: var(--selected-line);
+}
+
+.ble-switch-btn.is-on {
+  color: var(--foreground);
+  border-color: var(--selected-line);
+  background: var(--selected);
+}
+
+.ble-switch-track {
+  position: relative;
+  width: 30px;
+  height: 18px;
+  border-radius: 999px;
+  background: var(--dot);
+  transition: background .15s ease;
+}
+
+.ble-switch-btn.is-on .ble-switch-track {
+  background: var(--accent);
+}
+
+.ble-switch-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--panel);
+  transition: transform .15s ease;
+}
+
+.ble-switch-btn.is-on .ble-switch-thumb {
+  transform: translateX(12px);
+}
+
+.ble-peers-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(16.5rem, 1fr));
+  gap: 10px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.ble-peer-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 13px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+}
+
+.ble-peer-meta {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.ble-peer-meta strong {
+  font-size: .88rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ble-peer-meta span {
+  font-size: .75rem;
+  color: var(--muted);
+}
+
+.ble-scan-options {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 11px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  margin: 12px 0 14px;
+}
+
+.ble-scan-option {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  font-size: .82rem;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color .15s ease, background .15s ease, color .15s ease;
+}
+
+.ble-scan-option:hover {
+  color: var(--foreground);
+}
+
+.ble-scan-option.is-active {
+  background: var(--selected);
+  border-color: var(--selected-line);
+  color: var(--foreground);
+  font-weight: 600;
+}
+
+.ble-ready-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--dot);
+  flex-shrink: 0;
+}
+
+.ble-ready-dot.is-ready {
+  background: var(--accent);
+  box-shadow: 0 0 6px var(--status-glow);
+}
+
+.ble-action-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+}
+
+.ble-action-hint {
+  font-size: .8rem;
+  color: var(--muted);
+}
+
+/* Sidebar dual-transport status card */
+aside .status {
+  display: grid;
+  gap: 10px;
+  padding: 12px 13px;
+  border-radius: 14px;
+}
+
+.status-head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.status-title {
+  flex: 1;
+  min-width: 0;
+}
+
+.status-title strong {
+  display: block;
+  font-size: .8rem;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.status-channels {
+  display: grid;
+  gap: 6px;
+  padding-top: 9px;
+  border-top: 1px solid var(--line);
+}
+
+.status-channel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: .72rem;
+  color: var(--muted);
+}
+
+aside .status .status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.status-badge em {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--dot);
+  font-style: normal;
+}
+
+.status-badge.is-ready {
+  color: var(--foreground);
+}
+
+.status-badge.is-ready em {
+  background: var(--selected-line);
+}
+
+.status-badge.is-on {
+  color: var(--accent);
+}
+
+.status-badge.is-on em {
+  background: var(--accent);
+  box-shadow: 0 0 6px var(--status-glow);
+}
+
+.brand-title-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.brand-version {
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: .6875rem;
+  font-weight: 500;
+  color: var(--muted);
+  background: var(--inset);
+  border: 1px solid var(--line);
+}

@@ -233,6 +233,9 @@ func (l *Listener) Serve(ctx context.Context) error {
 }
 
 func (l *Listener) currentScope(remote netip.Addr) bool {
+	if l.index == 0 && l.source.IsLoopback() {
+		return !remote.IsValid() || remote.IsLoopback()
+	}
 	interfaces, err := l.inventory()
 	if err != nil || networking.ListenerIndex(interfaces, l.name, l.source) != l.index {
 		return false

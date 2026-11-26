@@ -78,6 +78,11 @@ export interface DesktopApi {
   pollResourceEvents(id: string, since: number): Promise<unknown>;
   closeMount(id: string): Promise<boolean>;
   openMountInFinder(target: string): Promise<boolean>;
+  nearbyStatus(): Promise<unknown>;
+  nearbyAdvertise(enabled: boolean): Promise<unknown>;
+  nearbyScan(): Promise<unknown>;
+  nearbyConnect(serviceName: string): Promise<unknown>;
+  nearbyPair(endpoint: string, fingerprint: string): Promise<{ ok: boolean; error?: string }>;
   trustPeer(adapter: string, endpoint: string, fingerprint: string): Promise<boolean>;
   revokePeer(fingerprint: string): Promise<boolean>;
   onNavigate(callback: (page: 'Devices' | 'Sharing' | 'Sync' | 'Live Resources' | 'Services' | 'Network' | 'Settings') => void): () => void;

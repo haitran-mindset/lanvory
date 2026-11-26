@@ -23,6 +23,7 @@ import (
 	"unicode/utf8"
 
 	"lanvory.local/core/internal/mount"
+	"lanvory.local/core/internal/nearby"
 	"lanvory.local/core/internal/networking"
 	"lanvory.local/core/internal/peer"
 )
@@ -166,11 +167,16 @@ func (m *mountManager) remove(id string) (*activeMount, bool) {
 
 // WithMounts mounts Live Resources export, discovery, session, explorer, streaming, and event endpoints.
 func WithMounts(next http.Handler, reg *mount.Registry, device Device, dir string, key ed25519.PrivateKey) http.Handler {
+	return WithMountsWithNearby(next, reg, device, dir, key, nil)
+}
+
+// WithMountsWithNearby mounts Live Resources endpoints with optional Wi-Fi P2P bridge support.
+func WithMountsWithNearby(next http.Handler, reg *mount.Registry, device Device, dir string, key ed25519.PrivateKey, nearbyMgr *nearby.Manager) http.Handler {
 	if reg == nil {
 		return next
 	}
 	mux := http.NewServeMux()
-	registerMounts(mux, device, dir, reg, key)
+	registerMounts(mux, device, dir, reg, key, nearbyMgr)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == mountRoute || strings.HasPrefix(r.URL.Path, mountRoute+"/") {
 			mux.ServeHTTP(w, r)
@@ -180,7 +186,7 @@ func WithMounts(next http.Handler, reg *mount.Registry, device Device, dir strin
 	})
 }
 
-func registerMounts(mux *http.ServeMux, _ Device, dir string, reg *mount.Registry, key ed25519.PrivateKey) {
+func registerMounts(mux *http.ServeMux, _ Device, dir string, reg *mount.Registry, key ed25519.PrivateKey, nearbyMgr *nearby.Manager) {
 	mgr := newMountManager()
 	davClient := &http.Client{Timeout: 15 * time.Second}
 
@@ -241,10 +247,19 @@ func registerMounts(mux *http.ServeMux, _ Device, dir string, reg *mount.Registr
 			http.Error(w, "Invalid peer fingerprint", http.StatusBadRequest)
 			return
 		}
-		inventory := func() ([]networking.Interface, error) {
-			return approvedInventory(dir)
+		var list []mount.ResourceDescriptor
+		if req.Interface == "p2p" || endpoint.Addr().IsLoopback() {
+			if nearbyMgr == nil || !nearbyMgr.HasEndpoint(endpoint.String()) {
+				http.Error(w, "Unknown Wi-Fi P2P bridge endpoint", http.StatusForbidden)
+				return
+			}
+			list, err = peer.DiscoverResourcesLoopback(r.Context(), endpoint, expected, key)
+		} else {
+			inventory := func() ([]networking.Interface, error) {
+				return approvedInventory(dir)
+			}
+			list, err = peer.DiscoverResources(r.Context(), req.Interface, endpoint, expected, key, inventory)
 		}
-		list, err := peer.DiscoverResources(r.Context(), req.Interface, endpoint, expected, key, inventory)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadGateway)
 			return
@@ -285,19 +300,35 @@ func registerMounts(mux *http.ServeMux, _ Device, dir string, reg *mount.Registr
 			http.Error(w, "Invalid remote resource ID", http.StatusBadRequest)
 			return
 		}
-		inventory := func() ([]networking.Interface, error) {
-			return approvedInventory(dir)
+		var sess *peer.MountSession
+		if req.Interface == "p2p" || endpoint.Addr().IsLoopback() {
+			if nearbyMgr == nil || !nearbyMgr.HasEndpoint(endpoint.String()) {
+				http.Error(w, "Unknown Wi-Fi P2P bridge endpoint", http.StatusForbidden)
+				return
+			}
+			sess, err = peer.StartMountSessionLoopback(
+				context.Background(),
+				endpoint,
+				expected,
+				key,
+				req.RemoteID,
+				"127.0.0.1:0",
+			)
+		} else {
+			inventory := func() ([]networking.Interface, error) {
+				return approvedInventory(dir)
+			}
+			sess, err = peer.StartMountSession(
+				context.Background(),
+				req.Interface,
+				endpoint,
+				expected,
+				key,
+				req.RemoteID,
+				"127.0.0.1:0",
+				inventory,
+			)
 		}
-		sess, err := peer.StartMountSession(
-			context.Background(),
-			req.Interface,
-			endpoint,
-			expected,
-			key,
-			req.RemoteID,
-			"127.0.0.1:0",
-			inventory,
-		)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadGateway)
 			return

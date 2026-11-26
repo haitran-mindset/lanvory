@@ -38,10 +38,12 @@ type lanListener struct {
 	syncMgr   *syncengine.Manager
 	mountReg  *mount.Registry
 
-	mu      sync.Mutex
-	current local.ListenerStatus
-	done    chan struct{}
-	cancel  context.CancelFunc
+	mu        sync.Mutex
+	current   local.ListenerStatus
+	done      chan struct{}
+	cancel    context.CancelFunc
+	p2pPort   int
+	p2pCancel context.CancelFunc
 }
 
 func (l *lanListener) status() local.ListenerStatus {
@@ -199,4 +201,67 @@ func (l *lanListener) start(adapter string, bind netip.AddrPort, advertise, enab
 	}()
 	fmt.Fprintf(os.Stderr, "lanvoryd: experimental TLS listener started on port %d\n", address.Port())
 	return nil
+}
+
+func (l *lanListener) ensureP2PPort() int {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.current.State == "listening" {
+		if addr, err := netip.ParseAddrPort(l.current.Endpoint); err == nil && addr.Port() > 0 {
+			return int(addr.Port())
+		}
+	}
+	if l.p2pPort > 0 {
+		return l.p2pPort
+	}
+	trusted := func(fingerprint string) (bool, error) {
+		return storage.IsTrustedPeer(l.dir, l.device.ID, fingerprint)
+	}
+	lookup := func(fingerprint, id string) (bridge.Service, error) {
+		return storage.AuthorizedService(l.dir, l.device.ID, fingerprint, id, time.Now())
+	}
+	ctx, cancel := context.WithCancel(l.parent)
+	loop, err := peer.ListenLoopback(ctx, l.key, trusted, l.receiver, lookup, l.pairs)
+	if err != nil {
+		cancel()
+		return 0
+	}
+	if l.clipboard != nil {
+		loop.EnableClipboard(l.clipboard, func(fingerprint string) bool {
+			allowed, err := storage.HasGrant(l.dir, l.device.ID, storage.Grant{
+				Fingerprint: fingerprint, Capability: permissions.ClipboardShare, Resource: "clipboard",
+			}, time.Now())
+			return err == nil && allowed
+		})
+	}
+	if l.syncMgr != nil {
+		loop.EnableSync(l.syncMgr, func(fingerprint, folderID string) bool {
+			allowed, err := storage.HasGrant(l.dir, l.device.ID, storage.Grant{
+				Fingerprint: fingerprint, Capability: permissions.FolderSync, Resource: folderID,
+			}, time.Now())
+			return err == nil && allowed
+		})
+	}
+	if l.mountReg != nil {
+		loop.EnableMount(l.mountReg, func(fingerprint, mountID string) bool {
+			allowed, err := storage.HasGrant(l.dir, l.device.ID, storage.Grant{
+				Fingerprint: fingerprint, Capability: permissions.MountFolder, Resource: mountID,
+			}, time.Now())
+			return err == nil && allowed
+		})
+	}
+	addr := netip.MustParseAddrPort(loop.Addr().String())
+	l.p2pPort = int(addr.Port())
+	l.p2pCancel = cancel
+	go func() {
+		_ = loop.Serve(ctx)
+		cancel()
+		l.mu.Lock()
+		if l.p2pCancel != nil {
+			l.p2pPort = 0
+			l.p2pCancel = nil
+		}
+		l.mu.Unlock()
+	}()
+	return int(addr.Port())
 }

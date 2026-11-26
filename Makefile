@@ -8,6 +8,9 @@ build: build-core build-desktop
 build-core:
 	mkdir -p bin
 	version=$$(node -p "require('./apps/desktop/package.json').version") && cd core && $(GO) build -ldflags "-X main.buildVersion=$$version" -o ../bin/ ./cmd/...
+	@if [ "$$(uname -s)" = "Darwin" ] && command -v swiftc >/dev/null 2>&1; then \
+		swiftc -O -framework CoreBluetooth -framework Network core/native/darwin/lanvory-nearby.swift -o bin/lanvory-nearby; \
+	fi
 
 build-desktop:
 	$(PNPM) build

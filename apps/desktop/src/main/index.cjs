@@ -1073,6 +1073,42 @@ if (!app.requestSingleInstanceLock()) {
       return requestDaemon('GET', `/v1/mounts/${encodeURIComponent(id)}/events?since=${seq}`)
         .catch((err) => ({ error: err?.message || 'Unable to fetch resource events.' }));
     });
+
+    ipcMain.handle('lanvory:nearby-status', async (event) => {
+      assertTrustedFrame(event);
+      return requestDaemon('GET', '/v1/nearby/status').catch(() => null);
+    });
+
+    ipcMain.handle('lanvory:nearby-advertise', async (event, enabled) => {
+      assertTrustedFrame(event);
+      return requestDaemon('POST', '/v1/nearby/advertise', { enabled: enabled === true })
+        .catch((err) => ({ error: err?.message || 'Unable to update BLE advertising.' }));
+    });
+
+    ipcMain.handle('lanvory:nearby-scan', async (event) => {
+      assertTrustedFrame(event);
+      return requestDaemon('POST', '/v1/nearby/scan', { durationMs: 2200 })
+        .catch((err) => ({ error: err?.message || 'Unable to scan nearby BLE devices.' }));
+    });
+
+    ipcMain.handle('lanvory:nearby-connect', async (event, serviceName) => {
+      assertTrustedFrame(event);
+      if (typeof serviceName !== 'string' || !serviceName.trim()) {
+        return { error: 'Invalid nearby service name.' };
+      }
+      return requestDaemon('POST', '/v1/nearby/connect', { serviceName: serviceName.trim() })
+        .catch((err) => ({ error: err?.message || 'Unable to open Wi-Fi P2P channel.' }));
+    });
+
+    ipcMain.handle('lanvory:nearby-pair', async (event, endpoint, fingerprint) => {
+      assertTrustedFrame(event);
+      if (typeof endpoint !== 'string' || !/^127\.0\.0\.1:[0-9]{1,5}$/.test(endpoint)
+          || typeof fingerprint !== 'string' || !/^[a-fA-F0-9]{64}$/.test(fingerprint)) {
+        return { ok: false, error: 'Invalid P2P endpoint or peer fingerprint.' };
+      }
+      return requestDaemon('POST', '/v1/nearby/pair', { endpoint, fingerprint })
+        .then(() => ({ ok: true }), (err) => ({ ok: false, error: err?.message || 'Unable to pair over Wi-Fi P2P.' }));
+    });
     ipcMain.handle('lanvory:service-snapshot', async (event) => {
       assertTrustedFrame(event);
       const commands = [['services', 'list'], ['tunnels', 'list'], ['permissions', 'list'], ['peer', 'trusted']];

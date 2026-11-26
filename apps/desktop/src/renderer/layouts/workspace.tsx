@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 
 import { NotificationBell } from "../components/notifications";
+import { version as appVersion } from "../../../package.json";
 
 const navigation = [
   ["Devices", Monitor],
@@ -32,6 +33,8 @@ export function Workspace({
   status,
   online,
   lanActive,
+  bleActive = false,
+  bleReady = false,
   pendingFiles,
   action,
   children,
@@ -42,6 +45,8 @@ export function Workspace({
   status: string;
   online: boolean;
   lanActive: boolean;
+  bleActive?: boolean;
+  bleReady?: boolean;
   pendingFiles: number;
   action?: ReactNode;
   children: ReactNode;
@@ -56,7 +61,10 @@ export function Workspace({
       <aside>
         <div className="brand">
           <span className="mark" aria-hidden="true" />
-          <strong>Lanvory</strong>
+          <div className="brand-title-row">
+            <strong>Lanvory</strong>
+            <span className="brand-version" aria-label={`App version ${appVersion}`}>v{appVersion}</span>
+          </div>
           <small>Local Network Platform</small>
         </div>
         <nav aria-label="Workspace">
@@ -84,14 +92,35 @@ export function Workspace({
           ))}
         </nav>
         <div className="status" role="status">
-          <Activity size={20} aria-hidden="true" />
-          <span>
-            <strong>
-              {lanActive ? "Local network on" : "Local network off"}
-            </strong>
-            <small>{status}</small>
-          </span>
-          <i className={online && lanActive ? "live" : ""} />
+          <div className="status-head">
+            <Activity size={17} aria-hidden="true" />
+            <div className="status-title">
+              <strong>
+                {lanActive && bleActive
+                  ? "LAN & BLE active"
+                  : lanActive
+                    ? "Local network on"
+                    : bleActive
+                      ? "BLE + P2P active"
+                      : status || "Standby"}
+              </strong>
+            </div>
+            <i className={online && (lanActive || bleActive) ? "live" : ""} />
+          </div>
+          <div className="status-channels">
+            <div className="status-channel">
+              <span>Local Network</span>
+              <span className={`status-badge ${lanActive ? "is-on" : ""}`}>
+                <em /> {lanActive ? "On" : "Off"}
+              </span>
+            </div>
+            <div className="status-channel">
+              <span>Bluetooth + P2P</span>
+              <span className={`status-badge ${bleActive ? "is-on" : bleReady ? "is-ready" : ""}`}>
+                <em /> {bleActive ? "Visible" : bleReady ? "Ready" : "Off"}
+              </span>
+            </div>
+          </div>
         </div>
       </aside>
       <main className="main-shell">

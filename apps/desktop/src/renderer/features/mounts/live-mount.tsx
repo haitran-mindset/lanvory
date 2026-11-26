@@ -204,7 +204,14 @@ export function LiveMountSection({
   const [selectedPeerByExport, setSelectedPeerByExport] = useState<Record<string, string>>({});
   const [mountPeer, setMountPeer] = useState('');
   const [mountConnReady, setMountConnReady] = useState(false);
+  const [forceLanAddress, setForceLanAddress] = useState(false);
   const [showManualId, setShowManualId] = useState(false);
+
+  const savedRoute = mountPeer ? routes?.[mountPeer] : undefined;
+  const p2pRoute = !forceLanAddress && savedRoute?.adapter === 'p2p' && /^127\.0\.0\.1:[0-9]{1,5}$/.test(savedRoute.endpoint)
+    ? savedRoute
+    : undefined;
+  const effectiveReady = Boolean(mountPeer) && (Boolean(p2pRoute) || mountConnReady);
   const [discovered, setDiscovered] = useState<ResourceDescriptor[]>([]);
   const [lastConn, setLastConn] = useState<{ adapter: string; endpoint: string } | null>(null);
   const [busy, setBusy] = useState(false);
@@ -291,13 +298,20 @@ export function LiveMountSection({
       setMountFeedback({ tone: 'error', text: 'Select a paired device first.' });
       return;
     }
-    const form = new FormData(formEl);
-    const adapter = String(form.get('adapter') ?? '').trim();
-    const endpoint = String(form.get('endpoint') ?? '').trim();
-    const validationErr = await connectionError(adapter, endpoint);
-    if (validationErr) {
-      setMountFeedback({ tone: 'error', text: validationErr });
-      return;
+    let adapter = '';
+    let endpoint = '';
+    if (p2pRoute) {
+      adapter = 'p2p';
+      endpoint = p2pRoute.endpoint;
+    } else {
+      const form = new FormData(formEl);
+      adapter = String(form.get('adapter') ?? '').trim();
+      endpoint = String(form.get('endpoint') ?? '').trim();
+      const validationErr = await connectionError(adapter, endpoint);
+      if (validationErr) {
+        setMountFeedback({ tone: 'error', text: validationErr });
+        return;
+      }
     }
     setBusy(true);
     setMountFeedback(null);
@@ -361,17 +375,24 @@ export function LiveMountSection({
       return;
     }
     const form = new FormData(event.currentTarget);
-    const adapter = String(form.get('adapter') ?? '').trim();
-    const endpoint = String(form.get('endpoint') ?? '').trim();
     const remoteId = String(form.get('remoteId') ?? '').trim();
     if (!/^[a-z0-9][a-z0-9_-]{0,63}$/.test(remoteId)) {
       setMountFeedback({ tone: 'error', text: 'Enter a valid lowercase folder name.' });
       return;
     }
-    const validationErr = await connectionError(adapter, endpoint);
-    if (validationErr) {
-      setMountFeedback({ tone: 'error', text: validationErr });
-      return;
+    let adapter = '';
+    let endpoint = '';
+    if (p2pRoute) {
+      adapter = 'p2p';
+      endpoint = p2pRoute.endpoint;
+    } else {
+      adapter = String(form.get('adapter') ?? '').trim();
+      endpoint = String(form.get('endpoint') ?? '').trim();
+      const validationErr = await connectionError(adapter, endpoint);
+      if (validationErr) {
+        setMountFeedback({ tone: 'error', text: validationErr });
+        return;
+      }
     }
     await openResourceSession(adapter, endpoint, remoteId);
   }
@@ -642,6 +663,7 @@ export function LiveMountSection({
               placeholder={peers.length === 0 ? 'Pair a device first…' : 'Choose a paired device…'}
               onValueChange={(fp) => {
                 setMountPeer(fp);
+                setForceLanAddress(false);
                 setDiscovered([]);
               }}
               options={peers.map((p) => ({ value: p.fingerprint, label: pairedDeviceName(p.fingerprint, names) }))}
@@ -649,7 +671,7 @@ export function LiveMountSection({
             <button
               type="button"
               className="primary"
-              disabled={busy || !mountPeer || !mountConnReady}
+              disabled={busy || !effectiveReady}
               onClick={(e) => {
                 const form = e.currentTarget.closest('form');
                 if (form) void handleDiscover(form);
@@ -660,9 +682,18 @@ export function LiveMountSection({
             </button>
           </div>
 
-          {mountPeer && (
+          {mountPeer && p2pRoute && (
+            <div className="sync-feedback-banner is-success" role="status" style={{ justifyContent: 'space-between' }}>
+              <span>Connected directly via Bluetooth + Wi-Fi P2P ({p2pRoute.endpoint})</span>
+              <button type="button" className="lr-link-btn" onClick={() => setForceLanAddress(true)}>
+                Use LAN address instead
+              </button>
+            </div>
+          )}
+
+          {mountPeer && !p2pRoute && (
             <PeerConnectionFields
-              suggestedEndpoint={routes?.[mountPeer]?.endpoint}
+              suggestedEndpoint={savedRoute?.adapter === 'p2p' ? '' : savedRoute?.endpoint}
               endpointLabel="Device address"
               adapterLabel="Network adapter"
               disabled={busy}
@@ -685,7 +716,7 @@ export function LiveMountSection({
               Folder name
               <div className="sync-path-row">
                 <input name="remoteId" placeholder="e.g. movies" autoComplete="off" disabled={busy} />
-                <button type="submit" className="refresh" disabled={busy || !mountPeer || !mountConnReady}>
+                <button type="submit" className="refresh" disabled={busy || !effectiveReady}>
                   Open
                 </button>
               </div>

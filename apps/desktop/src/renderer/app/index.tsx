@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { Plus } from 'lucide-react';
 import { z } from 'zod';
 import { Services } from '../features/services/services';
 import { Sharing, type PeerRoute } from '../features/sharing/sharing';
@@ -271,6 +270,7 @@ function AppContent({
   const [nearbyCount, setNearbyCount] = useState<number>();
   const [listener, setListener] = useState<z.infer<typeof listenerRow>>();
   const lanActive = listener !== undefined;
+  const [bleState, setBleState] = useState<{ ready: boolean; active: boolean }>({ ready: false, active: false });
   const [pendingFiles, setPendingFiles] = useState(0);
   const [counts, setCounts] = useState<{ trusted?: number; services?: number; transfers?: number }>({});
 
@@ -285,11 +285,25 @@ function AppContent({
       setListener(listenerRow.safeParse(listenerStatus).data);
       const fileActivity = page === 'Sharing'
         ? undefined : window.lanvory.fileSnapshot().catch(() => null);
-      const [pairingList, clipboardInfo] = await Promise.all([
+      const [pairingList, clipboardInfo, nearbyInfo] = await Promise.all([
         window.lanvory.pairingRequests().catch(() => null),
         window.lanvory.clipboardState().catch(() => null),
+        window.lanvory.nearbyStatus().catch(() => null),
       ]);
       if (!active) return;
+
+      const parsedNearby = z.object({
+        status: z.object({
+          bluetoothState: z.string(),
+          advertising: z.boolean(),
+        }),
+      }).safeParse(nearbyInfo);
+      if (parsedNearby.success) {
+        setBleState({
+          ready: parsedNearby.data.status.bluetoothState === 'poweredOn',
+          active: parsedNearby.data.status.advertising,
+        });
+      }
 
       const parsedPairing = pairingRows.safeParse(pairingList);
       if (parsedPairing.success) {
@@ -400,14 +414,11 @@ function AppContent({
 
   return (
     <Workspace page={page} status={status} online={Boolean(identity)} lanActive={Boolean(identity) && lanActive}
+      bleActive={Boolean(identity) && bleState.active}
+      bleReady={Boolean(identity) && bleState.ready}
       onNavigate={navigate}
       onOpenPalette={() => setPaletteOpen(true)}
       pendingFiles={identity ? pendingFiles : 0}
-      action={page === 'Devices' && <div className="page-heading-actions">
-        <button type="button" className="primary" disabled={!identity} onClick={discover}>
-          <Plus size={18} aria-hidden="true" /> Pair Device
-        </button>
-      </div>}
     >
         {page === 'Settings' ? (
           <SettingsPanel ownerId={identity?.id} fingerprint={identity?.fingerprint} reducedMotion={reducedMotion} onReducedMotionChange={changeReducedMotion} density={density} onDensityChange={changeDensity} theme={theme} onThemeChange={changeTheme} textSize={textSize} onTextSizeChange={changeTextSize} name={identity?.name} protocolVersion={identity?.protocolVersion} daemonVersion={identity?.daemonVersion} onRename={async (name) => {
