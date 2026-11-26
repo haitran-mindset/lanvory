@@ -129,6 +129,7 @@ final class NearbyController: NSObject, CBCentralManagerDelegate, CBPeripheralMa
     private var advName = "Lanvory-Mac"
     private var advTag = ""
     private var advTargetPort: UInt16 = 0
+    private var selfServiceName = ""
     private var isScanning = false
 
     override init() {
@@ -173,6 +174,11 @@ final class NearbyController: NSObject, CBCentralManagerDelegate, CBPeripheralMa
                 self.emitStatus()
 
             case "start_scan":
+                if let n = msg.name, !n.isEmpty { self.advName = sanitizeLabel(n, maxLen: 24) }
+                if let t = msg.tag, !t.isEmpty { self.advTag = sanitizeLabel(t, maxLen: 12) }
+                if !self.advName.isEmpty {
+                    self.selfServiceName = self.advTag.isEmpty ? self.advName : "\(self.advName)-\(self.advTag)"
+                }
                 let durationMs = max(1500, min(msg.durationMs ?? 4500, 12000))
                 self.startScan(durationMs: durationMs, requestId: msg.requestId ?? "")
 
@@ -222,10 +228,14 @@ final class NearbyController: NSObject, CBCentralManagerDelegate, CBPeripheralMa
 
     private func applyAdvertising() {
         peripheral.stopAdvertising()
+        p2pListener?.service = nil
         p2pListener?.cancel()
         p2pListener = nil
 
         guard wantAdvertise else { return }
+
+        let currentServiceName = advTag.isEmpty ? advName : "\(advName)-\(advTag)"
+        selfServiceName = currentServiceName
 
         if peripheral.state == .poweredOn {
             let localLabel = advTag.isEmpty ? advName : "\(advName)#\(advTag)"
@@ -239,8 +249,7 @@ final class NearbyController: NSObject, CBCentralManagerDelegate, CBPeripheralMa
             let params = NWParameters.tcp
             params.includePeerToPeer = true
             if let listener = try? NWListener(using: params) {
-                let svcName = advTag.isEmpty ? advName : "\(advName)-\(advTag)"
-                listener.service = NWListener.Service(name: svcName, type: lanvoryP2PServiceType)
+                listener.service = NWListener.Service(name: currentServiceName, type: lanvoryP2PServiceType)
                 let targetPort = advTargetPort
                 listener.newConnectionHandler = { incoming in
                     let localConn = NWConnection(host: "127.0.0.1", port: NWEndpoint.Port(rawValue: targetPort)!, using: .tcp)
@@ -268,11 +277,16 @@ final class NearbyController: NSObject, CBCentralManagerDelegate, CBPeripheralMa
         browseParams.includePeerToPeer = true
         let browser = NWBrowser(for: .bonjour(type: lanvoryP2PServiceType, domain: "local."), using: browseParams)
         browser.browseResultsChangedHandler = { results, _ in
+            var current: [String: String] = [:]
             for r in results {
                 if case .service(let name, _, _, _) = r.endpoint {
-                    self.discoveredP2P[name] = name
+                    if !self.selfServiceName.isEmpty && name == self.selfServiceName {
+                        continue
+                    }
+                    current[name] = name
                 }
             }
+            self.discoveredP2P = current
         }
         browser.start(queue: queue)
         p2pBrowser = browser
@@ -280,6 +294,11 @@ final class NearbyController: NSObject, CBCentralManagerDelegate, CBPeripheralMa
         queue.asyncAfter(deadline: .now() + .milliseconds(durationMs)) {
             self.stopScan()
             var peers: [NearbyPeerRecord] = Array(self.discoveredBLE.values)
+            if !self.discoveredP2P.isEmpty {
+                // Drop anonymous BLE-only records when AWDL already resolved named peers,
+                // since CoreBluetooth omits LocalName when the 128-bit UUID fills the 31-byte packet.
+                peers.removeAll { !$0.p2pReady && $0.name == "Lanvory Device" }
+            }
             for (svcName, _) in self.discoveredP2P {
                 if let idx = peers.firstIndex(where: { $0.serviceName == svcName || svcName.hasPrefix($0.name) }) {
                     peers[idx].p2pReady = true
@@ -329,14 +348,21 @@ final class NearbyController: NSObject, CBCentralManagerDelegate, CBPeripheralMa
     }
 
     func centralManager(_ central: CBCentralManager, didDiscover peripheral: CBPeripheral, advertisementData: [String: Any], rssi RSSI: NSNumber) {
-        let rawName = (advertisementData[CBAdvertisementDataLocalNameKey] as? String) ?? peripheral.name ?? "Lanvory Device"
+        let rawName = (advertisementData[CBAdvertisementDataLocalNameKey] as? String) ?? peripheral.name ?? ""
         let parts = rawName.split(separator: "#", maxSplits: 1).map(String.init)
-        let cleanName = sanitizeLabel(parts[0])
+        let cleanName = parts.isEmpty ? "" : sanitizeLabel(parts[0])
         let cleanTag = parts.count > 1 ? sanitizeLabel(parts[1], maxLen: 12) : ""
-        let svcName = cleanTag.isEmpty ? cleanName : "\(cleanName)-\(cleanTag)"
+        if cleanName.isEmpty, let existing = discoveredBLE[peripheral.identifier.uuidString], existing.name != "Lanvory Device" {
+            return
+        }
+        let displayName = cleanName.isEmpty ? "Lanvory Device" : cleanName
+        let svcName = cleanTag.isEmpty ? displayName : "\(displayName)-\(cleanTag)"
+        if !selfServiceName.isEmpty && svcName == selfServiceName {
+            return
+        }
         discoveredBLE[peripheral.identifier.uuidString] = NearbyPeerRecord(
             id: peripheral.identifier.uuidString,
-            name: cleanName.isEmpty ? "Lanvory Device" : cleanName,
+            name: displayName,
             tag: cleanTag,
             rssi: RSSI.intValue,
             transport: "ble",

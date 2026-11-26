@@ -953,7 +953,7 @@ if (!app.requestSingleInstanceLock()) {
       return false;
     });
 
-    function requestDaemon(method, routePath, payload) {
+    function requestDaemon(method, routePath, payload, timeoutMs = 15000) {
       return new Promise((resolve, reject) => {
         const stateDir = process.env.LANVORY_STATE_DIR || path.join(app.getPath('home'), '.lanvory');
         const body = payload !== undefined ? JSON.stringify(payload) : null;
@@ -961,7 +961,7 @@ if (!app.requestSingleInstanceLock()) {
           socketPath: path.join(stateDir, 'daemon.sock'),
           path: routePath,
           method,
-          timeout: 12000,
+          timeout: timeoutMs,
           headers: body ? { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) } : {},
         }, (res) => {
           const chunks = [];
@@ -1087,7 +1087,7 @@ if (!app.requestSingleInstanceLock()) {
 
     ipcMain.handle('lanvory:nearby-scan', async (event) => {
       assertTrustedFrame(event);
-      return requestDaemon('POST', '/v1/nearby/scan', { durationMs: 2200 })
+      return requestDaemon('POST', '/v1/nearby/scan', { durationMs: 2200 }, 18000)
         .catch((err) => ({ error: err?.message || 'Unable to scan nearby BLE devices.' }));
     });
 
@@ -1096,7 +1096,7 @@ if (!app.requestSingleInstanceLock()) {
       if (typeof serviceName !== 'string' || !serviceName.trim()) {
         return { error: 'Invalid nearby service name.' };
       }
-      return requestDaemon('POST', '/v1/nearby/connect', { serviceName: serviceName.trim() })
+      return requestDaemon('POST', '/v1/nearby/connect', { serviceName: serviceName.trim() }, 18000)
         .catch((err) => ({ error: err?.message || 'Unable to open Wi-Fi P2P channel.' }));
     });
 
@@ -1106,7 +1106,7 @@ if (!app.requestSingleInstanceLock()) {
           || typeof fingerprint !== 'string' || !/^[a-fA-F0-9]{64}$/.test(fingerprint)) {
         return { ok: false, error: 'Invalid P2P endpoint or peer fingerprint.' };
       }
-      return requestDaemon('POST', '/v1/nearby/pair', { endpoint, fingerprint })
+      return requestDaemon('POST', '/v1/nearby/pair', { endpoint, fingerprint }, 68000)
         .then(() => ({ ok: true }), (err) => ({ ok: false, error: err?.message || 'Unable to pair over Wi-Fi P2P.' }));
     });
     ipcMain.handle('lanvory:service-snapshot', async (event) => {

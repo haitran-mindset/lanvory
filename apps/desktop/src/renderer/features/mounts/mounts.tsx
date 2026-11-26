@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { FolderOpen, RefreshCw, Share2 } from 'lucide-react';
 import { z } from 'zod';
 import { readPairedNames } from '../../services/paired-names';
 import type { PeerRoute } from '../sharing/sharing';
@@ -68,45 +67,10 @@ export function MountsPanel({
 
   return (
     <section className="network-panel sync-panel" aria-label="Live Resources">
-      <div className="lr-top-bar">
-        <div className="lr-tabs" role="tablist" aria-label="Live Resources mode">
-          <button
-            type="button"
-            role="tab"
-            aria-selected={tab === 'remote'}
-            className={`lr-tab ${tab === 'remote' ? 'is-active' : ''}`}
-            onClick={() => setTab('remote')}
-          >
-            <FolderOpen size={15} aria-hidden="true" />
-            <span>Remote Folders</span>
-            {mountsList.length > 0 && <span className="lr-tab-count">{mountsList.length}</span>}
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={tab === 'shared'}
-            className={`lr-tab ${tab === 'shared' ? 'is-active' : ''}`}
-            onClick={() => setTab('shared')}
-          >
-            <Share2 size={15} aria-hidden="true" />
-            <span>Shared by This Mac</span>
-            {mountExports.length > 0 && <span className="lr-tab-count">{mountExports.length}</span>}
-          </button>
-        </div>
-
-        <button
-          type="button"
-          className="refresh"
-          disabled={refreshing}
-          onClick={() => void refresh()}
-        >
-          <RefreshCw size={14} aria-hidden="true" />
-          <span>{refreshing ? 'Refreshing…' : 'Refresh'}</span>
-        </button>
-      </div>
-
       <LiveMountSection
         mode={tab}
+        onModeChange={setTab}
+        refreshing={refreshing}
         exportsList={mountExports}
         mountsList={mountsList}
         peers={peers}

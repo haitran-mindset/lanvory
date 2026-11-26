@@ -1,10 +1,9 @@
 import { type FormEvent, useEffect, useState } from 'react';
 import {
   AlertCircle,
-  ArrowLeft,
   Check,
   CheckCircle2,
-  ChevronRight,
+  ChevronLeft,
   ExternalLink,
   Eye,
   File as FileIcon,
@@ -15,11 +14,15 @@ import {
   HardDrive,
   Image as ImageIcon,
   Info,
+  Laptop,
+  Layers,
+  MoreHorizontal,
   Music,
   Pencil,
   Plus,
   RefreshCw,
   Search,
+  Share2,
   Trash2,
   X,
 } from 'lucide-react';
@@ -178,6 +181,8 @@ function friendlyEventText(ev: ResourceEvent) {
 
 export function LiveMountSection({
   mode,
+  onModeChange,
+  refreshing = false,
   exportsList,
   mountsList,
   peers,
@@ -188,6 +193,8 @@ export function LiveMountSection({
   onRefresh,
 }: {
   mode: 'remote' | 'shared';
+  onModeChange?(mode: 'remote' | 'shared'): void;
+  refreshing?: boolean;
   exportsList: MountExport[];
   mountsList: MountRecord[];
   peers: Array<{ fingerprint: string }>;
@@ -232,8 +239,16 @@ export function LiveMountSection({
   const [renamingPath, setRenamingPath] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const [confirmDeletePath, setConfirmDeletePath] = useState<string | null>(null);
+  const [openRowMenuPath, setOpenRowMenuPath] = useState<string | null>(null);
+  const [showHeaderMenu, setShowHeaderMenu] = useState(false);
 
   const activeSession = mountsList.find((m) => m.id === activeSessionId) ?? mountsList[0] ?? null;
+
+  useEffect(() => {
+    if (!mountPeer && peers.length > 0) {
+      setMountPeer(peers[0].fingerprint);
+    }
+  }, [mountPeer, peers]);
 
   useEffect(() => {
     if (activeSession && activeSession.id !== activeSessionId) {
@@ -329,10 +344,23 @@ export function LiveMountSection({
             : `${pairedDeviceName(mountPeer, names)} hasn’t shared any folders with you yet.`,
         });
       } else {
-        const errText = raw && typeof raw === 'object' && 'error' in raw && typeof raw.error === 'string'
+        const rawErr = raw && typeof raw === 'object' && 'error' in raw && typeof raw.error === 'string'
           ? raw.error
           : 'Could not reach the paired device.';
-        setMountFeedback({ tone: 'error', text: errText });
+        if (/Unknown Wi-Fi P2P bridge endpoint/i.test(rawErr)) {
+          setForceLanAddress(true);
+          setMountFeedback({
+            tone: 'info',
+            text: 'The previous Bluetooth + Wi-Fi P2P session expired. Enter a LAN address below or reconnect under Devices → Bluetooth + P2P.',
+          });
+        } else if (/canceled by remote with error code 1/i.test(rawErr)) {
+          setMountFeedback({
+            tone: 'error',
+            text: 'The remote device rejected this connection. Check that this device is trusted on the remote machine and its Local Network adapter is approved.',
+          });
+        } else {
+          setMountFeedback({ tone: 'error', text: rawErr });
+        }
       }
     } finally {
       setBusy(false);
@@ -358,10 +386,23 @@ export function LiveMountSection({
           body: 'Files are ready to browse and stream on demand.',
         });
       } else {
-        const errText = raw && typeof raw === 'object' && 'error' in raw && typeof raw.error === 'string'
+        const rawErr = raw && typeof raw === 'object' && 'error' in raw && typeof raw.error === 'string'
           ? raw.error
           : 'Unable to open remote folder.';
-        setMountFeedback({ tone: 'error', text: errText });
+        if (/Unknown Wi-Fi P2P bridge endpoint/i.test(rawErr)) {
+          setForceLanAddress(true);
+          setMountFeedback({
+            tone: 'info',
+            text: 'The previous Bluetooth + Wi-Fi P2P session expired. Enter a LAN address below or reconnect under Devices → Bluetooth + P2P.',
+          });
+        } else if (/canceled by remote with error code 1/i.test(rawErr)) {
+          setMountFeedback({
+            tone: 'error',
+            text: 'The remote device rejected this connection. Check that this device is trusted on the remote machine and its Local Network adapter is approved.',
+          });
+        } else {
+          setMountFeedback({ tone: 'error', text: rawErr });
+        }
       }
     } finally {
       setBusy(false);
@@ -459,7 +500,33 @@ export function LiveMountSection({
 
   if (mode === 'shared') {
     return (
-      <div className="operation-grid">
+      <div className="lr-shell">
+        <header className="lr-shell-header">
+          <div className="lr-shell-title">
+            <Layers size={18} aria-hidden="true" />
+            <h2>Live Resources</h2>
+          </div>
+          <div className="lr-shell-actions">
+            <button
+              type="button"
+              className="lr-pill-btn"
+              onClick={() => onModeChange?.('remote')}
+            >
+              <ChevronLeft size={14} aria-hidden="true" />
+              <span>Browse remote</span>
+            </button>
+            <button
+              type="button"
+              className="lr-icon-btn"
+              title="Refresh"
+              disabled={refreshing}
+              onClick={() => void onRefresh()}
+            >
+              <RefreshCw size={15} className={refreshing ? 'spin' : undefined} aria-hidden="true" />
+            </button>
+          </div>
+        </header>
+        <div className="operation-grid" style={{ padding: 18 }}>
         <section className="operation-card operation-highlight">
           <PanelHeading
             icon={Plus}
@@ -642,332 +709,430 @@ export function LiveMountSection({
           )}
         </section>
       </div>
+      </div>
     );
   }
 
+  const activePeerName = mountPeer
+    ? pairedDeviceName(mountPeer, names)
+    : activeSession
+      ? (activeSession.peerName || pairedDeviceName(activeSession.fingerprint, names))
+      : 'No device';
+
+  const sidebarResources = (() => {
+    const items: Array<{ id: string; readOnly?: boolean; fileCount?: number; totalBytes?: number; session?: MountRecord }> = [];
+    for (const res of discovered) {
+      const existing = mountsList.find((m) => m.remoteId === res.id && (!mountPeer || m.fingerprint === mountPeer));
+      items.push({ id: res.id, readOnly: res.readOnly, fileCount: res.fileCount, totalBytes: res.totalBytes, session: existing });
+    }
+    for (const m of mountsList) {
+      if (mountPeer && m.fingerprint !== mountPeer) continue;
+      if (!items.some((item) => item.id === m.remoteId)) {
+        items.push({ id: m.remoteId, session: m });
+      }
+    }
+    return items;
+  })();
+
+  const peerConnected = Boolean(
+    p2pRoute ||
+    lastConn ||
+    mountsList.some((m) => m.fingerprint === mountPeer && m.state !== 'revoked'),
+  );
+
   return (
-    <div className="lr-panel">
-      <section className="operation-card operation-highlight">
-        <PanelHeading
-          icon={HardDrive}
-          title="Access remote folders"
-          description="Select a paired device to browse folders and stream videos or documents on demand."
-        />
+    <div className="lr-shell">
+      <header className="lr-shell-header">
+        <div className="lr-shell-title">
+          <Layers size={18} aria-hidden="true" />
+          <h2>Live Resources</h2>
+        </div>
 
-        <form className="trust-form" onSubmit={handleManualOpen}>
-          <div className="lr-connect-row">
-            <SelectField
-              label="Paired device"
-              value={mountPeer}
-              disabled={busy}
-              placeholder={peers.length === 0 ? 'Pair a device first…' : 'Choose a paired device…'}
-              onValueChange={(fp) => {
-                setMountPeer(fp);
-                setForceLanAddress(false);
-                setDiscovered([]);
-              }}
-              options={peers.map((p) => ({ value: p.fingerprint, label: pairedDeviceName(p.fingerprint, names) }))}
-            />
+        <div className="lr-shell-actions">
+          <button
+            type="button"
+            className="lr-pill-btn"
+            onClick={() => onModeChange?.('shared')}
+          >
+            <Share2 size={14} aria-hidden="true" />
+            <span>Share folders</span>
+            {exportsList.length > 0 && <span className="lr-pill-count">{exportsList.length}</span>}
+          </button>
+          <button
+            type="button"
+            className="lr-icon-btn"
+            title="Refresh"
+            disabled={refreshing || busy}
+            onClick={() => {
+              void onRefresh();
+              if (activeSession) {
+                void loadDirectory(activeSession.id, currentPath);
+                void refreshEvents(activeSession.id, eventSeq);
+              }
+            }}
+          >
+            <RefreshCw size={15} className={refreshing ? 'spin' : undefined} aria-hidden="true" />
+          </button>
+          <div className="lr-menu-anchor">
             <button
               type="button"
-              className="primary"
-              disabled={busy || !effectiveReady}
-              onClick={(e) => {
-                const form = e.currentTarget.closest('form');
-                if (form) void handleDiscover(form);
-              }}
+              className="lr-icon-btn"
+              title="More options"
+              onClick={() => setShowHeaderMenu((v) => !v)}
             >
-              <Search size={14} aria-hidden="true" />
-              <span>Find shared folders</span>
+              <MoreHorizontal size={15} aria-hidden="true" />
             </button>
-          </div>
-
-          {mountPeer && p2pRoute && (
-            <div className="sync-feedback-banner is-success" role="status" style={{ justifyContent: 'space-between' }}>
-              <span>Connected directly via Bluetooth + Wi-Fi P2P ({p2pRoute.endpoint})</span>
-              <button type="button" className="lr-link-btn" onClick={() => setForceLanAddress(true)}>
-                Use LAN address instead
-              </button>
-            </div>
-          )}
-
-          {mountPeer && !p2pRoute && (
-            <PeerConnectionFields
-              suggestedEndpoint={savedRoute?.adapter === 'p2p' ? '' : savedRoute?.endpoint}
-              endpointLabel="Device address"
-              adapterLabel="Network adapter"
-              disabled={busy}
-              onReady={setMountConnReady}
-            />
-          )}
-
-          <div className="lr-sub-actions">
-            <button
-              type="button"
-              className="lr-link-btn"
-              onClick={() => setShowManualId((v) => !v)}
-            >
-              {showManualId ? 'Hide manual folder name' : 'Or enter a folder name manually'}
-            </button>
-          </div>
-
-          {showManualId && (
-            <label>
-              Folder name
-              <div className="sync-path-row">
-                <input name="remoteId" placeholder="e.g. movies" autoComplete="off" disabled={busy} />
-                <button type="submit" className="refresh" disabled={busy || !effectiveReady}>
-                  Open
+            {showHeaderMenu && (
+              <div className="lr-popover" role="menu">
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setShowManualId((v) => !v);
+                    setShowHeaderMenu(false);
+                  }}
+                >
+                  <Plus size={14} aria-hidden="true" />
+                  <span>{showManualId ? 'Hide manual folder input' : 'Open folder by name'}</span>
                 </button>
+                {p2pRoute && (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setForceLanAddress(true);
+                      setShowHeaderMenu(false);
+                    }}
+                  >
+                    <HardDrive size={14} aria-hidden="true" />
+                    <span>Use LAN address instead</span>
+                  </button>
+                )}
+                {activeSession && (
+                  <>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setCreatingDir(true);
+                        setNewDirName('');
+                        setShowHeaderMenu(false);
+                      }}
+                    >
+                      <FolderPlus size={14} aria-hidden="true" />
+                      <span>New folder</span>
+                    </button>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setShowHeaderMenu(false);
+                        if (activeSession.mounted && activeSession.mountPoint) {
+                          void window.lanvory.openMountInFinder(activeSession.mountPoint);
+                          return;
+                        }
+                        setBusy(true);
+                        void window.lanvory
+                          .attachNativeMount(activeSession.id)
+                          .then(async (res) => {
+                            await onRefresh();
+                            const parsed = mountRecordSchema.safeParse(res);
+                            if (parsed.success && parsed.data.mounted && parsed.data.mountPoint) {
+                              void window.lanvory.openMountInFinder(parsed.data.mountPoint);
+                            } else if (parsed.success && parsed.data.mountError) {
+                              setExplorerError('Finder integration is not available on this Mac — continue using the built-in browser.');
+                            }
+                          })
+                          .finally(() => setBusy(false));
+                      }}
+                    >
+                      <ExternalLink size={14} aria-hidden="true" />
+                      <span>{activeSession.mounted ? 'Show in Finder' : 'Open in Finder'}</span>
+                    </button>
+                  </>
+                )}
               </div>
-            </label>
-          )}
-          <MountBanner feedback={mountFeedback} />
-        </form>
+            )}
+          </div>
+        </div>
+      </header>
 
-        {(discovered.length > 0 || mountsList.length > 0) && (
-          <div className="lr-shelf">
-            {discovered.map((res) => {
-              const existing = mountsList.find((m) => m.remoteId === res.id && (!mountPeer || m.fingerprint === mountPeer));
-              const isOpen = Boolean(existing && activeSession?.id === existing.id);
-              return (
-                <div key={res.id} className={`lr-shelf-item ${isOpen ? 'is-active' : ''}`}>
-                  <div className="lr-shelf-info">
-                    <span className="lr-folder-badge"><Folder size={17} aria-hidden="true" /></span>
-                    <div style={{ minWidth: 0 }}>
-                      <div className="lr-resource-name">{res.id}</div>
-                      <div className="lr-resource-meta">
-                        {res.readOnly ? 'View only' : 'Editable'} · {res.fileCount} files · {formatBytes(res.totalBytes)}
-                      </div>
-                    </div>
-                  </div>
-                  <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-                    {existing ? (
-                      <>
+      <div className="lr-shell-body">
+        <aside className="lr-sidebar" aria-label="Devices and Resources">
+          <div className="lr-sidebar-group">
+            <div className="lr-sidebar-label">DEVICES</div>
+            {peers.length === 0 ? (
+              <p className="lr-sidebar-empty">Pair a device first</p>
+            ) : (
+              <ul className="lr-sidebar-list">
+                {peers.map((p) => {
+                  const selected = mountPeer === p.fingerprint;
+                  const pRoute = routes?.[p.fingerprint];
+                  const isLive = selected ? peerConnected : Boolean(pRoute || mountsList.some((m) => m.fingerprint === p.fingerprint));
+                  return (
+                    <li key={p.fingerprint}>
+                      <button
+                        type="button"
+                        className={`lr-device-item ${selected ? 'is-active' : ''}`}
+                        onClick={() => {
+                          setMountPeer(p.fingerprint);
+                          setForceLanAddress(false);
+                          setDiscovered([]);
+                          setMountFeedback(null);
+                        }}
+                      >
+                        <div className="lr-device-row">
+                          <Laptop size={15} aria-hidden="true" />
+                          <span>{pairedDeviceName(p.fingerprint, names)}</span>
+                        </div>
+                        {selected && (
+                          <span className={`lr-device-status ${isLive ? 'is-online' : ''}`}>
+                            <span className="lr-status-dot" aria-hidden="true" />
+                            {isLive ? 'Connected' : 'Ready to connect'}
+                          </span>
+                        )}
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
+
+          <div className="lr-sidebar-divider" />
+
+          <div className="lr-sidebar-group">
+            <div className="lr-sidebar-label">RESOURCES</div>
+            {sidebarResources.length === 0 ? (
+              <p className="lr-sidebar-empty">No folders loaded</p>
+            ) : (
+              <ul className="lr-sidebar-list">
+                {sidebarResources.map((item) => {
+                  const isOpen = Boolean(item.session && activeSession?.id === item.session.id);
+                  return (
+                    <li key={item.id} className="lr-resource-li">
+                      <button
+                        type="button"
+                        className={`lr-resource-item ${isOpen ? 'is-active' : ''}`}
+                        disabled={busy}
+                        onClick={() => {
+                          if (item.session) {
+                            setActiveSessionId(item.session.id);
+                            void loadDirectory(item.session.id, '/');
+                          } else if (lastConn) {
+                            void openResourceSession(lastConn.adapter, lastConn.endpoint, item.id);
+                          } else if (p2pRoute) {
+                            void openResourceSession('p2p', p2pRoute.endpoint, item.id);
+                          }
+                        }}
+                      >
+                        <Folder size={15} className="lr-folder-glyph" aria-hidden="true" />
+                        <span>{item.id}</span>
+                      </button>
+                      {item.session && (
                         <button
                           type="button"
-                          className={isOpen ? 'primary' : 'refresh'}
-                          onClick={() => {
-                            setActiveSessionId(existing.id);
-                            void loadDirectory(existing.id, '/');
-                          }}
-                        >
-                          {isOpen ? 'Open' : 'Browse'}
-                        </button>
-                        <button
-                          type="button"
-                          className="lr-icon-btn"
+                          className="lr-resource-close"
                           title="Disconnect"
                           disabled={busy}
                           onClick={() => {
                             setBusy(true);
-                            void window.lanvory.closeMount(existing.id).then(() => onRefresh()).finally(() => setBusy(false));
+                            void window.lanvory.closeMount(item.session!.id).then(() => onRefresh()).finally(() => setBusy(false));
                           }}
                         >
-                          <X size={14} aria-hidden="true" />
+                          <X size={13} aria-hidden="true" />
                         </button>
-                      </>
-                    ) : (
-                      lastConn && (
-                        <button
-                          type="button"
-                          className="primary"
-                          disabled={busy}
-                          onClick={() => void openResourceSession(lastConn.adapter, lastConn.endpoint, res.id)}
-                        >
-                          Open
-                        </button>
-                      )
-                    )}
-                  </div>
-                </div>
-              );
-            })}
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
 
-            {mountsList
-              .filter((m) => !discovered.some((d) => d.id === m.remoteId))
-              .map((m) => {
-                const isOpen = activeSession?.id === m.id;
-                return (
-                  <div key={m.id} className={`lr-shelf-item ${isOpen ? 'is-active' : ''}`}>
-                    <div className="lr-shelf-info">
-                      <span className="lr-folder-badge"><Folder size={17} aria-hidden="true" /></span>
-                      <div style={{ minWidth: 0 }}>
-                        <div className="lr-resource-name">{m.remoteId}</div>
-                        <div className="lr-resource-meta">
-                          {m.state === 'revoked' ? 'Access revoked' : 'Connected'}{m.mounted ? ' · In Finder' : ''}
-                        </div>
-                      </div>
-                    </div>
-                    <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-                      <button
-                        type="button"
-                        className={isOpen ? 'primary' : 'refresh'}
-                        onClick={() => {
-                          setActiveSessionId(m.id);
-                          void loadDirectory(m.id, '/');
-                        }}
-                      >
-                        {isOpen ? 'Open' : 'Browse'}
-                      </button>
-                      <button
-                        type="button"
-                        className="lr-icon-btn"
-                        title="Disconnect"
-                        disabled={busy}
-                        onClick={() => {
-                          setBusy(true);
-                          void window.lanvory.closeMount(m.id).then(() => onRefresh()).finally(() => setBusy(false));
-                        }}
-                      >
-                        <X size={14} aria-hidden="true" />
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
+            <button
+              type="button"
+              className="lr-sidebar-action"
+              onClick={() => setShowManualId((v) => !v)}
+            >
+              <Plus size={13} aria-hidden="true" />
+              <span>Open by name</span>
+            </button>
           </div>
-        )}
-      </section>
+        </aside>
 
-      {activeSession && (
-        <section className="lr-explorer" aria-label="Folder Explorer">
-          <div className="lr-explorer-toolbar">
-            <div className="lr-breadcrumbs">
-              {currentPath !== '/' && (
+        <div className="lr-main">
+          {(!activeSession || showManualId || (!p2pRoute && sidebarResources.length === 0)) && (
+            <form className="lr-connect-inline trust-form" onSubmit={handleManualOpen}>
+              {mountPeer && !p2pRoute && (
+                <PeerConnectionFields
+                  suggestedEndpoint={savedRoute?.adapter === 'p2p' ? '' : savedRoute?.endpoint}
+                  endpointLabel="Device address"
+                  adapterLabel="Network adapter"
+                  disabled={busy}
+                  onReady={setMountConnReady}
+                />
+              )}
+              <div className="lr-connect-actions">
                 <button
                   type="button"
-                  className="lr-icon-btn"
-                  title="Up one folder"
-                  onClick={() => void loadDirectory(activeSession.id, parentPath)}
+                  className="primary"
+                  disabled={busy || !effectiveReady}
+                  onClick={(e) => {
+                    const form = e.currentTarget.closest('form');
+                    if (form) void handleDiscover(form);
+                  }}
                 >
-                  <ArrowLeft size={15} aria-hidden="true" />
+                  <Search size={14} aria-hidden="true" />
+                  <span>Find shared folders</span>
                 </button>
-              )}
-              {breadcrumbs.map((seg, idx) => {
-                const target = idx === 0 ? '/' : '/' + breadcrumbs.slice(1, idx + 1).join('/');
-                const isLast = idx === breadcrumbs.length - 1;
-                return (
-                  <span key={target} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                    {idx > 0 && <ChevronRight size={13} className="lr-crumb-sep" aria-hidden="true" />}
-                    <button
-                      type="button"
-                      className={`lr-crumb ${isLast ? 'is-current' : ''}`}
-                      onClick={() => void loadDirectory(activeSession.id, target)}
-                    >
-                      {seg === '/' ? activeSession.remoteId : seg}
+                {p2pRoute && (
+                  <>
+                    <span className="lr-p2p-chip">Bluetooth + Wi-Fi P2P ({p2pRoute.endpoint})</span>
+                    <button type="button" className="lr-link-btn" onClick={() => setForceLanAddress(true)}>
+                      Use LAN instead
                     </button>
-                  </span>
-                );
-              })}
-            </div>
-
-            <div className="lr-toolbar-actions">
-              <button
-                type="button"
-                className="refresh"
-                onClick={() => {
-                  setCreatingDir((v) => !v);
-                  setNewDirName('');
-                }}
-              >
-                <FolderPlus size={14} aria-hidden="true" />
-                <span>New folder</span>
-              </button>
-              <button
-                type="button"
-                className="refresh"
-                onClick={() => {
-                  void loadDirectory(activeSession.id, currentPath);
-                  void refreshEvents(activeSession.id, eventSeq);
-                }}
-              >
-                <RefreshCw size={14} aria-hidden="true" />
-                <span>Refresh</span>
-              </button>
-              <button
-                type="button"
-                className="refresh"
-                title="Optional: open this folder in macOS Finder"
-                onClick={() => {
-                  if (activeSession.mounted && activeSession.mountPoint) {
-                    void window.lanvory.openMountInFinder(activeSession.mountPoint);
-                    return;
-                  }
-                  setBusy(true);
-                  void window.lanvory
-                    .attachNativeMount(activeSession.id)
-                    .then(async (res) => {
-                      await onRefresh();
-                      const parsed = mountRecordSchema.safeParse(res);
-                      if (parsed.success && parsed.data.mounted && parsed.data.mountPoint) {
-                        void window.lanvory.openMountInFinder(parsed.data.mountPoint);
-                      } else if (parsed.success && parsed.data.mountError) {
-                        setExplorerError('Finder integration is not available on this Mac — continue using the built-in browser.');
-                      }
-                    })
-                    .finally(() => setBusy(false));
-                }}
-              >
-                <ExternalLink size={14} aria-hidden="true" />
-                <span>{activeSession.mounted ? 'Show in Finder' : 'Open in Finder'}</span>
-              </button>
-            </div>
-          </div>
-
-          {creatingDir && (
-            <form
-              className="lr-inline-form"
-              onSubmit={(e) => {
-                e.preventDefault();
-                const clean = newDirName.trim();
-                if (!clean) return;
-                const next = currentPath === '/' ? `/${clean}` : `${currentPath}/${clean}`;
-                void window.lanvory.createResourceDir(activeSession.id, next).then((res) => {
-                  if (!res.ok && res.error) setExplorerError(res.error);
-                  setCreatingDir(false);
-                  setNewDirName('');
-                  void loadDirectory(activeSession.id, currentPath);
-                });
-              }}
-            >
-              <FolderPlus size={15} aria-hidden="true" />
-              <input
-                autoFocus
-                value={newDirName}
-                onChange={(e) => setNewDirName(e.target.value)}
-                placeholder="New folder name…"
-              />
-              <button type="submit" className="primary">Create</button>
-              <button type="button" className="refresh" onClick={() => setCreatingDir(false)}>Cancel</button>
+                  </>
+                )}
+              </div>
+              {showManualId && (
+                <div className="sync-path-row" style={{ marginTop: 10 }}>
+                  <input name="remoteId" placeholder="Folder name (e.g. test, movies)" autoComplete="off" disabled={busy} />
+                  <button type="submit" className="refresh" disabled={busy || !effectiveReady}>
+                    Open
+                  </button>
+                </div>
+              )}
+              <MountBanner feedback={mountFeedback} />
             </form>
           )}
 
-          {explorerError && (
-            <div style={{ padding: '10px 16px 0' }}>
-              <MountBanner feedback={{ tone: 'error', text: explorerError }} />
-            </div>
-          )}
+          {activeSession ? (
+            <>
+              <div className="lr-main-bar">
+                <div className="lr-breadcrumbs">
+                  {currentPath !== '/' && (
+                    <button
+                      type="button"
+                      className="lr-icon-btn"
+                      title="Back"
+                      onClick={() => void loadDirectory(activeSession.id, parentPath)}
+                    >
+                      <ChevronLeft size={16} aria-hidden="true" />
+                    </button>
+                  )}
+                  <span className="lr-crumb-root">{activePeerName}</span>
+                  <span className="lr-crumb-sep">/</span>
+                  {breadcrumbs.map((seg, idx) => {
+                    const target = idx === 0 ? '/' : '/' + breadcrumbs.slice(1, idx + 1).join('/');
+                    const isLast = idx === breadcrumbs.length - 1;
+                    return (
+                      <span key={target} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                        {idx > 0 && <span className="lr-crumb-sep">/</span>}
+                        <button
+                          type="button"
+                          className={`lr-crumb ${isLast ? 'is-current' : ''}`}
+                          onClick={() => void loadDirectory(activeSession.id, target)}
+                        >
+                          {seg === '/' ? activeSession.remoteId : seg}
+                        </button>
+                      </span>
+                    );
+                  })}
+                </div>
 
-          <div className="lr-explorer-split">
-            <div className="lr-file-pane">
+                <div className="lr-toolbar-actions">
+                  <button
+                    type="button"
+                    className="lr-icon-btn"
+                    title="New folder"
+                    onClick={() => {
+                      setCreatingDir((v) => !v);
+                      setNewDirName('');
+                    }}
+                  >
+                    <FolderPlus size={15} aria-hidden="true" />
+                  </button>
+                  <button
+                    type="button"
+                    className="lr-icon-btn"
+                    title={activeSession.mounted ? 'Show in Finder' : 'Open in Finder'}
+                    onClick={() => {
+                      if (activeSession.mounted && activeSession.mountPoint) {
+                        void window.lanvory.openMountInFinder(activeSession.mountPoint);
+                        return;
+                      }
+                      setBusy(true);
+                      void window.lanvory
+                        .attachNativeMount(activeSession.id)
+                        .then(async (res) => {
+                          await onRefresh();
+                          const parsed = mountRecordSchema.safeParse(res);
+                          if (parsed.success && parsed.data.mounted && parsed.data.mountPoint) {
+                            void window.lanvory.openMountInFinder(parsed.data.mountPoint);
+                          } else if (parsed.success && parsed.data.mountError) {
+                            setExplorerError('Finder integration is not available on this Mac — continue using the built-in browser.');
+                          }
+                        })
+                        .finally(() => setBusy(false));
+                    }}
+                  >
+                    <ExternalLink size={15} aria-hidden="true" />
+                  </button>
+                </div>
+              </div>
+
+              {creatingDir && (
+                <form
+                  className="lr-inline-form"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    const clean = newDirName.trim();
+                    if (!clean) return;
+                    const next = currentPath === '/' ? `/${clean}` : `${currentPath}/${clean}`;
+                    void window.lanvory.createResourceDir(activeSession.id, next).then((res) => {
+                      if (!res.ok && res.error) setExplorerError(res.error);
+                      setCreatingDir(false);
+                      setNewDirName('');
+                      void loadDirectory(activeSession.id, currentPath);
+                    });
+                  }}
+                >
+                  <FolderPlus size={15} aria-hidden="true" />
+                  <input
+                    autoFocus
+                    value={newDirName}
+                    onChange={(e) => setNewDirName(e.target.value)}
+                    placeholder="New folder name…"
+                  />
+                  <button type="button" className="refresh" onClick={() => setCreatingDir(false)}>Cancel</button>
+                  <button type="submit" className="primary">Create</button>
+                </form>
+              )}
+
+              {explorerError && (
+                <div style={{ padding: '10px 0 0' }}>
+                  <MountBanner feedback={{ tone: 'error', text: explorerError }} />
+                </div>
+              )}
+
               {entries.length === 0 ? (
-                <div className="lr-preview-empty">
-                  <Folder size={24} aria-hidden="true" />
+                <div className="lr-empty-state">
+                  <Folder size={26} aria-hidden="true" />
                   <span>This folder is empty.</span>
                 </div>
               ) : (
-                <ul className="lr-file-list">
+                <ul className="lr-list">
                   {entries.map((entry) => {
                     const isSelected = previewEntry?.path === entry.path;
                     const isRenaming = renamingPath === entry.path;
                     const isConfirmDelete = confirmDeletePath === entry.path;
+                    const menuOpen = openRowMenuPath === entry.path;
                     return (
-                      <li key={entry.path} className={`lr-file-row ${isSelected ? 'is-selected' : ''}`}>
+                      <li key={entry.path} className={`lr-row ${isSelected ? 'is-selected' : ''}`}>
                         {isRenaming ? (
                           <form
                             className="lr-inline-form"
-                            style={{ flex: 1, padding: '4px 6px', borderRadius: 8 }}
+                            style={{ flex: 1, margin: 0, padding: '6px 8px' }}
                             onSubmit={(e) => {
                               e.preventDefault();
                               const nextName = renameValue.trim();
@@ -996,8 +1161,9 @@ export function LiveMountSection({
                           <>
                             <button
                               type="button"
-                              className="lr-file-main"
+                              className="lr-row-main"
                               onClick={() => {
+                                setOpenRowMenuPath(null);
                                 if (entry.isDir) {
                                   void loadDirectory(activeSession.id, entry.path);
                                 } else {
@@ -1005,15 +1171,18 @@ export function LiveMountSection({
                                 }
                               }}
                             >
-                              <span className={`lr-file-icon ${entry.isDir ? 'is-dir' : ''}`}>
+                              <span className={`lr-row-icon ${entry.isDir ? 'is-dir' : ''}`}>
                                 <EntryIcon entry={entry} />
                               </span>
-                              <span className="lr-file-name" title={entry.name}>{entry.name}</span>
-                              {!entry.isDir && <span className="lr-file-size">{formatBytes(entry.size)}</span>}
+                              <span className="lr-row-text">
+                                <span className="lr-row-name" title={entry.name}>{entry.name}</span>
+                                <span className="lr-row-meta">{entry.isDir ? 'Folder' : formatBytes(entry.size)}</span>
+                              </span>
                             </button>
-                            <div className="lr-row-actions">
+
+                            <div className="lr-row-end">
                               {isConfirmDelete ? (
-                                <>
+                                <div className="lr-row-confirm">
                                   <button
                                     type="button"
                                     className="refresh"
@@ -1028,35 +1197,49 @@ export function LiveMountSection({
                                     Delete
                                   </button>
                                   <button type="button" className="lr-icon-btn" onClick={() => setConfirmDeletePath(null)}>
-                                    <X size={13} />
+                                    <X size={14} />
                                   </button>
-                                </>
+                                </div>
                               ) : (
-                                <>
+                                <div className="lr-menu-anchor">
                                   <button
                                     type="button"
                                     className="lr-icon-btn"
-                                    title="Rename"
-                                    onClick={() => {
-                                      setRenamingPath(entry.path);
-                                      setRenameValue(entry.name);
-                                      setConfirmDeletePath(null);
-                                    }}
+                                    title="Actions"
+                                    onClick={() => setOpenRowMenuPath((prev) => (prev === entry.path ? null : entry.path))}
                                   >
-                                    <Pencil size={13} aria-hidden="true" />
+                                    <MoreHorizontal size={16} aria-hidden="true" />
                                   </button>
-                                  <button
-                                    type="button"
-                                    className="lr-icon-btn"
-                                    title="Delete"
-                                    onClick={() => {
-                                      setConfirmDeletePath(entry.path);
-                                      setRenamingPath(null);
-                                    }}
-                                  >
-                                    <Trash2 size={13} aria-hidden="true" />
-                                  </button>
-                                </>
+                                  {menuOpen && (
+                                    <div className="lr-popover" role="menu">
+                                      <button
+                                        type="button"
+                                        role="menuitem"
+                                        onClick={() => {
+                                          setRenamingPath(entry.path);
+                                          setRenameValue(entry.name);
+                                          setConfirmDeletePath(null);
+                                          setOpenRowMenuPath(null);
+                                        }}
+                                      >
+                                        <Pencil size={13} aria-hidden="true" />
+                                        <span>Rename</span>
+                                      </button>
+                                      <button
+                                        type="button"
+                                        role="menuitem"
+                                        onClick={() => {
+                                          setConfirmDeletePath(entry.path);
+                                          setRenamingPath(null);
+                                          setOpenRowMenuPath(null);
+                                        }}
+                                      >
+                                        <Trash2 size={13} aria-hidden="true" />
+                                        <span>Delete</span>
+                                      </button>
+                                    </div>
+                                  )}
+                                </div>
                               )}
                             </div>
                           </>
@@ -1066,14 +1249,17 @@ export function LiveMountSection({
                   })}
                 </ul>
               )}
-            </div>
 
-            <div className="lr-preview-pane">
-              {previewEntry ? (
-                <>
+              {previewEntry && (
+                <div className="lr-preview-drawer">
                   <div className="lr-preview-head">
                     <h4 title={previewEntry.name}>{previewEntry.name}</h4>
-                    <span className="pill-badge">{formatBytes(previewEntry.size)}</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span className="pill-badge">{formatBytes(previewEntry.size)}</span>
+                      <button type="button" className="lr-icon-btn" title="Close preview" onClick={() => setPreviewEntry(null)}>
+                        <X size={15} aria-hidden="true" />
+                      </button>
+                    </div>
                   </div>
                   {isVideo(previewEntry.name) && (
                     <video
@@ -1120,24 +1306,24 @@ export function LiveMountSection({
                       )}
                     </>
                   )}
-                </>
-              ) : (
-                <div className="lr-preview-empty">
-                  <FileText size={26} aria-hidden="true" />
-                  <span>Select any file on the left to preview or stream it instantly.</span>
                 </div>
               )}
-            </div>
-          </div>
 
-          {eventsFeed.length > 0 && (
-            <div className="lr-activity-strip">
-              <span>Latest update: {friendlyEventText(eventsFeed[0])}</span>
-              <span>{eventsFeed.length} recent change(s)</span>
+              {eventsFeed.length > 0 && (
+                <div className="lr-activity-strip">
+                  <span>Latest update: {friendlyEventText(eventsFeed[0])}</span>
+                  <span>{eventsFeed.length} recent change(s)</span>
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="lr-empty-state">
+              <Layers size={28} aria-hidden="true" />
+              <span>Select a device and resource on the left, or click Find shared folders.</span>
             </div>
           )}
-        </section>
-      )}
+        </div>
+      </div>
     </div>
   );
 }

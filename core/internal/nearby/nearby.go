@@ -268,6 +268,8 @@ func (m *Manager) Scan(ctx context.Context, duration time.Duration) (ScanResult,
 		"cmd":        "start_scan",
 		"requestId":  reqID,
 		"durationMs": int(duration.Milliseconds()),
+		"name":       m.deviceName,
+		"tag":        m.deviceTag,
 	})
 	m.mu.Unlock()
 	if err != nil {

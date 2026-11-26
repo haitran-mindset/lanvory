@@ -7,6 +7,7 @@ import (
 	"context"
 	"crypto/ed25519"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/netip"
 	"strings"
@@ -93,6 +94,10 @@ func registerNearby(
 	})
 
 	mux.HandleFunc("POST "+nearbyRoute+"/scan", func(w http.ResponseWriter, r *http.Request) {
+		if err := http.NewResponseController(w).SetWriteDeadline(time.Now().Add(15 * time.Second)); err != nil && !errors.Is(err, http.ErrNotSupported) {
+			http.Error(w, "Unable to configure response deadline", http.StatusInternalServerError)
+			return
+		}
 		var req nearbyScanRequest
 		_ = json.NewDecoder(http.MaxBytesReader(w, r.Body, 1024)).Decode(&req)
 		duration := 2200 * time.Millisecond
@@ -108,6 +113,10 @@ func registerNearby(
 	})
 
 	mux.HandleFunc("POST "+nearbyRoute+"/connect", func(w http.ResponseWriter, r *http.Request) {
+		if err := http.NewResponseController(w).SetWriteDeadline(time.Now().Add(15 * time.Second)); err != nil && !errors.Is(err, http.ErrNotSupported) {
+			http.Error(w, "Unable to configure response deadline", http.StatusInternalServerError)
+			return
+		}
 		var req nearbyConnectRequest
 		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 2048)).Decode(&req); err != nil || strings.TrimSpace(req.ServiceName) == "" {
 			http.Error(w, "serviceName is required", http.StatusBadRequest)
@@ -131,6 +140,10 @@ func registerNearby(
 	})
 
 	mux.HandleFunc("POST "+nearbyRoute+"/pair", func(w http.ResponseWriter, r *http.Request) {
+		if err := http.NewResponseController(w).SetWriteDeadline(time.Now().Add(pairingRequestTimeout)); err != nil && !errors.Is(err, http.ErrNotSupported) {
+			http.Error(w, "Unable to configure response deadline", http.StatusInternalServerError)
+			return
+		}
 		var req nearbyPairRequest
 		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 2048)).Decode(&req); err != nil {
 			http.Error(w, "Invalid P2P pair request", http.StatusBadRequest)
