@@ -394,7 +394,7 @@ if (!app.requestSingleInstanceLock()) {
         clipboard.writeText([
           'Lanvory network diagnostics',
           `Platform: ${process.platform} ${process.arch}`,
-          `Application version: ${require('../../package.json').version}`,
+          `Application version: ${app.getVersion()}`,
           `Daemon build: ${typeof build === 'string' && /^(?:development|\d{1,8}\.\d{1,8}\.\d{1,8})$/.test(build) ? build : 'unavailable'}`,
           `Protocol version: ${Number.isSafeInteger(identity?.protocolVersion) ? identity.protocolVersion : 'unavailable'}`,
           `LAN listener: ${lan}`,
