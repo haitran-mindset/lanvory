@@ -8,11 +8,11 @@ make package-macos
 make dmg-macos
 ```
 
-`make package-macos` produces an application bundle. `make dmg-macos` also produces a compressed disk image and its SHA-256 checksum. Every build has a distinct directory in `dist/macos`, so rebuilds preserve previous artifacts. The app embeds Electron, its built renderer, the Go daemon and the CLI. The packaged runtime requires no installed Node.js or Go toolchain.
+`make package-macos` produces an application bundle. `make dmg-macos` also produces a compressed disk image and its SHA-256 checksum. Every build has a distinct directory in `dist/macos`, so rebuilds preserve previous artifacts. The app embeds Electron, its built renderer, the Go daemon (`lanvoryd`), the CLI (`lanvory`), and—when built on macOS—the Swift Bluetooth + P2P helper (`lanvory-nearby`) inside `Contents/Resources/` along with `NSBluetoothAlwaysUsageDescription` in `Info.plist`. The packaged runtime requires no installed Node.js, Go, or Swift toolchain.
 
-Both commands write a CycloneDX 1.6 `.cdx.json` inventory alongside the bundle. It records Electron as a runtime component, Go runtime versions and modules reported by the two embedded binaries, and the resolved npm runtime dependency closure used for notice collection. The npm list can include dependencies removed by renderer tree shaking. Electron internals and macOS system libraries are outside this inventory.
+Both commands write a CycloneDX 1.6 `.cdx.json` inventory alongside the bundle. It records Electron as a runtime component, Go runtime versions and modules reported by `lanvory` and `lanvoryd`, and the resolved npm runtime dependency closure used for notice collection. The npm list can include dependencies removed by renderer tree shaking. Electron internals and macOS system libraries are outside this inventory.
 
-The npm packages and Go modules include Package URLs. The SBOM also includes SHA-256 hashes of the CLI and daemon as they appear in the signed application bundle.
+The npm packages and Go modules include Package URLs. The SBOM also includes SHA-256 hashes of `lanvory`, `lanvoryd`, and `lanvory-nearby` (when present) as they appear in the signed application bundle.
 
 To package without downloading the Electron archive, set `LANVORY_ELECTRON_ZIP_DIR` to an existing directory containing the platform ZIP for the pinned Electron version. The script checks its SHA-256 against the installed Electron package before extraction. Bring the locked dependencies and Go toolchain into the build environment separately.
 
@@ -20,7 +20,9 @@ For a cross-architecture test on macOS, build the renderer normally, build both 
 
 ## Local test build
 
-By default the application receives an ad hoc code signature. The build verifies the bundle and both native binaries with `codesign`, and verifies the disk image with `hdiutil`. Use the app from the local build or the mounted DMG for testing. The current package retains Electron's stock icon.
+By default the application receives an ad hoc code signature. The build verifies the bundle and native binaries with `codesign`, and verifies the disk image with `hdiutil`. Use the app from the local build or the mounted DMG for testing. When running an ad-hoc signed `.dmg` downloaded from GitHub Releases on another Mac, drag `Lanvory.app` to `Applications` and run `xattr -cr /Applications/Lanvory.app` before launching.
+
+GitHub Actions automates `arm64` and `x64` `.dmg` builds, `smoke-macos-dmg.sh --verify-only` checks, `SHA256SUMS.txt`, and GitHub Release creation on `v*` tags via `.github/workflows/release.yml`.
 
 The ad hoc build is for local testing with an interactive macOS login and accessible Keychain. The ad hoc signing branch leaves hardened runtime disabled to load the bundled Electron framework without a Developer ID Team ID. The Developer ID branch retains the standard hardened-runtime signing behavior and requires notarization before distribution. Existing Lanvory device identity and settings remain in the login Keychain and per-user state directory.
 

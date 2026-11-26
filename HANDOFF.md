@@ -693,6 +693,18 @@ Implemented the requested `POST_MVP` expansion across Go core, CLI, Electron IPC
 - **Daemon IPC, macOS `mount_webdav`, CLI & Desktop UI** (`core/internal/local/mount.go`, `core/cmd/lanvoryd/`, `core/cmd/lanvory/main.go`, `apps/desktop/src/renderer/features/sync/live-mount.tsx`):
   - Added `/v1/mounts/exports` and `/v1/mounts` IPC routes, `lanvory mounts` CLI subcommands, optional macOS `/sbin/mount_webdav` / `/sbin/umount` integration with loopback WebDAV fallback, and Live Resource Mount export/grant/mount controls in the Sync panel.
 
+## Live Resource Mount V2, Bluetooth + P2P (AWDL), and v0.1.0 Release
+
+- **Live Resource Mount V2** (`core/internal/mount/`, `core/internal/peer/mount.go`, `core/internal/local/mount.go`, `apps/desktop/src/renderer/features/mounts/`):
+  - Refined mount status/telemetry, export management, read-only vs read-write controls, and desktop Live Mount UI. Verified with `make build && make verify && sh scripts/smoke-native.sh pnpm`.
+- **Bluetooth + Wi-Fi P2P (AWDL) Nearby Discovery** (`core/native/darwin/lanvory-nearby.swift`, `core/internal/nearby/`, `core/internal/peer/p2p.go`, `core/internal/local/nearby.go`, `apps/desktop/src/renderer/features/devices/nearby.tsx`):
+  - Added macOS CoreBluetooth BLE advertising/scanning and `NSIncludesPeerToPeer` AWDL transport so nearby Macs can discover and connect without a shared router.
+  - Added dual sidebar status card (**Local Network** + **Bluetooth + P2P**) and sidebar app version badge (`v0.1.0`) in `apps/desktop/src/renderer/layouts/workspace.tsx`.
+- **macOS Packaging, GitHub Release (`v0.1.0`), and Website (`apps/web`)**:
+  - Updated `scripts/package-macos.mjs` to bundle `bin/lanvory-nearby` (when present on macOS) into `Lanvory.app/Contents/Resources/`, record its SHA-256 in the `.cdx.json` SBOM, and include `NSBluetoothAlwaysUsageDescription` in `Info.plist`.
+  - Added `.github/workflows/release.yml` triggered on `v*` tags (macOS `arm64` & `x64` DMGs, `smoke-macos-dmg.sh --verify-only`, `SHA256SUMS.txt`, and `softprops/action-gh-release@v2`). Removed `linux-core` from both `verify.yml` and `release.yml`.
+  - Updated `apps/web/src/app.tsx` and `apps/web/src/content.ts` with direct `v0.1.0` `.dmg` downloads (`arm64` & `x64`), `xattr -cr /Applications/Lanvory.app` first-launch instructions, and BLE + Wi-Fi P2P features/architecture/roadmap updates.
+
 ## Open verification gates
 
 | Task | Available evidence | Missing evidence and prerequisites |

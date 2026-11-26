@@ -11,19 +11,19 @@ This document records the known technical limitations, architectural boundaries,
 - Traffic across routed subnets or complex multi-VLAN architectures without direct Layer 2/3 routing is rejected by default to prevent unintentional packet leakage.
 
 ### Client Isolation (AP Isolation)
-- In enterprise or guest Wi-Fi networks where Access Point (AP) Client Isolation is enabled by the router/administrator, direct device-to-device communication (both UDP multicast mDNS and unicast TCP/QUIC) is dropped by the network hardware.
-- Because Lanvory strictly adheres to zero-cloud and no-central-relay principles, client isolation cannot and will not be bypassed.
+- In enterprise or guest Wi-Fi networks where Access Point (AP) Client Isolation is enabled by the router/administrator, direct device-to-device communication over the LAN adapter (both UDP multicast mDNS and unicast TCP/QUIC) is dropped by the network hardware.
+- On macOS, enabling **Bluetooth + P2P** (`lanvory-nearby` via CoreBluetooth and AWDL) provides a direct peer-to-peer path between nearby Macs without relying on the router. Lanvory strictly adheres to zero-cloud and no-central-relay principles and will never route traffic through external servers.
 
 ### Session-Scoped Listener
 - Starting the network listener (TCP, QUIC, and Bonjour registration) is intentionally session-scoped. Restarting the daemon resets the listener to `stopped` until explicitly enabled by the user via the UI ("Turn on LAN") or CLI (`lanvory network listener start`). This prevents unattended exposure after system reboots.
 
 ---
 
-## 2. File Transfer (Drop) Limitations
+## 2. File Transfer, Sync, and Mount Limitations
 
-### Single-File Transfer
-- The current MVP wire protocol (`lanvory-drop/1`) handles one regular file per transfer session (up to 1 GiB), verified with SHA-256 digest and atomic filesystem commit.
-- Directory trees and recursive folder transfers are deferred to Phase 7 (Folder Synchronization).
+### Single-File Drop & Folder Capabilities
+- The Drop wire protocol (`lanvory-drop/1`) handles one regular file per transfer session (up to 1 GiB), verified with SHA-256 digest and atomic filesystem commit.
+- Multi-file directory synchronization (`send-only`, `receive-only`, `two-way`) is handled by Folder Sync (`core/internal/sync`), and live folder browsing/editing is handled by Live Resource Mount (`lanvory-mount/1` WebDAV over mTLS, `core/internal/mount`).
 
 ### Fixed Destination Directory
 - Received files are written strictly to `~/.lanvory/inbox` (or `$LANVORY_STATE_DIR/inbox`) with strict `0700` directory and `0600` file permissions to prevent path traversal and arbitrary filesystem writes. Custom destination directories require future explicit security scoping.
@@ -39,8 +39,8 @@ This document records the known technical limitations, architectural boundaries,
 - The Ed25519 device identity seed is stored directly in `<state-dir>/identity.key` (default `~/.lanvory/identity.key`) with strict owner-only (`0600`) permissions inside an owner-only (`0700`) directory, avoiding macOS Keychain authorization prompts during installation and startup.
 
 ### Windows & Linux Desktop Status
-- Linux core verification (SQLite migrations, Unix IPC, interface binding, and GNOME Keyring identity persistence) has been validated in containers.
-- Windows Named Pipe and Credential Manager architectures are fully specified in [cross-platform.md](../architecture/cross-platform.md), but native Windows and Linux desktop installer builds are scheduled for post-macOS MVP phases.
+- Historical Linux core verification (SQLite migrations, Unix IPC, interface binding, and GNOME Keyring identity persistence) was validated in containers, and the `linux-core` GitHub Actions job was removed while active development targets macOS (`arm64` & `x64`).
+- Windows Named Pipe and Credential Manager architectures are specified in [cross-platform.md](../architecture/cross-platform.md), with native Windows and Linux desktop builds scheduled for later phases.
 
 ---
 

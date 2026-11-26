@@ -11,12 +11,16 @@ flowchart LR
     D --> K[OS credential storage]
     D --> S[Local SQLite]
     D --> L[Approved LAN interface]
+    D --> N[BLE + Wi-Fi P2P helper]
     L --> B[Peer daemon]
+    N --> B
 ```
 
-The macOS daemon provides owner-authenticated IPC over a private Unix socket. Its Keychain entry holds the Ed25519 seed, while SQLite holds profile metadata, adapter approvals, trusted peers, grants, and transfer history. DNS-SD advertises availability using a random label. Resolving a record checks the approved interface and subnet without granting trust.
+The macOS daemon provides owner-authenticated IPC over a private Unix socket. Its Ed25519 identity seed is persisted locally under `~/.lanvory/identity.key` (`0600`) inside an owner-only (`0700`) directory, while SQLite holds profile metadata, adapter approvals, trusted peers, grants, sync state, and transfer history. DNS-SD advertises availability using a random label. Resolving a record checks the approved interface and subnet without granting trust.
 
-Opt-in peer listeners bind to the approved interface. Pairing uses a dedicated TCP TLS 1.3 protocol, pins the receiver key, and requires approval on both devices. Drop and Bridge use mutually authenticated QUIC by preference, with pinned TCP fallback after a UDP handshake timeout. The daemon checks resource grants separately from identity and rechecks them during active operations. Bridge uses locally registered loopback destinations. Drop asks for consent on each incoming offer.
+On macOS, the daemon can also spawn the bundled `lanvory-nearby` Swift helper (`core/native/darwin/lanvory-nearby.swift`) when the user enables **Bluetooth + P2P**, using CoreBluetooth BLE and AWDL (`NSIncludesPeerToPeer`) to discover nearby Macs without a shared router.
+
+Opt-in peer listeners bind to the approved interface. Pairing uses a dedicated TCP TLS 1.3 protocol, pins the receiver key, and requires approval on both devices. Drop, Bridge, Folder Sync, and Live Resource Mount (`lanvory-mount/1` WebDAV over mTLS) use mutually authenticated QUIC by preference, with pinned TCP fallback after a UDP handshake timeout. The daemon checks resource grants separately from identity and rechecks them during active operations. Bridge uses locally registered loopback destinations. Drop asks for consent on each incoming offer.
 
 See [IPC](../protocols/ipc.md), [pairing](../protocols/pairing.md), [QUIC](../protocols/quic.md), and the [threat model](../security/threat-model.md) for the respective boundaries.
 

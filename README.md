@@ -249,3 +249,38 @@ While the command waits, inspect `./bin/lanvory pairing list` on both devices. C
 ```
 
 Use `pairing decline "$request_id"` to stop a pending request. See [pairing protocol](docs/protocols/pairing.md) for expiration and trust persistence behavior.
+
+
+### Bluetooth + Wi-Fi P2P (AWDL) nearby discovery on macOS
+
+On macOS, `make build` compiles the native Swift helper `bin/lanvory-nearby` (`core/native/darwin/lanvory-nearby.swift`) using CoreBluetooth and Apple Wireless Direct Link (`NSIncludesPeerToPeer`). This lets nearby Macs discover and connect directly without a shared Wi-Fi router or Ethernet network.
+
+- In the desktop sidebar, toggle **Bluetooth + P2P** alongside **Local Network** in the dual status card, or open **Devices → Nearby** to scan for nearby peers.
+- In the CLI:
+
+```sh
+./bin/lanvory nearby status
+./bin/lanvory nearby start
+./bin/lanvory nearby scan
+./bin/lanvory nearby stop
+```
+
+Packaged macOS apps bundle `lanvory-nearby` inside `Lanvory.app/Contents/Resources/` with `NSBluetoothAlwaysUsageDescription` in `Info.plist`.
+
+
+### Live Resource Mount and Folder Sync
+
+Lanvory supports sharing local folders with trusted peers as live WebDAV volumes (`lanvory-mount/1` over mTLS) and synchronizing folders (`send-only`, `receive-only`, or `two-way`) with SHA-256 change detection and conflict copies.
+
+```sh
+./bin/lanvory mounts
+```
+
+In Electron, open **Sync** to configure folder sync rules or export, grant, and mount live peer folders.
+
+
+### GitHub Releases and website
+
+Tagging a commit with `v*` (for example `v0.1.0`) triggers [the release workflow](.github/workflows/release.yml), which builds and verifies macOS `arm64` and `x64` `.dmg` images, generates CycloneDX SBOMs (`.cdx.json`) and `SHA256SUMS.txt`, and publishes a GitHub Release. Ad-hoc signed macOS downloads require running `xattr -cr /Applications/Lanvory.app` after dragging the app to `Applications`.
+
+The product website lives under `apps/web` (`pnpm --filter @lanvory/web build`).
