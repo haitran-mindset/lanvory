@@ -6,6 +6,7 @@ const { promisify } = require('node:util');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const { createMenuBar, createPairingAlerts, stopOwnedDaemon } = require('./native-lifecycle.cjs');
+const { checkForDesktopUpdate } = require('./release-update.cjs');
 
 const exec = promisify(execFile);
 const bundle = app.isPackaged ? process.resourcesPath : path.resolve(__dirname, '../../../../bin');
@@ -32,6 +33,9 @@ let nextStart = 0;
 let startupFailed = false;
 let daemonStartedAt;
 let recoveryTimer;
+let updateCheck;
+let updatePromptShown = false;
+const updateCheckController = new AbortController();
 const slowStartupMs = 8000;
 
 function permissionArgs(action, fingerprint, capability, resource, duration = 'until-revoked') {
@@ -227,15 +231,50 @@ function failStartup() {
   app.quit();
 }
 
+async function offerDesktopUpdate() {
+  if (!app.isPackaged || process.platform !== 'darwin' || stopping || updatePromptShown || !window?.isVisible()) return;
+
+  updateCheck ??= checkForDesktopUpdate({
+    currentVersion: app.getVersion(),
+    architecture: process.arch,
+    signal: updateCheckController.signal,
+  });
+
+  const update = await updateCheck;
+  const parent = window;
+  if (!update || stopping || updatePromptShown || !parent?.isVisible() || parent.isMinimized()) return;
+  updatePromptShown = true;
+
+  try {
+    const { response } = await dialog.showMessageBox(parent, {
+      type: 'info',
+      title: 'Lanvory update',
+      message: `Lanvory ${update.version} is available`,
+      detail: 'Download the disk image, then quit Lanvory and replace it in Applications. Open Lanvory again after installing.',
+      buttons: ['Download update', 'Later'],
+      defaultId: 0,
+      cancelId: 1,
+      noLink: true,
+      signal: updateCheckController.signal,
+    });
+    if (response === 0 && !stopping) await shell.openExternal(update.url);
+  } catch {
+    if (!stopping && !parent.isDestroyed()) {
+      dialog.showErrorBox('Lanvory update', 'The update could not be opened. You can download it from Lanvory’s GitHub Releases page.');
+    }
+  }
+}
+
 function openWindow() {
   if (!ready || stopping) return;
   if (!window) {
-    createWindow().catch(failStartup);
+    createWindow().then(offerDesktopUpdate).catch(failStartup);
     return;
   }
   if (window.isMinimized()) window.restore();
   window.show();
   window.focus();
+  void offerDesktopUpdate();
 }
 
 if (!app.requestSingleInstanceLock()) {
@@ -1188,6 +1227,7 @@ if (!app.requestSingleInstanceLock()) {
     }
     void daemonStatus(true);
     await createWindow(!menuBar || !existsSync(profileFlag('start-minimized')));
+    void offerDesktopUpdate();
   }).catch(failStartup);
   app.on('before-quit', (event) => {
     if (quitWait) {
@@ -1196,6 +1236,7 @@ if (!app.requestSingleInstanceLock()) {
     }
     if (stopping) return;
     stopping = true;
+    updateCheckController.abort();
     clearTimeout(recoveryTimer);
     clearInterval(backgroundCheck);
     pairingNotification?.close();

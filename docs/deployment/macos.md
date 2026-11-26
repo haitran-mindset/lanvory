@@ -24,6 +24,8 @@ By default the application receives an ad hoc code signature. The build verifies
 
 GitHub Actions automates `arm64` and `x64` `.dmg` builds, `smoke-macos-dmg.sh --verify-only` checks, `SHA256SUMS.txt`, and GitHub Release creation on `v*` tags via `.github/workflows/release.yml`.
 
+Packaged macOS builds check the latest stable GitHub Release once per launch when the app window is opened. If a newer release includes a DMG for the running architecture, Lanvory offers to open the download in your browser. Quit Lanvory, replace the app in Applications, and launch it again after installing. Builds shipped before this notification feature need one manual update to start receiving notices. A failed or offline check leaves the running app usable.
+
 The ad hoc build is for local testing with an interactive macOS login and accessible Keychain. The ad hoc signing branch leaves hardened runtime disabled to load the bundled Electron framework without a Developer ID Team ID. The Developer ID branch retains the standard hardened-runtime signing behavior and requires notarization before distribution. Existing Lanvory device identity and settings remain in the login Keychain and per-user state directory.
 
 For an isolated launch test, set `LANVORY_STATE_DIR` to a short absolute path under a private test directory. Both the app and any companion CLI invocation must inherit the same value. It selects the Unix socket, SQLite file and inbox location. The device key still belongs to the current login Keychain.

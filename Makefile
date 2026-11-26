@@ -21,6 +21,7 @@ verify:
 	$(PNPM) typecheck
 	node --check apps/desktop/src/main/index.cjs
 	node --check apps/desktop/src/main/native-lifecycle.cjs
+	node --test apps/desktop/tests/release-update.test.cjs
 	node --check apps/desktop/tests/native-smoke.cjs
 	node --check apps/desktop/src/preload/index.cjs
 	node --check scripts/package-macos.mjs
