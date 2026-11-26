@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
 import { createReadStream } from 'node:fs';
-import { access, cp, mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises';
+import { access, chmod, cp, mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
@@ -165,6 +165,9 @@ try {
         if (error.code !== 'ENOENT') throw error;
       }
     }
+  }
+  for (const noticeFile of await readdir(notices)) {
+    await chmod(path.join(notices, noticeFile), 0o644);
   }
 
   const [bundleFolder] = await packager({
