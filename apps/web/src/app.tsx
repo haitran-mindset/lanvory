@@ -106,33 +106,25 @@ function DemoMedia({
   )
 }
 
-function ArchitectureNodes({
-  nodes, className, label,
-}: {
-  nodes: (typeof technicalArchitecture)[keyof typeof technicalArchitecture]
-  className: string
-  label: string
-}) {
+type ArchitectureNode =
+  | (typeof technicalArchitecture.connection)[number]['nodes'][number]
+  | (typeof technicalArchitecture.resources)[number]
+
+function ArchitectureLink({ technology, icon: Icon, description, link }: ArchitectureNode) {
   return (
-    <ul className={`architecture-nodes ${className}`} aria-label={label} role="list">
-      {nodes.map(({ technology, icon: Icon, description, link }) => (
-        <li key={technology} className="architecture-node">
-          <a
-            className="group grid h-full grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-3 rounded-xl border border-border bg-card p-4 transition-colors hover:border-primary/60 hover:bg-selected"
-            href={`${githubUrl}/blob/main/${link}`}
-          >
-            <span className="grid size-9 place-items-center rounded-lg border border-border bg-background text-primary">
-              <Icon size={17} aria-hidden="true" />
-            </span>
-            <div>
-              <h4 className="text-sm font-semibold">{technology}</h4>
-              <p>{description}</p>
-            </div>
-            <ArrowUpRight size={15} className="mt-0.5 text-muted-foreground group-hover:text-primary" aria-hidden="true" />
-          </a>
-        </li>
-      ))}
-    </ul>
+    <a
+      className="group grid h-full grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-2.5 rounded-lg border border-border bg-card p-3 transition-colors hover:border-primary/60 hover:bg-selected"
+      href={`${githubUrl}/blob/main/${link}`}
+    >
+      <span className="grid size-8 place-items-center rounded-md border border-border bg-background text-primary">
+        <Icon size={16} aria-hidden="true" />
+      </span>
+      <div>
+        <span className="text-sm font-semibold">{technology}</span>
+        <p>{description}</p>
+      </div>
+      <ArrowUpRight size={14} className="mt-0.5 text-muted-foreground group-hover:text-primary" aria-hidden="true" />
+    </a>
   )
 }
 
@@ -388,18 +380,25 @@ export function App() {
           <h2 id="architecture-title">Technical Architecture</h2>
           <div className="architecture-diagram mt-6 rounded-xl border border-border">
             <h3 className="architecture-layer-title">Peer connection</h3>
-            <ArchitectureNodes
-              nodes={technicalArchitecture.connection}
-              className="architecture-connection"
-              label="Peer connection technologies"
-            />
+            <ol className="architecture-nodes architecture-connection" aria-label="Peer connection stages" role="list">
+              {technicalArchitecture.connection.map(({ stage, nodes }) => (
+                <li key={stage} className="architecture-node architecture-stage">
+                  <h4>{stage}</h4>
+                  <ul className="grid gap-2" role="list">
+                    {nodes.map((node) => (
+                      <li key={node.technology}><ArchitectureLink {...node} /></li>
+                    ))}
+                  </ul>
+                </li>
+              ))}
+            </ol>
             <div className="architecture-branch" aria-hidden="true" />
             <h3 className="architecture-layer-title architecture-resource-title">Resource operations</h3>
-            <ArchitectureNodes
-              nodes={technicalArchitecture.resources}
-              className="architecture-resources"
-              label="Resource operation technologies"
-            />
+            <ul className="architecture-nodes architecture-resources" aria-label="Resource operation technologies" role="list">
+              {technicalArchitecture.resources.map((node) => (
+                <li key={node.technology} className="architecture-node"><ArchitectureLink {...node} /></li>
+              ))}
+            </ul>
           </div>
           <div className="mt-5 flex flex-wrap gap-x-5 gap-y-3 text-sm">
             <a className="underline underline-offset-4 hover:text-primary" href={`${githubUrl}/blob/main/docs/architecture/overview.md`}>Architecture overview</a>

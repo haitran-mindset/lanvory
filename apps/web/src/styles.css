@@ -112,6 +112,25 @@ section[id] { scroll-margin-top: 2rem; }
 .architecture-nodes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .architecture-node { position: relative; min-width: 0; margin-inline: .75rem; }
 
+.architecture-stage {
+  display: grid;
+  align-content: center;
+  gap: .65rem;
+  padding: .75rem;
+  border: 1px solid var(--color-border);
+  border-radius: .85rem;
+  background: var(--color-background);
+}
+
+.architecture-stage h4 {
+  padding-inline: .25rem;
+  color: var(--color-muted-foreground);
+  font-size: .75rem;
+  font-weight: 650;
+}
+
+.architecture-node p { font-size: .8125rem; }
+
 .architecture-connection .architecture-node:not(:last-child)::after {
   content: "";
   position: absolute;
