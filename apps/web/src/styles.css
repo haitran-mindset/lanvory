@@ -97,6 +97,123 @@ section[id] { scroll-margin-top: 2rem; }
 .detail-card { border: 1px solid var(--color-border); border-radius: .85rem; background: var(--color-card); padding: 1.35rem; }
 .step-number { display: block; margin-bottom: .6rem; font-size: .75rem; color: var(--color-primary); }
 
+.architecture-diagram {
+  --architecture-line: color-mix(in srgb, var(--color-primary) 45%, var(--color-border));
+  padding: clamp(1rem, 2.5vw, 2rem);
+  background: radial-gradient(ellipse at 50% 0, var(--color-selected), var(--color-background) 70%);
+}
+
+.architecture-layer-title {
+  margin-bottom: .75rem;
+  color: var(--color-muted-foreground);
+  font-size: .75rem;
+}
+
+.architecture-nodes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.architecture-node { position: relative; min-width: 0; margin-inline: .75rem; }
+
+.architecture-connection .architecture-node:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  top: calc(50% - .25rem);
+  right: -1rem;
+  width: .5rem;
+  height: .5rem;
+  border: solid var(--architecture-line);
+  border-width: 1px 1px 0 0;
+  rotate: 45deg;
+}
+
+.architecture-connection .architecture-node:not(:last-child)::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 100%;
+  width: 1.5rem;
+  border-top: 1px solid var(--architecture-line);
+}
+
+.architecture-branch {
+  position: relative;
+  width: calc(100% / 3);
+  height: 2.75rem;
+  margin-left: 50%;
+  background: linear-gradient(var(--architecture-line), var(--architecture-line)) left bottom / 1px .85rem no-repeat;
+}
+
+.architecture-branch::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 .85rem;
+  border-right: 1px solid var(--architecture-line);
+  border-bottom: 1px solid var(--architecture-line);
+  border-bottom-right-radius: .85rem;
+}
+
+.architecture-resource-title {
+  width: fit-content;
+  margin: 0 auto;
+  padding: .35rem .8rem;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: var(--color-card);
+}
+
+.architecture-resources {
+  position: relative;
+  padding-top: 2rem;
+}
+
+.architecture-resources::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: calc(100% / 6);
+  right: calc(100% / 6);
+  height: 1rem;
+  border-bottom: 1px solid var(--architecture-line);
+  background: linear-gradient(var(--architecture-line), var(--architecture-line)) center / 1px 100% no-repeat;
+}
+
+.architecture-resources .architecture-node::before {
+  content: "";
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  height: 1rem;
+  border-left: 1px solid var(--architecture-line);
+}
+
+@media (max-width: 63.99rem) {
+  .architecture-nodes { grid-template-columns: minmax(0, 1fr); gap: 1.25rem; }
+  .architecture-node { margin-inline: 0; }
+  .architecture-connection .architecture-node:not(:last-child)::before {
+    top: 100%;
+    left: 50%;
+    width: 0;
+    height: 1.25rem;
+    border-left: 1px solid var(--architecture-line);
+  }
+  .architecture-connection .architecture-node:not(:last-child)::after {
+    top: calc(100% + .25rem);
+    left: calc(50% - .23rem);
+    rotate: 135deg;
+  }
+  .architecture-branch { width: 50%; margin-left: 0; }
+  .architecture-resource-title { margin-left: 0; }
+  .architecture-resources { padding: .75rem 0 0 .75rem; border-left: 1px solid var(--architecture-line); }
+  .architecture-resources::before { display: none; }
+  .architecture-resources .architecture-node::before {
+    top: 50%;
+    bottom: auto;
+    left: -.75rem;
+    width: .75rem;
+    height: 0;
+    border-top: 1px solid var(--architecture-line);
+    border-left: 0;
+  }
+}
+
 .quick-start-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1.75fr);

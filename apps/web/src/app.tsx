@@ -4,9 +4,9 @@ import {
   Layers3, Play, ShieldCheck, Square, Star, Zap, ZoomIn,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { copy, features, securityControls } from './content'
+import { copy, features, securityControls, technicalArchitecture } from './content'
 
-const sectionIds = ['why', 'features', 'how', 'security', 'roadmap']
+const sectionIds = ['why', 'features', 'how', 'security', 'architecture', 'roadmap']
 const githubRepository = 'haitran-mindset/lanvory'
 const githubUrl = `https://github.com/${githubRepository}`
 const starCountFormat = new Intl.NumberFormat('en')
@@ -100,6 +100,36 @@ function DemoMedia({
   )
 }
 
+function ArchitectureNodes({
+  nodes, className, label,
+}: {
+  nodes: (typeof technicalArchitecture)[keyof typeof technicalArchitecture]
+  className: string
+  label: string
+}) {
+  return (
+    <ul className={`architecture-nodes ${className}`} aria-label={label} role="list">
+      {nodes.map(({ technology, icon: Icon, description, link }) => (
+        <li key={technology} className="architecture-node">
+          <a
+            className="group grid h-full grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-3 rounded-xl border border-border bg-card p-4 transition-colors hover:border-primary/60 hover:bg-selected"
+            href={`${githubUrl}/blob/main/${link}`}
+          >
+            <span className="grid size-9 place-items-center rounded-lg border border-border bg-background text-primary">
+              <Icon size={17} aria-hidden="true" />
+            </span>
+            <div>
+              <h4 className="text-sm font-semibold">{technology}</h4>
+              <p>{description}</p>
+            </div>
+            <ArrowUpRight size={15} className="mt-0.5 text-muted-foreground group-hover:text-primary" aria-hidden="true" />
+          </a>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
 export function App() {
   const [activeDemo, setActiveDemo] = useState<string | null>(null)
 
@@ -116,7 +146,7 @@ export function App() {
         <span className="size-1.5 rounded-full bg-primary" aria-hidden="true" />
         <span>{copy.update}</span>
         <span className="inline-flex items-center gap-1 text-foreground underline underline-offset-4">
-          {copy.nav[4]} <ArrowUpRight size={13} aria-hidden="true" />
+          {copy.nav[5]} <ArrowUpRight size={13} aria-hidden="true" />
         </span>
       </a>
 
@@ -328,8 +358,31 @@ export function App() {
           </div>
         </section>
 
+        <section id="architecture" className="detail-section" aria-labelledby="architecture-title">
+          <h2 id="architecture-title">Technical Architecture</h2>
+          <div className="architecture-diagram mt-6 rounded-xl border border-border">
+            <h3 className="architecture-layer-title">Peer connection</h3>
+            <ArchitectureNodes
+              nodes={technicalArchitecture.connection}
+              className="architecture-connection"
+              label="Peer connection technologies"
+            />
+            <div className="architecture-branch" aria-hidden="true" />
+            <h3 className="architecture-layer-title architecture-resource-title">Resource operations</h3>
+            <ArchitectureNodes
+              nodes={technicalArchitecture.resources}
+              className="architecture-resources"
+              label="Resource operation technologies"
+            />
+          </div>
+          <div className="mt-5 flex flex-wrap gap-x-5 gap-y-3 text-sm">
+            <a className="underline underline-offset-4 hover:text-primary" href={`${githubUrl}/blob/main/docs/architecture/overview.md`}>Architecture overview</a>
+            <a className="underline underline-offset-4 hover:text-primary" href={`${githubUrl}/blob/main/docs/development/known-limitations.md`}>Known limitations</a>
+          </div>
+        </section>
+
         <section id="roadmap" className="detail-section">
-          <h2>{copy.nav[4]}</h2>
+          <h2>{copy.nav[5]}</h2>
           <ol className="roadmap-timeline mt-8" role="list">
             {copy.roadmap.map(({ phase, title, description, icon: Icon }, index) => (
               <li key={title} className="roadmap-milestone" aria-current={index === 0 ? 'step' : undefined}>
@@ -413,6 +466,7 @@ export function App() {
           <a href={`${githubUrl}/issues`}>Report an issue</a>
           <a href={`${githubUrl}/blob/main/docs/security/threat-model.md`}>Security model</a>
           <a href="#faq">FAQ</a>
+          <a href="#architecture">Architecture</a>
         </nav>
         <a className="text-sm text-muted-foreground hover:text-primary" href="#top">{copy.back} ↑</a>
       </footer>

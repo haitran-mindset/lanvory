@@ -36,7 +36,7 @@ export const features = [
 export const copy = {
   skip: 'Skip to content',
   update: 'Lanvory is in development',
-  nav: ['Why Lanvory', 'Features', 'How it works', 'Security', 'Roadmap'],
+  nav: ['Why Lanvory', 'Features', 'How it works', 'Security', 'Architecture', 'Roadmap'],
   tagline: 'Local network, truly yours.',
   headline: ['Your devices,', 'connected locally.'],
   intro: 'Lanvory brings your devices together in a private workspace on your local network.',
@@ -148,3 +148,40 @@ export const securityControls = [
     description: 'The recipient approves each incoming file offer. Lanvory verifies the file’s SHA-256 checksum before placing it in the inbox.',
   },
 ] as const
+
+export const technicalArchitecture = {
+  connection: [
+    {
+      technology: 'mDNS + DNS-SD', icon: Radar,
+      description: 'Find nearby devices on approved LAN adapters.',
+      link: 'docs/protocols/discovery.md',
+    },
+    {
+      technology: 'Ed25519 + TLS exporter', icon: Fingerprint,
+      description: 'Verify device identities and bind pairing to the TLS session.',
+      link: 'docs/protocols/pairing.md',
+    },
+    {
+      technology: 'QUIC + mutual TLS 1.3', icon: Network,
+      description: 'Encrypt peer traffic, with TCP fallback on handshake timeout.',
+      link: 'docs/protocols/quic.md',
+    },
+  ],
+  resources: [
+    {
+      technology: 'Streaming SHA-256', icon: FolderUp,
+      description: 'Verify each incoming file before it reaches the inbox.',
+      link: 'docs/protocols/drop.md',
+    },
+    {
+      technology: 'SHA-256 + conflict copies', icon: FolderSync,
+      description: 'Detect file changes and preserve conflicting versions where possible.',
+      link: 'core/internal/sync/protocol.go',
+    },
+    {
+      technology: 'Per-peer grants + SQLite', icon: SlidersHorizontal,
+      description: 'Grant access per peer and resource, with logs stored locally.',
+      link: 'docs/security/permissions.md',
+    },
+  ],
+} as const
