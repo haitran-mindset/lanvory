@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
 import { createReadStream } from 'node:fs';
-import { cp, mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises';
+import { access, cp, mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
@@ -46,6 +46,15 @@ if (zipDir) {
 
 const binaryDir = path.resolve(process.env.LANVORY_MAC_BIN_DIR || path.join(repo, 'bin'));
 const binaries = ['lanvoryd', 'lanvory'].map((name) => path.join(binaryDir, name));
+const nearbyBinary = path.join(binaryDir, 'lanvory-nearby');
+let hasNearbyBinary = false;
+try {
+  await access(nearbyBinary);
+  hasNearbyBinary = true;
+} catch (error) {
+  if (error.code !== 'ENOENT') throw error;
+}
+const packagedBinaries = hasNearbyBinary ? [...binaries, nearbyBinary] : binaries;
 const expectedArch = arch === 'x64' ? 'x86_64' : arch;
 async function verifyArchitecture(binary) {
   const { stdout } = await exec('/usr/bin/lipo', ['-archs', binary]);
@@ -53,7 +62,7 @@ async function verifyArchitecture(binary) {
     throw new Error(`${path.basename(binary)} must be built for ${expectedArch} before packaging.`);
   }
 }
-for (const binary of binaries) await verifyArchitecture(binary);
+for (const binary of packagedBinaries) await verifyArchitecture(binary);
 
 const identity = process.env.LANVORY_MAC_SIGN_IDENTITY || '-';
 const releases = path.join(repo, 'dist', 'macos');
@@ -171,7 +180,7 @@ try {
     electronZipDir: zipDir,
     asar: true,
     prune: false,
-    extraResource: [...binaries, notices],
+    extraResource: [...packagedBinaries, notices],
     afterCopyExtraResources: [async ({ buildPath }) => {
       const destination = path.join(buildPath, 'Lanvory.app', 'Contents', 'Resources', 'Notices');
       await cp(path.join(buildPath, 'LICENSE'), path.join(destination, 'Electron.txt'));
@@ -179,6 +188,7 @@ try {
     }],
     extendInfo: {
       NSLocalNetworkUsageDescription: 'Lanvory uses your local network to discover and connect to approved devices.',
+      NSBluetoothAlwaysUsageDescription: 'Lanvory uses Bluetooth and peer-to-peer Wi-Fi to discover nearby devices.',
       NSBonjourServices: ['_lanvory._tcp', '_lanvory._udp'],
     },
     osxSign: {
@@ -203,7 +213,7 @@ try {
   }
 
   const nativeComponents = [];
-  for (const binary of binaries) {
+  for (const binary of packagedBinaries) {
     const name = path.basename(binary);
     const embedded = path.join(application, 'Contents', 'Resources', name);
     await exec('/usr/bin/codesign', ['--verify', '--strict', embedded]);

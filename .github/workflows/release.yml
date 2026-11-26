@@ -1,0 +1,127 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  linux-core:
+    name: Linux Core Check
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: core/go.mod
+          cache: false
+      - name: Install native test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libsqlite3-dev libsecret-1-dev
+      - name: Check Go formatting
+        run: |
+          result=$(gofmt -l core)
+          if [ -n "$result" ]; then
+            printf '%s\n' "$result"
+            exit 1
+          fi
+      - name: Run core tests
+        working-directory: core
+        run: |
+          go vet ./...
+          go test -race ./...
+
+  release-macos:
+    name: Build macOS (${{ matrix.arch }})
+    needs: linux-core
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            arch: arm64
+          - runner: macos-15-intel
+            arch: x64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: core/go.mod
+          cache: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - uses: pnpm/action-setup@v6
+      - name: Verify tag matches desktop version
+        if: github.ref_type == 'tag'
+        run: |
+          pkg_ver=$(node -p "require('./apps/desktop/package.json').version")
+          if [ "${GITHUB_REF_NAME}" != "v${pkg_ver}" ]; then
+            echo "Tag ${GITHUB_REF_NAME} does not match apps/desktop/package.json version v${pkg_ver}" >&2
+            exit 1
+          fi
+      - run: pnpm install --frozen-lockfile
+      - name: Check Go formatting
+        run: |
+          result=$(gofmt -l core)
+          if [ -n "$result" ]; then
+            printf '%s\n' "$result"
+            exit 1
+          fi
+      - name: Verify source and build macOS disk image
+        run: make verify dmg-macos
+      - name: Check mounted disk image and SBOM
+        env:
+          EXPECTED_ARCH: ${{ matrix.arch }}
+        run: |
+          set -- dist/macos/*/Lanvory-*-"$EXPECTED_ARCH".dmg
+          test "$#" -eq 1
+          test -f "$1"
+          sh scripts/smoke-macos-dmg.sh --verify-only "$1"
+      - name: Stage release artifacts
+        env:
+          EXPECTED_ARCH: ${{ matrix.arch }}
+        run: |
+          mkdir -p release-assets
+          cp dist/macos/*/Lanvory-*-"$EXPECTED_ARCH".dmg release-assets/
+          cp dist/macos/*/Lanvory-*-"$EXPECTED_ARCH".dmg.sha256 release-assets/
+          cp dist/macos/*/Lanvory-*-"$EXPECTED_ARCH".cdx.json release-assets/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lanvory-macos-${{ matrix.arch }}
+          path: release-assets/*
+          if-no-files-found: error
+
+  publish-release:
+    name: Publish GitHub Release
+    needs: [linux-core, release-macos]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: lanvory-macos-*
+          path: release-assets
+          merge-multiple: true
+      - name: Generate combined SHA256SUMS.txt
+        working-directory: release-assets
+        run: |
+          cat *.dmg.sha256 > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Lanvory ${{ github.ref_name }}
+          generate_release_notes: true
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          files: release-assets/*
