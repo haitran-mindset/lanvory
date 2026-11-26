@@ -55,6 +55,13 @@ type plainConn struct {
 	net.Conn
 }
 
+func (c plainConn) Close() error {
+	if cw, ok := c.Conn.(interface{ CloseWrite() error }); ok {
+		_ = cw.CloseWrite()
+	}
+	return c.Conn.Close()
+}
+
 func newSingleConnListener(conn net.Conn) *singleConnListener {
 	return &singleConnListener{
 		conn:   plainConn{Conn: conn},
@@ -178,7 +185,13 @@ func serveMountConn(
 		Handler:           handler,
 		ReadHeaderTimeout: 10 * time.Second,
 		BaseContext:       func(net.Listener) context.Context { return ctx },
+		ConnState: func(_ net.Conn, state http.ConnState) {
+			if state == http.StateClosed {
+				_ = ln.Close()
+			}
+		},
 	}
+	srv.SetKeepAlivesEnabled(false)
 	go func() {
 		<-ctx.Done()
 		_ = srv.Close()
@@ -215,7 +228,11 @@ func discoverResources(
 ) ([]mount.ResourceDescriptor, error) {
 	tr := &http.Transport{
 		DialContext: func(dialCtx context.Context, _, _ string) (net.Conn, error) {
-			return dial(dialCtx)
+			c, err := dial(dialCtx)
+			if err != nil {
+				return nil, err
+			}
+			return plainConn{Conn: c}, nil
 		},
 		DisableKeepAlives: true,
 	}
@@ -358,10 +375,13 @@ func startMountSession(
 	sessionCtx, cancel := context.WithCancel(ctx)
 	tr := &http.Transport{
 		DialContext: func(dialCtx context.Context, _, _ string) (net.Conn, error) {
-			return dial(dialCtx)
+			c, err := dial(dialCtx)
+			if err != nil {
+				return nil, err
+			}
+			return plainConn{Conn: c}, nil
 		},
-		MaxIdleConns:       8,
-		IdleConnTimeout:    30 * time.Second,
+		DisableKeepAlives:  true,
 		DisableCompression: true,
 	}
 

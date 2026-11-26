@@ -13,6 +13,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/quic-go/quic-go"
 
 	"lanvory.local/core/internal/mount"
 )
@@ -163,5 +166,102 @@ func TestMountSessionRangeAndWriteOverMTLS(t *testing.T) {
 	}
 	if string(got) != "edited remotely" {
 		t.Fatalf("unexpected written file %q", string(got))
+	}
+}
+
+func TestDiscoverAndReadMountOverQUIC(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	hostPublic, hostKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	clientPublic, clientKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hostPin := Fingerprint(sha256.Sum256(hostPublic))
+	clientPin := Fingerprint(sha256.Sum256(clientPublic))
+
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "hello.txt"), []byte("hello over quic"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	reg := mount.NewRegistry()
+	if _, err := reg.Add("docs", root, false); err != nil {
+		t.Fatal(err)
+	}
+
+	trusted := func(pin string) (bool, error) { return pin == clientPin.String(), nil }
+	mountAllowed := func(pin, id string) bool { return pin == clientPin.String() && id == "docs" }
+
+	identity, err := identityTLS(hostKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	serverSock := testQUICSocket(t)
+	clientSock := testQUICSocket(t)
+	serverAddr := serverSock.LocalAddr().(*net.UDPAddr).AddrPort()
+
+	serverTr := &quic.Transport{Conn: serverSock, VerifySourceAddress: func(net.Addr) bool { return true }}
+	defer serverTr.Close()
+	ln, err := serverTr.Listen(trustedProtocolsTLS(identity, []string{mount.Protocol}, trusted), quicConfig(true))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+
+	go func() {
+		conn, err := ln.Accept(ctx)
+		if err != nil {
+			return
+		}
+		defer conn.CloseWithError(0, "done")
+		serveQUICStreamsWithMount(ctx, conn, trusted, func() bool { return true }, nil, nil, reg, mountAllowed)
+	}()
+
+	clientTLS, err := clientIdentity(hostPin, clientKey, mount.Protocol)
+	if err != nil {
+		t.Fatal(err)
+	}
+	clientTr := &quic.Transport{Conn: clientSock}
+	defer clientTr.Close()
+	qconn, err := clientTr.Dial(ctx, &net.UDPAddr{IP: serverAddr.Addr().AsSlice(), Port: int(serverAddr.Port())}, clientTLS, quicConfig(false))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer qconn.CloseWithError(0, "done")
+
+	dialFn := func(dialCtx context.Context) (net.Conn, error) {
+		stream, err := qconn.OpenStreamSync(dialCtx)
+		if err != nil {
+			return nil, err
+		}
+		return &quicStreamConn{Stream: stream, connection: qconn}, nil
+	}
+
+	discovered, err := discoverResources(ctx, dialFn)
+	if err != nil {
+		t.Fatalf("discoverResources over QUIC failed: %v", err)
+	}
+	if len(discovered) != 1 || discovered[0].ID != "docs" {
+		t.Fatalf("unexpected discovered resources over QUIC: %+v", discovered)
+	}
+
+	session, err := startMountSession(ctx, "docs", "127.0.0.1:0", dialFn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer session.Close()
+
+	resp, err := http.Get(session.URL + "hello.txt")
+	if err != nil {
+		t.Fatalf("GET over QUIC mount failed: %v", err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK || string(body) != "hello over quic" {
+		t.Fatalf("unexpected QUIC mount response status=%d body=%q", resp.StatusCode, string(body))
 	}
 }
