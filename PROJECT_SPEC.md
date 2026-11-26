@@ -3,7 +3,7 @@
 
 ## 01. ROLE
 
-Bạn hãy đóng vai một đội ngũ phát triển phần mềm cao cấp bao gồm:
+Act as a senior software engineering team consisting of:
 
 - Principal Software Architect.
 - Senior Network Engineer.
@@ -17,27 +17,27 @@ Bạn hãy đóng vai một đội ngũ phát triển phần mềm cao cấp bao
 - QA Automation Engineer.
 - DevOps Engineer.
 
-Bạn có trách nhiệm nghiên cứu, thiết kế, triển khai, kiểm thử, tối ưu, bảo mật và hoàn thiện toàn bộ dự án Lanvory.
+You are responsible for researching, designing, implementing, testing, optimizing, securing, and completing the entire Lanvory project.
 
-Bạn là Autonomous Coding Agent, không chỉ là trợ lý tư vấn.
+You are an Autonomous Coding Agent, not just an advisory assistant.
 
-Phải trực tiếp:
+You must directly:
 
-- Phân tích repository.
-- Tạo và chỉnh sửa source code.
-- Cài đặt dependency cần thiết.
-- Thực thi terminal commands.
-- Thiết kế kiến trúc.
-- Triển khai functionality.
-- Xây dựng giao diện.
-- Viết automated tests.
-- Chạy tests và build.
-- Phân tích và sửa lỗi.
-- Kiểm tra security.
-- Viết documentation.
-- Hoàn thiện quy trình release.
+- Analyze the repository.
+- Create and edit source code.
+- Install required dependencies.
+- Execute terminal commands.
+- Design architecture.
+- Implement functionality.
+- Build the user interface.
+- Write automated tests.
+- Run tests and builds.
+- Analyze and fix bugs.
+- Perform security checks.
+- Write documentation.
+- Complete the release workflow.
 
-Không dừng lại ở architecture proposal, pseudocode, project scaffolding hoặc UI prototype.
+Do not stop at architecture proposals, pseudocode, project scaffolding, or UI prototypes.
 
 ---
 
@@ -81,19 +81,19 @@ Lanvory is a decentralized, privacy-first desktop networking platform that enabl
 - Transparent networking.
 - Native desktop experience.
 
-Lanvory không phải VPN, không phải Cloud Storage, không phải Tailscale clone và không phải ứng dụng quản lý mạng thông qua server trung tâm.
+Lanvory is not a VPN, not Cloud Storage, not a Tailscale clone, and not a network management app using a central server.
 
-Lanvory là một nền tảng kết nối và chia sẻ tài nguyên giữa những thiết bị trong cùng mạng nội bộ.
+Lanvory is a platform for connecting and sharing resources between devices on the same local network.
 
 ---
 
 ## 03. NON-NEGOTIABLE REQUIREMENTS
 
-Đây là những ràng buộc kiến trúc bắt buộc.
+These are mandatory architectural constraints.
 
 ### No Cloud
 
-Không sử dụng:
+Do not use:
 
 - AWS.
 - Google Cloud.
@@ -107,11 +107,11 @@ Không sử dụng:
 - Remote analytics services.
 - Remote configuration services.
 
-Không được bổ sung Cloud dependency để đơn giản hóa implementation.
+Do not add Cloud dependencies to simplify implementation.
 
 ### No Central Server
 
-Không xây dựng:
+Do not build:
 
 - Control Plane Server.
 - Centralized Device Registry.
@@ -124,13 +124,13 @@ Không xây dựng:
 - Web Admin Dashboard.
 - Centralized Database.
 
-Mỗi thiết bị là một peer độc lập và có network listener để giao tiếp với các peer khác.
+Each device is an independent peer with its own network listener to communicate with other peers.
 
-Không được yêu cầu một thiết bị cố định luôn online để quản lý những thiết bị còn lại.
+Do not require a dedicated device to stay always online to manage other devices.
 
 ### No Account
 
-Không triển khai:
+Do not implement:
 
 - Sign up.
 - Sign in.
@@ -141,17 +141,17 @@ Không triển khai:
 - Password reset.
 - User account management.
 
-Danh tính được tạo và quản lý trực tiếp trên từng thiết bị.
+Identity is generated and managed directly on each device.
 
 ### LAN Only
 
-Chỉ hỗ trợ kết nối thông qua local network interface và những endpoint thuộc mạng nội bộ được phép.
+Only support connections through approved local network interfaces and local-network endpoints.
 
-Không triển khai:
+Do not implement:
 
 - Internet P2P.
 - NAT Traversal.
-- UDP Hole Punching xuyên Internet.
+- UDP Hole Punching across the Internet.
 - Public Relay.
 - Public Tunnel.
 - Public Port Forwarding.
@@ -160,24 +160,24 @@ Không triển khai:
 - Exit Node.
 - WireGuard Tunnel.
 
-Phải có network scope validation và không chỉ dựa vào việc địa chỉ IP thuộc private IP range để kết luận endpoint an toàn.
+Enforce network scope validation and do not rely solely on private IP ranges to conclude an endpoint is safe.
 
-Không tự động giao tiếp qua VPN interface, public interface hoặc những interface không được người dùng cho phép.
+Do not automatically communicate over VPN interfaces, public interfaces, or interfaces not approved by the user.
 
 ### No Internet Required
 
-Runtime functionality phải hoạt động khi:
+Runtime functionality must work when:
 
-- Router không có Internet.
-- Ethernet network không có Internet.
-- Local Wi-Fi không có Internet.
-- Mobile Hotspot cho phép peer communication.
+- The router has no Internet access.
+- The Ethernet network has no Internet access.
+- The local Wi-Fi has no Internet access.
+- A Mobile Hotspot allows peer communication.
 
-Việc tải dependency, phát triển phần mềm và phát hành bản cập nhật có thể cần Internet, nhưng không được biến Internet thành điều kiện bắt buộc để sử dụng ứng dụng.
+Fetching dependencies, developing software, and publishing updates may require Internet, but never make Internet a mandatory requirement to use the application.
 
 ### Local Data Ownership
 
-Mọi dữ liệu ứng dụng được lưu tại thiết bị.
+All application data is stored locally on the device.
 
 - Device identity.
 - Private keys.
@@ -189,17 +189,17 @@ Mọi dữ liệu ứng dụng được lưu tại thiết bị.
 - Permissions.
 - Activity logs.
 
-Không gửi dữ liệu tới external service.
+Do not send data to external services.
 
 ---
 
 ## 04. PRODUCT DIFFERENTIATION
 
-Lanvory có thể tham khảo ý tưởng từ LocalSend, Syncthing, KDE Connect và các Developer Tools, nhưng phải có product identity riêng.
+Lanvory may draw inspiration from LocalSend, Syncthing, KDE Connect, and Developer Tools, but must maintain its own product identity.
 
-Không xây dựng Lanvory chỉ như một File Transfer App.
+Do not build Lanvory merely as a File Transfer App.
 
-Lanvory phải kết hợp:
+Lanvory must combine:
 
 1. Local Device Discovery.
 2. Secure Peer-to-Peer Networking.
@@ -215,13 +215,13 @@ Lanvory phải kết hợp:
 13. Local Backup.
 14. Developer SDK.
 
-Giá trị khác biệt là cung cấp một desktop workspace thống nhất để quản lý và sử dụng tài nguyên giữa nhiều thiết bị trong cùng LAN.
+Its differentiating value is providing a unified desktop workspace to manage and use resources across multiple devices on the same LAN.
 
 ---
 
 ## 05. REFERENCE PROJECTS
 
-Nghiên cứu các repository và tài liệu chính thức:
+Study official repositories and documentation:
 
 - LocalSend: https://github.com/localsend/localsend
 - Syncthing: https://github.com/syncthing/syncthing
@@ -237,7 +237,7 @@ Nghiên cứu các repository và tài liệu chính thức:
 - xterm.js: https://github.com/xtermjs/xterm.js
 - shadcn/ui: https://github.com/shadcn-ui/ui
 
-Nghiên cứu thêm RFC liên quan đến:
+Study additional RFCs related to:
 
 - mDNS.
 - DNS-SD.
@@ -246,7 +246,7 @@ Nghiên cứu thêm RFC liên quan đến:
 - Ed25519.
 - Secure authentication.
 
-Đánh giá:
+Evaluate:
 
 - Architecture.
 - Protocol design.
@@ -256,9 +256,9 @@ Nghiên cứu thêm RFC liên quan đến:
 - License compatibility.
 - Cross-platform support.
 
-Không sao chép nguyên trạng source code hoặc UI của các sản phẩm tham khảo.
+Do not copy source code or UI verbatim from reference products.
 
-Kiểm tra license trước khi tái sử dụng implementation.
+Check licenses before reusing any implementation.
 
 ---
 
@@ -274,13 +274,13 @@ Kiểm tra license trước khi tái sử dụng implementation.
 - shadcn/ui primitives.
 - Radix UI.
 - Zustand.
-- TanStack Query khi phù hợp.
+- TanStack Query when appropriate.
 - Zod.
 - Lucide Icons.
 - React Hook Form.
 - Electron Builder.
 
-Không sử dụng Next.js cho desktop renderer nếu không có technical requirement rõ ràng.
+Do not use Next.js for the desktop renderer unless there is a clear technical requirement.
 
 ### Network Core
 
@@ -302,18 +302,18 @@ Không sử dụng Next.js cho desktop renderer nếu không có technical requi
 - OS secure storage.
 - Local filesystem.
 
-Ưu tiên SQLite driver phù hợp với cross-platform packaging và hạn chế native dependency không cần thiết.
+Prefer an SQLite driver suitable for cross-platform packaging and avoid unnecessary native dependencies.
 
 ### Secure Storage
 
 - macOS Keychain.
-- Windows Credential Manager hoặc DPAPI.
-- Linux Secret Service hoặc system-protected storage.
+- Windows Credential Manager or DPAPI.
+- Linux Secret Service or system-protected storage.
 
 ### Local IPC
 
-- Unix Domain Socket trên macOS/Linux.
-- Named Pipe trên Windows.
+- Unix Domain Socket on macOS/Linux.
+- Named Pipe on Windows.
 - Versioned typed protocol.
 - Request/response.
 - Event streaming.
@@ -321,9 +321,9 @@ Không sử dụng Next.js cho desktop renderer nếu không có technical requi
 ### Additional Components
 
 - fsnotify cho filesystem monitoring.
-- SHA-256 hoặc BLAKE3 cho file integrity.
-- React Flow cho network visualization khi cần.
-- QR Code generation và scanning khi phần cứng hỗ trợ.
+- SHA-256 or BLAKE3 for file integrity.
+- React Flow for network visualization when needed.
+- QR Code generation and scanning when hardware supports it.
 
 ### Development Tooling
 
@@ -341,19 +341,19 @@ Không sử dụng Next.js cho desktop renderer nếu không có technical requi
 - govulncheck.
 - GitHub Actions.
 
-Sử dụng dependency stable, được duy trì và tương thích.
+Use stable, maintained, and compatible dependencies.
 
-Không thêm framework chỉ vì phổ biến.
+Do not add frameworks merely because they are popular.
 
 ---
 
 ## 07. SYSTEM ARCHITECTURE
 
-Lanvory sử dụng Fully Decentralized Peer Architecture.
+Lanvory uses a Fully Decentralized Peer Architecture.
 
-Mỗi thiết bị chạy toàn bộ các thành phần cần thiết để discovery, pairing, truyền dữ liệu và quản lý local permissions.
+Each device runs all components required for discovery, pairing, data transfer, and local permission management.
 
-Không tồn tại coordinator trung tâm.
+There is no central coordinator.
 
 System topology:
 
@@ -375,7 +375,7 @@ No Central Server
 No Internet Required
 ```
 
-Các đường kết nối biểu diễn khả năng giao tiếp trực tiếp giữa peers, không yêu cầu duy trì kết nối full-mesh liên tục.
+Connection edges represent direct peer communication capabilities and do not require maintaining continuous full-mesh connections.
 
 ### Architecture Layers
 
@@ -414,7 +414,7 @@ Local Network
 
 - Separation of concerns.
 - Explicit dependencies.
-- Modular monolith tại từng thiết bị.
+- Modular monolith on each device.
 - Transport abstraction.
 - Platform abstraction.
 - Event-driven state updates.
@@ -422,13 +422,13 @@ Local Network
 - No centralized coordination.
 - No unnecessary microservices.
 
-Không triển khai Kubernetes, Redis, message broker hoặc distributed database.
+Do not deploy Kubernetes, Redis, message brokers, or distributed databases.
 
 ---
 
 ## 08. REPOSITORY STRUCTURE
 
-Sử dụng multi-language monorepo.
+Use a multi-language monorepo.
 
 ```text
 lanvory/
@@ -538,23 +538,23 @@ lanvory/
 └── .gitignore
 ```
 
-Đây là cấu trúc mục tiêu.
+This is the target structure.
 
-Chỉ tạo module khi có implementation thực tế. Không tạo hàng loạt empty folders, interfaces hoặc abstraction chưa cần sử dụng.
+Only create modules when actual implementations exist. Do not create batches of empty folders, interfaces, or unused abstractions.
 
 ---
 
 ## 09. NETWORK DAEMON
 
-Tên background process:
+Background process name:
 
 `lanvoryd`
 
-Daemon chịu trách nhiệm về networking, local storage, identity, security và background services.
+The daemon is responsible for networking, local storage, identity, security, and background services.
 
 ### Requirements
 
-- Hoạt động độc lập với renderer.
+- Operate independently from the renderer.
 - Background execution.
 - Network interface monitoring.
 - Device discovery.
@@ -573,9 +573,9 @@ Daemon chịu trách nhiệm về networking, local storage, identity, security 
 - Local IPC.
 - Resource cleanup.
 
-Ưu tiên chạy daemon dưới quyền người dùng thông thường.
+Prefer running the daemon under normal user privileges.
 
-Không yêu cầu administrator hoặc root cho functionality không cần quyền đặc biệt.
+Do not require administrator or root privileges for functionality that does not need elevated permissions.
 
 ### Lifecycle
 
@@ -592,11 +592,11 @@ ERROR
 
 ### Daemon Management
 
-Phải xử lý:
+Must handle:
 
-- Electron khởi động trước daemon.
-- Daemon khởi động trước Electron.
-- Daemon bị crash.
+- Electron starting before the daemon.
+- The daemon starting before Electron.
+- Daemon crash recovery.
 - Duplicate daemon process.
 - Application restart.
 - IPC disconnect.
@@ -604,15 +604,15 @@ Phải xử lý:
 - Computer sleep/wake.
 - Application shutdown.
 
-Phải ngăn nhiều daemon instance sử dụng chung database hoặc identity không an toàn.
+Prevent multiple daemon instances from sharing the same database or identity unsafely.
 
 ---
 
 ## 10. DEVICE IDENTITY
 
-Mỗi thiết bị tự tạo danh tính trong lần khởi động đầu tiên.
+Each device generates its own identity on first launch.
 
-Không yêu cầu user account.
+No user account is required.
 
 ### Device Identity Includes
 
@@ -626,47 +626,47 @@ Không yêu cầu user account.
 - Protocol version.
 - Created timestamp.
 
-Sử dụng Ed25519 cho long-term device identity.
+Use Ed25519 for long-term device identity.
 
-Device ID nên được dẫn xuất một cách xác định từ public key theo format đã được version hóa.
+Device ID should be deterministically derived from the public key in a versioned format.
 
-Không sử dụng MAC address, IP address hoặc hardware serial number làm security identity.
+Do not use MAC address, IP address, or hardware serial number as a security identity.
 
 ### Private Keys
 
-- Được tạo tại local.
-- Sử dụng cryptographically secure random generator.
-- Không được export mặc định.
-- Không truyền tới peer.
-- Không xuất hiện trong log.
-- Không xuất hiện trong renderer.
-- Không lưu plaintext trong SQLite.
+- Generated locally.
+- Uses a cryptographically secure random generator.
+- Not exported by default.
+- Not transmitted to peers.
+- Never appears in logs.
+- Never appears in the renderer.
+- Never stored as plaintext in SQLite.
 
-Identity phải được bảo vệ tại OS secure storage phù hợp.
+Identity must be protected by appropriate OS secure storage.
 
-Nếu secure storage không khả dụng, phải có cơ chế fallback được thiết kế, giải thích và kiểm thử rõ ràng; không âm thầm giảm mức bảo mật.
+If secure storage is unavailable, a fallback mechanism must be explicitly designed, explained, and tested; never silently downgrade security.
 
-Device identity phải giữ ổn định khi IP hoặc hostname thay đổi.
+Device identity must remain stable when IP or hostname changes.
 
-Identity reset phải có explicit user confirmation.
+Identity reset must require explicit user confirmation.
 
 ---
 
 ## 11. LOCAL DEVICE DISCOVERY
 
-Sử dụng mDNS và DNS-SD làm discovery mechanism chính.
+Use mDNS and DNS-SD as the primary discovery mechanism.
 
 Service type:
 
 `_lanvory._udp.local.`
 
-Nếu sử dụng TCP fallback, có thể đăng ký service type tương ứng:
+When using TCP fallback, register the corresponding service type:
 
 `_lanvory._tcp.local.`
 
 ### Announcement Metadata
 
-Ví dụ:
+For example:
 
 ```json
 {
@@ -677,11 +677,11 @@ Ví dụ:
 }
 ```
 
-Chỉ công bố metadata tối thiểu cần thiết.
+Publish only the minimum metadata required.
 
-Không đưa secret, token, file path, permissions hoặc thông tin nhạy cảm vào mDNS TXT records.
+Do not include secrets, tokens, file paths, permissions, or sensitive information in mDNS TXT records.
 
-Hostname và device display name phải có privacy settings phù hợp.
+Hostname and device display name must have appropriate privacy settings.
 
 ### Discovery Features
 
@@ -694,19 +694,19 @@ Hostname và device display name phải có privacy settings phù hợp.
 - Device timeout.
 - Network interface filtering.
 - IPv4 support.
-- IPv6 local connectivity khi phù hợp.
+- IPv6 local connectivity when appropriate.
 - Multiple interface handling.
 - Manual endpoint discovery.
 - Discovery retry.
 - Refresh discovery.
 
-Discovery không đồng nghĩa với authentication.
+Discovery does not equal authentication.
 
-Mọi discovered peer đều là untrusted cho đến khi pairing thành công.
+Every discovered peer is untrusted until pairing succeeds.
 
 ### Network Changes
 
-Phải xử lý:
+Must handle:
 
 - Wi-Fi switching.
 - Ethernet connection.
@@ -719,17 +719,17 @@ Phải xử lý:
 
 ### Discovery Fallback
 
-Nếu mDNS bị chặn nhưng hai thiết bị vẫn có thể kết nối trực tiếp, hỗ trợ manual pairing bằng local IP và port.
+If mDNS is blocked while two devices can still connect directly, support manual pairing using local IP and port.
 
-Không triển khai aggressive subnet scanning mặc định.
+Do not perform aggressive subnet scanning by default.
 
-Không bypass client isolation hoặc network security policies.
+Do not bypass client isolation or network security policies.
 
 ---
 
 ## 12. SECURE DEVICE PAIRING
 
-Không tự động trust thiết bị chỉ vì chúng xuất hiện trong cùng mạng LAN.
+Do not automatically trust devices merely because they appear on the same LAN.
 
 ### Pairing Methods
 
@@ -740,24 +740,24 @@ Không tự động trust thiết bị chỉ vì chúng xuất hiện trong cùn
 
 ### Pairing Flow
 
-1. Device A phát hiện Device B.
-2. User chọn Pair Device.
-3. Device A gửi pairing request.
-4. Device B hiển thị incoming request.
-5. Hai thiết bị thực hiện secure handshake.
-6. Hai bên xác minh identity thông qua fingerprint hoặc short authentication string.
-7. Người dùng xác nhận thông tin trùng khớp.
-8. Hai bên lưu trusted public key.
-9. Thiết lập authenticated secure session.
-10. Áp dụng default permissions.
+1. Device A discovers Device B.
+2. User selects Pair Device.
+3. Device A sends a pairing request.
+4. Device B displays the incoming request.
+5. Both devices perform a secure handshake.
+6. Both sides verify identity via fingerprint or short authentication string.
+7. Users confirm the information matches.
+8. Both sides save the trusted public key.
+9. Establish an authenticated secure session.
+10. Apply default permissions.
 
-Giá trị verification code phải được ràng buộc với cryptographic handshake transcript và danh tính của hai thiết bị.
+The verification code must be bound to the cryptographic handshake transcript and the identities of both devices.
 
-Không truyền một mã PIN qua kết nối chưa được xác thực rồi coi đây là cơ chế chống MITM.
+Do not transmit a PIN over an unauthenticated connection and treat it as MITM protection.
 
-Nếu triển khai pairing dùng secret có entropy thấp, nghiên cứu PAKE hoặc protocol pairing đã được kiểm chứng.
+If implementing pairing with a low-entropy secret, use PAKE or a proven pairing protocol.
 
-QR Code có thể chứa public key fingerprint, endpoint và pairing challenge có thời hạn.
+A QR Code may contain a public key fingerprint, endpoint, and time-limited pairing challenge.
 
 ### Requirements
 
@@ -775,15 +775,15 @@ QR Code có thể chứa public key fingerprint, endpoint và pairing challenge 
 - Re-pairing.
 - Key-change detection.
 
-Khi public key của trusted device thay đổi, không tự động chấp nhận key mới.
+When a trusted device's public key changes, do not automatically accept the new key.
 
-Phải yêu cầu người dùng xác minh và pairing lại hoặc sử dụng cơ chế key rotation đã được xác thực.
+Require the user to re-verify and re-pair, or use an authenticated key rotation mechanism.
 
 ---
 
 ## 13. SECURE P2P TRANSPORT
 
-Sử dụng QUIC làm preferred peer transport.
+Use QUIC as the preferred peer transport.
 
 Implementation:
 
@@ -794,9 +794,9 @@ Implementation:
 - ALPN protocol negotiation.
 - Multiplexed streams.
 
-Sử dụng TCP với TLS làm fallback nếu UDP không khả dụng.
+Use TCP with TLS as a fallback if UDP is unavailable.
 
-Fallback chỉ được thực hiện trong local network và phải duy trì cùng security guarantees.
+Fallback must only occur within the local network and must preserve the same security guarantees.
 
 ### Transport Responsibilities
 
@@ -816,36 +816,36 @@ Fallback chỉ được thực hiện trong local network và phải duy trì c�
 - Graceful shutdown.
 - Cancellation.
 
-Sử dụng TLS certificates được liên kết đúng với device identity và xác minh trust bằng key đã được pairing.
+Use TLS certificates properly bound to device identity and verify trust using the paired key.
 
-Không sử dụng `InsecureSkipVerify` để bỏ qua authentication trừ khi có custom verification đầy đủ và được security review.
+Do not use `InsecureSkipVerify` to bypass authentication unless full custom verification is implemented and security-reviewed.
 
-Không tự thiết kế encryption algorithm.
+Do not invent custom encryption algorithms.
 
-Không sử dụng encryption keys cố định hoặc hardcoded secrets.
+Do not use fixed encryption keys or hardcoded secrets.
 
-Vô hiệu hóa 0-RTT đối với các thao tác có khả năng bị replay nếu chưa có replay protection phù hợp.
+Disable 0-RTT for replayable operations unless proper replay protection is in place.
 
 ### Transport Abstraction
 
-Application modules không phụ thuộc trực tiếp vào QUIC implementation.
+Application modules must not depend directly on the QUIC implementation.
 
-Tạo transport abstraction đủ để hỗ trợ:
+Create a transport abstraction sufficient to support:
 
 - QUIC.
 - TCP/TLS.
 - Test transport.
 - Future local transport.
 
-Không bắt buộc duy trì connection với toàn bộ peers cùng lúc.
+Maintaining simultaneous connections to all peers is not required.
 
-Có thể sử dụng on-demand connection và idle timeout.
+On-demand connections and idle timeouts may be used.
 
 ---
 
 ## 14. PEER PROTOCOL
 
-Thiết kế versioned application protocol.
+Design a versioned application protocol.
 
 ### Protocol Envelope
 
@@ -858,7 +858,7 @@ Thiết kế versioned application protocol.
 }
 ```
 
-Danh tính người gửi phải được lấy từ authenticated transport session, không tin tưởng `senderId` tùy ý do client gửi trong payload.
+Sender identity must be derived from the authenticated transport session; never trust an arbitrary `senderId` sent by a client in the payload.
 
 ### Protocol Features
 
@@ -913,21 +913,21 @@ message.send
 message.ack
 ```
 
-Sử dụng protocol framing phù hợp cho binary stream.
+Use appropriate protocol framing for binary streams.
 
-Không bắt buộc sử dụng JSON cho dữ liệu file hoặc mọi network packet.
+JSON is not required for file data or all network packets.
 
-Large binary payload phải được stream thay vì encode toàn bộ thành Base64.
+Large binary payloads must be streamed rather than Base64-encoded in full.
 
-Tạo protocol documentation và compatibility tests.
+Write protocol documentation and compatibility tests.
 
 ---
 
 ## 15. TRUST MODEL & PERMISSIONS
 
-Lanvory sử dụng per-device trust model.
+Lanvory uses a per-device trust model.
 
-Trusted peers không mặc định được cấp mọi quyền truy cập.
+Trusted peers are not granted all access permissions by default.
 
 ### Trust States
 
@@ -938,7 +938,7 @@ Trusted peers không mặc định được cấp mọi quyền truy cập.
 - Blocked.
 - Revoked.
 
-Online/offline là presence state, không phải trust state.
+Online/offline is a presence state, not a trust state.
 
 ### Permission Categories
 
@@ -965,21 +965,21 @@ Online/offline là presence state, không phải trust state.
 - Audit events.
 - Active session cancellation.
 
-Mỗi thiết bị phải tự enforce quyền truy cập đối với tài nguyên của chính mình.
+Each device must enforce access permissions for its own resources.
 
-Không tồn tại global admin role hoặc centralized ACL.
+There is no global admin role or centralized ACL.
 
-Trust giữa A và B không đồng nghĩa B có thể đại diện A để trust C.
+Trust between A and B does not mean B can vouch for A to trust C.
 
-Không tự động propagate trust xuyên thiết bị.
+Do not automatically propagate trust across devices.
 
-Trusted device bị revoke phải bị ngắt active session liên quan và không được tiếp tục truy cập resource nếu không pairing lại.
+A revoked trusted device must have related active sessions terminated and must not retain resource access without re-pairing.
 
 ---
 
 ## 16. LOCAL DATABASE
 
-Sử dụng SQLite.
+Use SQLite.
 
 ### Database Entities
 
@@ -1007,7 +1007,7 @@ Sử dụng SQLite.
 - ApplicationSettings.
 - SchemaMigrations.
 
-Chỉ tạo bảng khi feature tương ứng thực sự cần.
+Only create tables when the corresponding feature actually needs them.
 
 ### Database Requirements
 
@@ -1023,14 +1023,14 @@ Chỉ tạo bảng khi feature tương ứng thực sự cần.
 - Backup and restore.
 - Safe schema upgrades.
 
-Không lưu:
+Do not store:
 
 - Raw private keys.
 - Plaintext authentication secrets.
-- Sensitive clipboard history mặc định.
-- File content không cần thiết.
+- Sensitive clipboard history by default.
+- Unnecessary file contents.
 
-Không bắt buộc encryption toàn bộ SQLite nếu OS-level protection và threat model không yêu cầu, nhưng sensitive data phải được bảo vệ phù hợp.
+Full SQLite encryption is not mandatory if OS-level protection and the threat model do not require it, but sensitive data must be protected appropriately.
 
 ---
 
@@ -1038,7 +1038,7 @@ Không bắt buộc encryption toàn bộ SQLite nếu OS-level protection và t
 
 ### Devices Screen
 
-Hiển thị:
+Display:
 
 - Device name.
 - Device type.
@@ -1052,7 +1052,7 @@ Hiển thị:
 - Application version.
 - Supported capabilities.
 - Connection transport.
-- Measured latency nếu có.
+- Measured latency when available.
 
 ### Device Actions
 
@@ -1081,9 +1081,9 @@ Hiển thị:
 - Shared resources.
 - Recent activity.
 
-Không hiển thị fake latency hoặc fake online status.
+Do not display fake latency or fake online status.
 
-Phân biệt:
+Distinguish between:
 
 - Discovered.
 - Reachable.
@@ -1095,7 +1095,7 @@ Phân biệt:
 
 ## 18. FILE TRANSFER — LANVORY DROP
 
-Xây dựng secure peer-to-peer file transfer.
+Build secure peer-to-peer file transfer.
 
 ### Features
 
@@ -1105,13 +1105,13 @@ Xây dựng secure peer-to-peer file transfer.
 - Drag and drop.
 - Incoming transfer confirmation.
 - Transfer queue.
-- Parallel transfers có giới hạn.
+- Bounded parallel transfers.
 - Progress.
 - Speed.
 - Estimated remaining time.
 - Cancel.
 - Retry.
-- Pause/resume khi protocol hỗ trợ.
+- Pause/resume when supported by the protocol.
 - Transfer history.
 - Destination selection.
 - Open received folder.
@@ -1119,16 +1119,16 @@ Xây dựng secure peer-to-peer file transfer.
 
 ### Transfer Flow
 
-1. Sender chọn file.
-2. Sender chọn trusted peer.
-3. Sender tạo transfer manifest.
-4. Receiver nhận transfer offer.
-5. Receiver xác nhận hoặc từ chối.
-6. Kiểm tra disk availability và permission.
+1. Sender selects file.
+2. Sender selects trusted peer.
+3. Sender creates transfer manifest.
+4. Receiver receives transfer offer.
+5. Receiver approves or declines.
+6. Check disk availability and permissions.
 7. Stream file chunks.
-8. Kiểm tra integrity.
-9. Hoàn tất file tại destination.
-10. Ghi nhận kết quả.
+8. Verify integrity.
+9. Finalize file at destination.
+10. Record result.
 
 ### Security Requirements
 
@@ -1145,30 +1145,30 @@ Xây dựng secure peer-to-peer file transfer.
 - Safe temporary files.
 - Disk-space checks.
 - File overwrite confirmation.
-- Archive-bomb protection nếu hỗ trợ archive.
+- Archive-bomb protection if archives are supported.
 - Integrity verification.
 
-Không tự động thực thi file đã nhận.
+Do not automatically execute received files.
 
-Không tự động ghi file vào arbitrary filesystem location.
+Do not automatically write files to arbitrary filesystem locations.
 
-Sử dụng temporary file và atomic completion khi filesystem hỗ trợ.
+Use temporary files and atomic completion when supported by the filesystem.
 
 ### Resume Protocol
 
-Hỗ trợ resume bằng transfer ID và verified chunk information.
+Support resume via transfer ID and verified chunk information.
 
-Phải xác minh source file không bị thay đổi trước khi tiếp tục transfer.
+Verify the source file has not changed before resuming a transfer.
 
-Không buộc đọc toàn bộ file vào memory.
+Do not require reading the entire file into memory.
 
-Kiểm thử file kích thước lớn, interruption và network reconnect.
+Test large files, interruptions, and network reconnects.
 
 ---
 
 ## 19. FOLDER SYNCHRONIZATION — LANVORY SYNC
 
-Xây dựng decentralized folder synchronization.
+Build decentralized folder synchronization.
 
 ### Sync Modes
 
@@ -1188,8 +1188,8 @@ Xây dựng decentralized folder synchronization.
 - File metadata.
 - Content hashing.
 - Incremental transfer.
-- Chunk-based synchronization khi phù hợp.
-- Rename detection khi khả thi.
+- Chunk-based synchronization when appropriate.
+- Rename detection when feasible.
 - Conflict detection.
 - Conflict copies.
 - Deletion handling.
@@ -1201,49 +1201,49 @@ Xây dựng decentralized folder synchronization.
 - Retry.
 - Rescan.
 
-Không sử dụng modification timestamp như nguồn sự thật duy nhất.
+Do not rely on modification timestamps as the sole source of truth.
 
-Phải thiết kế version vectors hoặc cơ chế version tracking phù hợp để phát hiện concurrent changes.
+Design version vectors or an appropriate version-tracking mechanism to detect concurrent changes.
 
-Không áp dụng CRDT một cách tùy tiện cho arbitrary binary files.
+Do not blindly apply CRDTs to arbitrary binary files.
 
 ### Conflict Handling
 
-Ví dụ:
+For example:
 
 ```text
 document.md
 document.conflict-macbook-20261120.md
 ```
 
-Không tự động ghi đè thay đổi của người dùng khi có concurrent modifications.
+Do not silently overwrite user changes on concurrent modifications.
 
-Phải hiển thị conflict rõ ràng và hỗ trợ resolution.
+Clearly surface conflicts and support resolution.
 
 ### Deletion Safety
 
 - Explicit deletion policy.
 - Tombstones.
-- Version history hoặc trash strategy.
+- Version history or trash strategy.
 - Mass-deletion warning.
 - Protection against accidental destructive sync.
 
-Không tự động đồng bộ mọi folder trên máy.
+Do not automatically sync every folder on the machine.
 
-Chỉ đồng bộ folder được user chọn và peer được cấp quyền.
+Only sync user-selected folders with authorized peers.
 
 ---
 
 ## 20. SHARED CLIPBOARD
 
-Cho phép chia sẻ clipboard giữa trusted devices.
+Allow clipboard sharing between trusted devices.
 
 ### Supported Data
 
 - Plain text.
 - URLs.
 - Images theo roadmap.
-- Files hoặc rich content sau khi có thiết kế security phù hợp.
+- Files or rich content after appropriate security design.
 
 ### Requirements
 
@@ -1259,25 +1259,25 @@ Cho phép chia sẻ clipboard giữa trusted devices.
 - Explicit permission.
 - Pause synchronization.
 
-Không tự động broadcast clipboard đến tất cả peers.
+Do not automatically broadcast clipboard contents to all peers.
 
-Không tự động paste hoặc thực thi clipboard contents từ remote peer.
+Do not automatically paste or execute clipboard contents from a remote peer.
 
-Phải có cơ chế tránh vòng lặp:
+Implement loop prevention:
 
 Device A updates B → B updates A → repeated synchronization.
 
-Không tuyên bố có thể phát hiện chính xác mọi password hoặc secret trong clipboard.
+Do not claim to accurately detect every password or secret in the clipboard.
 
-Cho phép người dùng giới hạn loại dữ liệu và tắt tính năng khi cần.
+Allow users to restrict data types and disable the feature when needed.
 
 ---
 
 ## 21. LOCAL SERVICE SHARING — LANVORY BRIDGE
 
-Cho phép người dùng chia sẻ local services với trusted devices.
+Allow users to share local services with trusted devices.
 
-Ví dụ:
+For example:
 
 - Next.js development server.
 - React development server.
@@ -1296,7 +1296,7 @@ Next.js application
 127.0.0.1:3000
 ```
 
-Machine B truy cập thông qua local endpoint:
+Machine B accesses it via a local endpoint:
 
 ```text
 127.0.0.1:13000
@@ -1317,7 +1317,7 @@ Machine A
 127.0.0.1:3000
 ```
 
-Không yêu cầu ứng dụng Next.js thay đổi binding sang `0.0.0.0`.
+Do not require the Next.js application to change its binding to `0.0.0.0`.
 
 ### Service Configuration
 
@@ -1334,27 +1334,27 @@ Không yêu cầu ứng dụng Next.js thay đổi binding sang `0.0.0.0`.
 
 ### Security
 
-Không publish arbitrary ports tự động.
+Do not publish arbitrary ports automatically.
 
-Chỉ những service được người dùng tạo rõ ràng mới được truy cập.
+Only explicitly user-created services are accessible.
 
-Remote peer không được cung cấp arbitrary destination address để biến Lanvory thành general-purpose proxy.
+Remote peers must not supply arbitrary destination addresses to turn Lanvory into a general-purpose proxy.
 
-Không hỗ trợ unrestricted remote network scanning hoặc internal network pivoting.
+Do not support unrestricted remote network scanning or internal network pivoting.
 
-Service forwarding phải được giới hạn tới resource đã đăng ký.
+Service forwarding must be restricted to registered resources.
 
-Không cho phép truy cập Cloud metadata endpoint hoặc địa chỉ ngoài phạm vi đã được xác định.
+Do not allow access to Cloud metadata endpoints or addresses outside the defined scope.
 
-Local proxy trên receiving device phải bind loopback mặc định.
+The local proxy on the receiving device must bind to loopback by default.
 
-Không bypass authentication của underlying services.
+Do not bypass authentication of underlying services.
 
 ---
 
 ## 22. LOCAL TUNNEL
 
-Xây dựng TCP stream forwarding qua authenticated peer connection.
+Build TCP stream forwarding over authenticated peer connections.
 
 ### Requirements
 
@@ -1386,19 +1386,19 @@ Remote Lanvory Peer
 Approved Local Service
 ```
 
-QUIC encryption chỉ bảo vệ đoạn truyền giữa các Lanvory peers.
+QUIC encryption only protects the segment between Lanvory peers.
 
-Phải mô tả rõ trust boundary giữa local application, tunnel endpoints và target service.
+Clearly document the trust boundary between the local application, tunnel endpoints, and target service.
 
-Không tuyên bố Lanvory là system-wide VPN.
+Do not claim Lanvory is a system-wide VPN.
 
-Không sử dụng TUN/TAP interface nếu không có requirement mới được người dùng phê duyệt.
+Do not use TUN/TAP interfaces without an explicit new requirement approved by the user.
 
 ---
 
 ## 24. LOCAL MESSAGING
 
-Xây dựng lightweight local messaging.
+Build lightweight local messaging.
 
 ### Features
 
@@ -1410,24 +1410,24 @@ Xây dựng lightweight local messaging.
 - Local message history.
 - Offline message queue.
 - Retry.
-- Message deletion tại local.
+- Local message deletion.
 - Conversation permission.
 
-Message delivery chỉ diễn ra khi hai peer có thể kết nối.
+Message delivery only occurs when both peers can connect.
 
-Không triển khai cloud store-and-forward.
+Do not implement cloud store-and-forward.
 
-Không giả định có thể xóa tin nhắn đã lưu trên thiết bị khác.
+Do not assume messages saved on another device can be deleted.
 
-Message payload phải đi qua authenticated encrypted transport.
+Message payloads must travel over authenticated encrypted transport.
 
-Đây là tính năng roadmap, không được làm chậm networking foundation.
+This is a roadmap feature and must not delay the networking foundation.
 
 ---
 
 ## 25. NETWORK EXPLORER
 
-Xây dựng network visualization riêng cho Lanvory.
+Build a dedicated network visualization for Lanvory.
 
 ### Requirements
 
@@ -1442,19 +1442,19 @@ Xây dựng network visualization riêng cho Lanvory.
 - Measured latency.
 - Network interface information.
 
-Visualization chỉ phản ánh thông tin thực tế mà local node biết.
+Visualization must only reflect actual information known to the local node.
 
-Không suy diễn topology vật lý của router hoặc kết nối giữa hai remote peers khi không có dữ liệu.
+Do not infer physical router topology or connections between two remote peers without data.
 
-Không sử dụng fake graph edges.
+Do not use fake graph edges.
 
-Network graph phải phục vụ việc hiểu trạng thái kết nối, không chỉ là decorative animation.
+The network graph must serve connection understanding, not decorative animation.
 
 ---
 
 ## 26. NETWORK DIAGNOSTICS
 
-Xây dựng diagnostics tools.
+Build diagnostics tools.
 
 ### Information
 
@@ -1473,7 +1473,7 @@ Xây dựng diagnostics tools.
 - Bytes received.
 - Active streams.
 - Transfer throughput.
-- Firewall-related errors nếu xác định được.
+- Firewall-related errors when identifiable.
 
 ### Diagnostic Actions
 
@@ -1486,17 +1486,17 @@ Xây dựng diagnostics tools.
 - Restart networking.
 - Reset discovery.
 
-Không fabricate networking metrics.
+Do not fabricate networking metrics.
 
-Không tự động quét toàn bộ LAN.
+Do not automatically scan the entire LAN.
 
-Không tự động thay đổi firewall configuration.
+Do not automatically modify firewall configuration.
 
 ---
 
 ## 27. LOCAL AUTOMATION
 
-Thiết kế rule-based automation engine chạy tại local.
+Design a local rule-based automation engine.
 
 ### Trigger Examples
 
@@ -1519,25 +1519,25 @@ Thiết kế rule-based automation engine chạy tại local.
 
 ### Example
 
-Khi MacBook vào mạng LAN tại nhà:
+When MacBook joins the home LAN:
 
-- Phát hiện Mac Mini.
-- Kiểm tra trusted identity.
-- Khởi động folder synchronization đã được cấu hình.
-- Hiển thị progress.
-- Thông báo khi hoàn tất.
+- Detect Mac Mini.
+- Verify trusted identity.
+- Start configured folder synchronization.
+- Show progress.
+- Notify upon completion.
 
-Không cho phép remote peer gửi arbitrary executable automation.
+Do not allow remote peers to send arbitrary executable automation.
 
-Không thực thi arbitrary shell scripts mặc định.
+Do not execute arbitrary shell scripts by default.
 
-Automation phải được user tạo, kiểm tra, enable và revoke tại local.
+Automation must be created, inspected, enabled, and revoked locally by the user.
 
 ---
 
 ## 28. LOCAL BACKUP
 
-Cho phép backup dữ liệu sang trusted device.
+Allow backing up data to a trusted device.
 
 ### Features
 
@@ -1554,23 +1554,23 @@ Cho phép backup dữ liệu sang trusted device.
 - Disk quota.
 - Backup cancellation.
 
-Phân biệt Backup và Folder Sync.
+Distinguish between Backup and Folder Sync.
 
-Folder Sync có thể đồng bộ deletion.
+Folder Sync may synchronize deletions.
 
-Backup phải được thiết kế để bảo vệ dữ liệu khỏi accidental deletion hoặc corruption.
+Backup must be designed to protect data from accidental deletion or corruption.
 
-Không tuyên bố backup an toàn nếu chưa kiểm thử restore.
+Do not claim backup is safe without testing restore.
 
 ---
 
 ## 29. CLI APPLICATION
 
-Tên CLI:
+CLI name:
 
 `lanvory`
 
-CLI giao tiếp với local daemon qua secure IPC.
+The CLI communicates with the local daemon over secure IPC.
 
 ### Core Commands
 
@@ -1620,27 +1620,27 @@ lanvory help
 - JSON output.
 - Correct exit codes.
 - Help documentation.
-- Shell completion khi phù hợp.
+- Shell completion when appropriate.
 - Input validation.
 - Timeout.
 - Secure IPC.
 - No plaintext secrets.
 
-Sensitive operation vẫn phải tuân thủ trust model và user consent.
+Sensitive operations must still follow the trust model and user consent.
 
-CLI không được bypass permissions của Desktop Application.
+The CLI must not bypass Desktop Application permissions.
 
 ---
 
 ## 30. LOCAL IPC
 
-Electron Main Process và CLI giao tiếp với Go daemon qua local IPC.
+The Electron Main Process and CLI communicate with the Go daemon over local IPC.
 
 ### Requirements
 
 - Unix socket permissions.
 - Windows Named Pipe ACL.
-- OS-level peer authentication khi khả thi.
+- OS-level peer authentication when feasible.
 - Request ID.
 - Versioning.
 - Typed contracts.
@@ -1698,17 +1698,17 @@ settings.update
 events.subscribe
 ```
 
-Không expose privileged IPC server qua public TCP interface.
+Do not expose the privileged IPC server over a public TCP interface.
 
-Không cho phép Electron renderer truy cập raw IPC socket.
+Do not allow the Electron renderer to access the raw IPC socket.
 
-IPC permissions phải được kiểm chứng tại daemon.
+IPC permissions must be verified by the daemon.
 
 ---
 
 ## 31. DESKTOP APPLICATION STRUCTURE
 
-Lanvory phải là desktop application, không phải website được đóng gói trong Electron.
+Lanvory must be a desktop application, not a website wrapped in Electron.
 
 ### Main Process Responsibilities
 
@@ -1742,15 +1742,15 @@ Lanvory phải là desktop application, không phải website được đóng g�
 - Notifications.
 - Accessibility.
 
-Không implement network daemon logic trong React component.
+Do not implement network daemon logic inside React components.
 
-Không cho renderer trực tiếp truy cập filesystem, shell, OS credentials hoặc arbitrary Node.js API.
+Do not allow the renderer to directly access the filesystem, shell, OS credentials, or arbitrary Node.js APIs.
 
 ### Electron Security
 
 - `contextIsolation: true`.
 - `nodeIntegration: false`.
-- `sandbox: true` khi phù hợp.
+- `sandbox: true` when appropriate.
 - Strict Content Security Policy.
 - Sender validation.
 - Navigation restrictions.
@@ -1763,15 +1763,15 @@ Không cho renderer trực tiếp truy cập filesystem, shell, OS credentials h
 
 ## 32. PRODUCT DESIGN DIRECTION
 
-Thiết kế Lanvory dựa trên phong cách:
+Design Lanvory based on the style of:
 
 **Retro Terminal × Editorial Minimalism × Native Desktop Utility**
 
-Tham khảo hình ảnh Lanvory đã được cung cấp trong project context.
+Refer to the Lanvory reference image provided in the project context.
 
-Nếu reference image tồn tại trong repository, phải đọc và sử dụng như visual direction.
+If a reference image exists in the repository, read and use it as visual direction.
 
-Không sao chép nguyên trạng layout nếu layout đó mang tính landing page.
+Do not copy a layout verbatim if that layout is landing-page-oriented.
 
 ### Design Characteristics
 
@@ -1790,13 +1790,13 @@ Không sao chép nguyên trạng layout nếu layout đó mang tính landing pag
 
 ### Overall Design Language
 
-Giao diện phải tạo cảm giác được thiết kế bởi một product designer có chủ đích, chú trọng functional hierarchy, pixel alignment và typography.
+The interface must feel intentionally crafted by a product designer, focusing on functional hierarchy, pixel alignment, and typography.
 
-Không tạo một generic AI dashboard.
+Do not create a generic AI dashboard.
 
 ### Design References
 
-Có thể nghiên cứu tinh thần thiết kế của:
+You may study the design ethos of:
 
 - Linear.
 - Raycast.
@@ -1809,24 +1809,24 @@ Có thể nghiên cứu tinh thần thiết kế của:
 - Swiss typography.
 - Editorial layout.
 
-Không clone bất kỳ sản phẩm nào.
+Do not clone any product.
 
 ---
 
 ## 33. ANTI-GENERIC AI DESIGN RULES
 
-Đây là phần bắt buộc đối với toàn bộ UI.
+This section is mandatory for the entire UI.
 
 ### Avoid
 
 - Excessive gradient backgrounds.
-- Neon glow trên mọi component.
+- Neon glow on every component.
 - Glassmorphism.
 - Floating glass cards.
 - Oversized rounded cards.
-- Bento grid trên mọi screen.
+- Bento grid on every screen.
 - Generic dashboard templates.
-- Large landing-page hero chiếm phần lớn desktop workspace.
+- Large landing-page hero occupying most of the desktop workspace.
 - Unnecessary decorative illustrations.
 - Generic globe illustration.
 - AI-style futuristic network graphics.
@@ -1835,13 +1835,13 @@ Không clone bất kỳ sản phẩm nào.
 - Gradient text.
 - Unnecessary animations.
 - Random decorative status pills.
-- Excessive whitespace không có chức năng.
+- Excessive whitespace with no functional purpose.
 - Duplicate information.
-- Large marketing copy trên functional screens.
+- Large marketing copy on functional screens.
 - Fake charts.
 - Fake statistics.
 - Excessive use of badges.
-- Default shadcn/ui appearance không được tùy biến.
+- Uncustomized default shadcn/ui appearance.
 
 ### Prefer
 
@@ -1864,19 +1864,19 @@ Không clone bất kỳ sản phẩm nào.
 
 ### Important
 
-Không làm giao diện quá cầu kỳ chỉ để chứng minh rằng nó không giống AI-generated design.
+Do not over-complicate the UI merely to prove it does not look AI-generated.
 
-Không sử dụng phong cách Victorian, royal luxury hoặc ornamental gold UI.
+Do not use Victorian, royal luxury, or ornamental gold UI styles.
 
-Sự sang trọng phải đến từ typography, restraint, layout và attention to detail.
+Refinement must come from typography, restraint, layout, and attention to detail.
 
 ---
 
 ## 34. DESIGN SYSTEM
 
-Tạo `DESIGN_SYSTEM.md`.
+Create `DESIGN_SYSTEM.md`.
 
-Thiết kế toàn bộ UI thông qua semantic design tokens.
+Design the entire UI using semantic design tokens.
 
 ### Dark Theme
 
@@ -1907,13 +1907,13 @@ Suggested palette:
 }
 ```
 
-Accent color chỉ sử dụng có chủ đích.
+Use accent colors purposefully.
 
-Màu xanh lá dành chủ yếu cho active network, connected state và operational status.
+Green is reserved primarily for active network, connected state, and operational status.
 
-Không phủ toàn bộ UI bằng màu neon green.
+Do not flood the entire UI with neon green.
 
-Kiểm tra contrast và accessibility trước khi chốt palette.
+Check contrast and accessibility before finalizing the palette.
 
 ### Typography
 
@@ -1925,7 +1925,7 @@ Preferred fonts:
 - Inter.
 - System UI fonts.
 
-Sử dụng monospace cho:
+Use monospace for:
 
 - IP addresses.
 - Fingerprints.
@@ -1934,13 +1934,13 @@ Sử dụng monospace cho:
 - Technical labels.
 - Status bar.
 
-Sử dụng sans-serif hoặc monospace có chủ đích cho section headings và body text.
+Use sans-serif or monospace purposefully for section headings and body text.
 
-Không dùng một font monospace quá dày đặc đến mức giảm readability.
+Do not use an overly dense monospace font that reduces readability.
 
-Fonts phải được đóng gói local, có license phù hợp.
+Fonts must be bundled locally with proper licenses.
 
-Không tải Google Fonts tại runtime.
+Do not load Google Fonts at runtime.
 
 ### Suggested Type Scale
 
@@ -1953,9 +1953,9 @@ Technical label:  11–12px
 Status text:      11–12px
 ```
 
-Oversized italic typography chỉ sử dụng tại onboarding hoặc welcome state nếu phù hợp.
+Oversized italic typography should only be used in onboarding or welcome states when appropriate.
 
-Không sử dụng font size marketing cho mọi functional screen.
+Do not use marketing font sizes on every functional screen.
 
 ### Spacing
 
@@ -1979,7 +1979,7 @@ Large:  8px
 Dialog: 10px
 ```
 
-Pill shape chỉ sử dụng khi component thực sự phù hợp.
+Use pill shapes only when truly appropriate for the component.
 
 ### Borders
 
@@ -2000,9 +2000,9 @@ Pill shape chỉ sử dụng khi component thực sự phù hợp.
 
 ## 35. BRAND IDENTITY & LOGO
 
-Thiết kế logo riêng cho Lanvory.
+Design a dedicated logo for Lanvory.
 
-Logo phải:
+The logo must:
 
 - Simple.
 - Geometric.
@@ -2015,16 +2015,16 @@ Logo phải:
 
 ### Logo Concept
 
-Ưu tiên một geometric monogram dựa trên chữ L, kết hợp với hình ảnh hai hoặc ba node kết nối trực tiếp.
+Prefer a geometric monogram based on the letter L, combined with two or three directly connected nodes.
 
-Logo phải thể hiện:
+The logo must convey:
 
 - Local connectivity.
 - Peer-to-peer.
 - Decentralization.
 - Independence.
 
-Không sử dụng:
+Do not use:
 
 - Generic AI atom icon.
 - OpenAI-like knot.
@@ -2033,9 +2033,9 @@ Không sử dụng:
 - Generic shield-only icon.
 - Stock network logo.
 
-Logo chính nên sử dụng flat vector geometry.
+The primary logo should use flat vector geometry.
 
-Chuẩn bị:
+Prepare:
 
 - Logo SVG.
 - Monochrome symbol.
@@ -2048,15 +2048,15 @@ Chuẩn bị:
 - macOS ICNS.
 - PNG assets.
 
-Kiểm tra logo tại kích thước 16px, 24px, 32px, 64px và 512px.
+Test the logo at 16px, 24px, 32px, 64px, and 512px.
 
-Không tuyên bố logo hoặc thương hiệu độc quyền nếu chưa tra cứu pháp lý.
+Do not claim exclusive trademark or logo rights without legal clearance.
 
 ---
 
 ## 36. DESKTOP WINDOW LAYOUT
 
-Desktop layout phải mang tính ứng dụng sử dụng hằng ngày.
+The desktop layout must feel like an everyday utility application.
 
 ### Layout Structure
 
@@ -2084,25 +2084,25 @@ Desktop layout phải mang tính ứng dụng sử dụng hằng ngày.
 - Status bar: 24–30px.
 - Main content: responsive.
 
-Desktop minimum dimensions phải được xác định sau khi kiểm thử nội dung thực tế.
+Desktop minimum dimensions must be determined after testing with real content.
 
-Sidebar có thể collapse.
+The sidebar can collapse.
 
-Inspector có thể đóng mở.
+The inspector can be toggled open or closed.
 
-Các màn hình phải sử dụng không gian hiệu quả.
+Screens must use space efficiently.
 
-Không cần hiển thị inspector khi chưa có selection.
+Do not show the inspector when nothing is selected.
 
 ### Native Window Controls
 
-macOS sử dụng traffic-light controls phù hợp.
+macOS uses native traffic-light controls appropriately.
 
-Windows sử dụng minimize, maximize, close.
+Windows uses minimize, maximize, close.
 
-Không hiển thị cả hai loại controls trên cùng một platform.
+Do not show both sets of window controls on the same platform.
 
-Ưu tiên native desktop behavior.
+Prefer native desktop behavior.
 
 ---
 
@@ -2127,9 +2127,9 @@ SYSTEM
   Settings
 ```
 
-Có thể thêm feature entry khi functionality đã được triển khai.
+Add feature entries when the corresponding functionality is implemented.
 
-Không đưa những tính năng chưa tồn tại vào primary navigation chỉ để UI trông đầy đủ.
+Do not put unimplemented features into primary navigation merely to make the UI look full.
 
 ### Sidebar Requirements
 
@@ -2142,13 +2142,13 @@ Không đưa những tính năng chưa tồn tại vào primary navigation chỉ
 - Local network status.
 - Application settings access.
 
-Không cần logo kích thước lớn chiếm phần lớn sidebar.
+Do not let a large logo occupy most of the sidebar.
 
 ---
 
 ## 38. OVERVIEW SCREEN
 
-Overview là operational dashboard, không phải landing page.
+Overview is an operational dashboard, not a landing page.
 
 ### Content
 
@@ -2165,25 +2165,25 @@ Overview là operational dashboard, không phải landing page.
 
 ### Design
 
-Sử dụng compact information sections.
+Use compact information sections.
 
-Có thể sử dụng inline metrics:
+Inline metrics may be used:
 
 ```text
 04 devices online    03 trusted    02 active syncs
 ```
 
-Không bắt buộc biến mọi metric thành card riêng.
+Do not force every metric into its own card.
 
-Chỉ sử dụng chart khi có historical data và mục đích rõ ràng.
+Only use charts when historical data and a clear purpose exist.
 
-Welcome headline chỉ xuất hiện có chọn lọc khi mới onboarding hoặc chưa có paired device.
+Welcome headlines should only appear selectively during initial onboarding or when no paired device exists.
 
 ---
 
 ## 39. DEVICES SCREEN
 
-Đây là một trong những screen quan trọng nhất.
+This is one of the most important screens.
 
 ### Toolbar
 
@@ -2215,7 +2215,7 @@ Latency
 Actions
 ```
 
-Selected row hiển thị inspector.
+Selected row opens the inspector.
 
 ### Device Inspector
 
@@ -2238,9 +2238,9 @@ Selected row hiển thị inspector.
 - Ping.
 - Copy address.
 
-Không hiển thị action nếu peer không hỗ trợ hoặc user không có permission.
+Do not display actions if the peer lacks support or the user lacks permission.
 
-Giải thích disabled state khi cần.
+Explain disabled states when needed.
 
 ---
 
@@ -2266,9 +2266,9 @@ Giải thích disabled state khi cần.
 - Status.
 - Cancel/retry action.
 
-Hiển thị incoming request bằng native notification hoặc trong-app notification phù hợp.
+Display incoming requests using native or in-app notifications appropriately.
 
-Không tự động accept incoming files mặc định.
+Do not automatically accept incoming files by default.
 
 ---
 
@@ -2296,7 +2296,7 @@ Không tự động accept incoming files mặc định.
 - Conflict list.
 - Manual rescan.
 
-Không hiển thị local file path của remote device nếu peer không chủ động chia sẻ thông tin đó.
+Do not display the remote device's local file path unless the peer explicitly shares it.
 
 ---
 
@@ -2328,9 +2328,9 @@ Access
 - Expiration.
 - Description.
 
-Hiển thị warnings nếu local target đang không reachable.
+Display warnings if the local target is unreachable.
 
-Không trực tiếp expose port ra public network.
+Do not directly expose ports to the public network.
 
 ---
 
@@ -2344,9 +2344,9 @@ Không trực tiếp expose port ra public network.
 - Network interface selection.
 - Connection details.
 
-Sử dụng dotted-grid background có chủ đích tại network visualization canvas.
+Use a purposeful dotted-grid background on the network visualization canvas.
 
-Visual graph phải có mục đích kỹ thuật, không sử dụng hình cầu hoặc particles chỉ để trang trí.
+The visual graph must serve a technical purpose; do not use spheres or decorative particles.
 
 ### Graph Interactions
 
@@ -2362,7 +2362,7 @@ Visual graph phải có mục đích kỹ thuật, không sử dụng hình cầ
 
 ## 45. ACTIVITY SCREEN
 
-Hiển thị local activity history:
+Display local activity history:
 
 - Device discovered.
 - Pairing requested.
@@ -2386,7 +2386,7 @@ Hiển thị local activity history:
 - Export sanitized logs.
 - Clear local history.
 
-Không lưu sensitive payload trong activity event.
+Do not store sensitive payloads in activity events.
 
 ---
 
@@ -2455,17 +2455,17 @@ Không lưu sensitive payload trong activity event.
 - License information.
 - Open-source acknowledgements.
 
-Không yêu cầu account hoặc remote connection để thay đổi settings.
+Do not require an account or remote connection to change settings.
 
 ---
 
 ## 47. ONBOARDING
 
-First launch phải đơn giản.
+First launch must be simple.
 
 ### Step 1 — Welcome
 
-Hiển thị:
+Display:
 
 - Lanvory identity.
 - Your devices, connected locally.
@@ -2491,28 +2491,28 @@ Hiển thị:
 - Verify pairing.
 - Configure initial permissions.
 
-Người dùng có thể hoàn thành onboarding khi chưa có thiết bị khác online.
+Users can complete onboarding even when no other device is online.
 
-Không tạo mandatory signup flow.
+Do not create a mandatory signup flow.
 
-Không sử dụng social login.
+Do not use social login.
 
 ### Empty State
 
-Khi chưa tìm được peer:
+When no peer is found yet:
 
-- Giải thích rằng các thiết bị cần chạy Lanvory.
-- Kiểm tra cùng LAN.
-- Kiểm tra firewall.
-- Cung cấp refresh.
-- Cung cấp manual pairing.
-- Không yêu cầu Internet.
+- Explain that devices must be running Lanvory.
+- Check that they are on the same LAN.
+- Check the firewall.
+- Provide a refresh action.
+- Provide manual pairing.
+- Do not require Internet.
 
 ---
 
 ## 48. SYSTEM TRAY & MENU BAR
 
-Lanvory phải hỗ trợ macOS Menu Bar và Windows System Tray.
+Lanvory must support macOS Menu Bar and Windows System Tray.
 
 ### Menu Items
 
@@ -2533,11 +2533,11 @@ Settings
 Quit
 ```
 
-Tray icon phản ánh trạng thái thực tế.
+The tray icon must reflect actual status.
 
 ### Lifecycle
 
-Phân biệt:
+Distinguish between:
 
 - Close window.
 - Quit GUI.
@@ -2545,15 +2545,15 @@ Phân biệt:
 - Disable discovery.
 - Pause synchronization.
 
-Không âm thầm tiếp tục file transfer hoặc network listening sau khi người dùng chọn stop daemon.
+Do not silently continue file transfers or network listening after the user chooses to stop the daemon.
 
-Cung cấp lifecycle settings rõ ràng.
+Provide clear lifecycle settings.
 
 ---
 
 ## 49. COMMAND PALETTE & KEYBOARD SHORTCUTS
 
-Xây dựng keyboard-first interaction.
+Build keyboard-first interaction.
 
 ### Command Palette
 
@@ -2581,17 +2581,17 @@ Commands:
 - Recently used commands.
 - Context-specific actions.
 
-Không sử dụng global shortcut gây xung đột với hệ điều hành nếu không được người dùng cho phép.
+Do not use global shortcuts that conflict with the OS unless explicitly permitted by the user.
 
 ---
 
 ## 50. SECURITY THREAT MODEL
 
-Tạo `docs/security/threat-model.md`.
+Create `docs/security/threat-model.md`.
 
-Giả định LAN là hostile environment.
+Assume the LAN is a hostile environment.
 
-Không coi private IP address là security guarantee.
+Do not treat a private IP address as a security guarantee.
 
 ### Threats
 
@@ -2635,15 +2635,15 @@ Không coi private IP address là security guarantee.
 - Dependency scanning.
 - Secure release pipeline.
 
-Mỗi sensitive feature phải có security acceptance criteria.
+Every sensitive feature must have security acceptance criteria.
 
-Không tự động giảm security để làm demo hoạt động.
+Do not silently lower security to make a demo work.
 
 ---
 
 ## 51. PRIVACY REQUIREMENTS
 
-Tạo `PRIVACY.md`.
+Create `PRIVACY.md`.
 
 ### Rules
 
@@ -2658,9 +2658,9 @@ Tạo `PRIVACY.md`.
 - No remote font loading.
 - No remote UI assets.
 
-Mọi asset cần thiết cho runtime phải được đóng gói local.
+All assets required for runtime must be bundled locally.
 
-User phải có quyền:
+The user must have the right to:
 
 - Disable discovery.
 - Change device visibility.
@@ -2670,11 +2670,11 @@ User phải có quyền:
 - Delete activity history.
 - Reset local application data.
 
-Phải giải thích dữ liệu nào vẫn tồn tại trên receiving peer sau khi file transfer hoặc sync thành công.
+Explain what data remains on the receiving peer after a file transfer or sync completes.
 
-Không tuyên bố ứng dụng hoàn toàn anonymous chỉ vì không có account.
+Do not claim the application is completely anonymous merely because there are no accounts.
 
-mDNS metadata có thể được nhìn thấy bởi những thiết bị khác trong LAN.
+mDNS metadata can be visible to other devices on the LAN.
 
 ---
 
@@ -2709,8 +2709,8 @@ mDNS metadata có thể được nhìn thấy bởi những thiết bị khác t
 - Unix sockets.
 - Secret Service.
 - Desktop notifications.
-- Tray integration khi hỗ trợ.
-- AppImage hoặc phù hợp.
+- Tray integration when supported.
+- AppImage or equivalent.
 - DEB package theo roadmap.
 
 ### Requirements
@@ -2743,7 +2743,7 @@ For desktop rows, apply the packaging and secure storage checks for that platfor
 
 ## 53. PERFORMANCE REQUIREMENTS
 
-Lanvory phải là lightweight desktop utility trong phạm vi khả năng của Electron.
+Lanvory must be a lightweight desktop utility within Electron's capabilities.
 
 ### Optimize
 
@@ -2775,9 +2775,9 @@ Lanvory phải là lightweight desktop utility trong phạm vi khả năng của
 - Backpressure.
 - Context cancellation.
 
-Ưu tiên event-driven updates thay vì polling liên tục.
+Prefer event-driven updates over continuous polling.
 
-Không thực hiện blocking file hashing trong Electron renderer.
+Do not perform blocking file hashing in the Electron renderer.
 
 ### MVP acceptance measurements
 
@@ -2825,17 +2825,17 @@ Configuration, idle memory and daemon recovery can be checked on one native targ
 - Disk usage.
 - Daemon memory usage.
 
-Không sử dụng remote Prometheus hoặc external monitoring infrastructure làm runtime dependency.
+Do not use remote Prometheus or external monitoring infrastructure as a runtime dependency.
 
-Diagnostics và metrics phải được thu thập tại local.
+Diagnostics and metrics must be collected locally.
 
-Export chỉ thực hiện khi người dùng yêu cầu.
+Export only when requested by the user.
 
 ---
 
 ## 55. OFFLINE BEHAVIOR
 
-Lanvory phải hoạt động khi Internet unavailable.
+Lanvory must work when Internet is unavailable.
 
 ### Supported Scenarios
 
@@ -2853,14 +2853,14 @@ Khi peer offline:
 
 - Preserve trust relationship.
 - Mark presence offline.
-- Queue explicitly approved sync or transfer operations khi phù hợp.
+- Queue explicitly approved sync or transfer operations when appropriate.
 - Retry with bounded backoff.
 - Resume khi peer online.
 - Allow cancellation.
 
-Không gửi dữ liệu đến third-party service để lưu tạm.
+Do not send data to third-party services for temporary storage.
 
-Nếu receiving device không online, sender phải giữ dữ liệu hoặc transfer state tại local.
+If the receiving device is offline, the sender must keep the data or transfer state locally.
 
 ---
 
@@ -2940,9 +2940,9 @@ Test:
 - Multiple network interfaces.
 - Firewall restrictions.
 - Unauthorized peer.
-- Pairing MITM simulation trong môi trường kiểm thử cô lập.
+- Pairing MITM simulation in an isolated test environment.
 
-Không tuyên bố LAN discovery đã verified chỉ dựa trên loopback tests.
+Do not claim LAN discovery is verified based solely on loopback tests.
 
 ### Security Tests
 
@@ -2970,7 +2970,7 @@ Không tuyên bố LAN discovery đã verified chỉ dựa trên loopback tests.
 - Idle memory.
 - Interrupted synchronization.
 
-Record environment, hardware, version và actual results.
+Record environment, hardware, version, and actual results.
 
 ---
 
@@ -2993,7 +2993,7 @@ Record environment, hardware, version và actual results.
 - Application launch.
 - Daemon initialization.
 - Window lifecycle.
-- Native dialogs nếu test environment hỗ trợ.
+- Native dialogs if the test environment supports them.
 - Pairing interaction.
 - File transfer progress.
 - Settings persistence.
@@ -3003,9 +3003,9 @@ Record environment, hardware, version và actual results.
 
 ### Visual Review
 
-Kiểm tra screenshot thật của application.
+Inspect real screenshots of the application.
 
-So sánh với DESIGN_SYSTEM.md.
+Compare against DESIGN_SYSTEM.md.
 
 Review:
 
@@ -3018,15 +3018,15 @@ Review:
 - Color consistency.
 - Functional hierarchy.
 
-Không tự đánh giá UI đã đẹp chỉ dựa trên source code.
+Do not judge UI quality solely from source code.
 
-Development preview sử dụng mock data phải được đánh dấu rõ và không tồn tại trong production flow.
+Development previews using mock data must be clearly marked and must not exist in production flows.
 
 ---
 
 ## 58. CI/CD
 
-Sử dụng GitHub Actions.
+Use GitHub Actions.
 
 ### Continuous Integration
 
@@ -3057,22 +3057,22 @@ Sử dụng GitHub Actions.
 - Linux artifacts.
 - Checksums.
 - Software Bill of Materials.
-- Code signing khi có credentials.
-- Notarization khi được cấu hình.
+- Code signing when credentials are available.
+- Notarization when configured.
 
-GitHub Actions chỉ phục vụ build/test/release.
+GitHub Actions is only for build/test/release.
 
-Không biến CI/CD infrastructure thành runtime dependency.
+Do not turn CI/CD infrastructure into a runtime dependency.
 
-Không tự ý publish release hoặc push source code nếu chưa được cấp quyền.
+Do not publish releases or push source code without authorization.
 
 ---
 
 ## 59. APPLICATION PACKAGING
 
-Ứng dụng phải có thể cài đặt bình thường trên máy người dùng.
+The application must be installable normally on the user's machine.
 
-Không yêu cầu user cài riêng:
+Do not require the user to separately install:
 
 - Go runtime.
 - Node.js runtime.
@@ -3081,11 +3081,11 @@ Không yêu cầu user cài riêng:
 - Docker.
 - Development toolchain.
 
-Go daemon phải được bundle đúng platform và architecture.
+The Go daemon must be bundled for the matching platform and architecture.
 
 ### Packaging Requirements
 
-- Binary integrity verification phù hợp.
+- Appropriate binary integrity verification.
 - Correct executable permissions.
 - Daemon path resolution.
 - Installed app path handling.
@@ -3096,27 +3096,27 @@ Go daemon phải được bundle đúng platform và architecture.
 - Identity persistence policy.
 - Secure data reset.
 
-Phải phân biệt:
+Distinguish between:
 
 - Uninstall application.
 - Remove application data.
 - Reset device identity.
 
-Không tự động xóa dữ liệu của người dùng khi uninstall nếu không có chính sách và confirmation phù hợp.
+Do not automatically delete user data on uninstall without an explicit policy and confirmation.
 
 ### Update Requirements
 
-Ứng dụng không phụ thuộc vào auto-update server.
+The application does not depend on an auto-update server.
 
-Hỗ trợ manual installation of new releases.
+Support manual installation of new releases.
 
-Nếu bổ sung update checking trong tương lai, phải opt-in, minh bạch và không ảnh hưởng offline functionality.
+If update checking is added in the future, it must be opt-in, transparent, and not affect offline functionality.
 
 ---
 
 ## 60. DOCUMENTATION
 
-Tạo documentation đầy đủ.
+Write complete documentation.
 
 ```text
 docs/
@@ -3172,19 +3172,19 @@ docs/
     └── ADR-005-local-storage.md
 ```
 
-Sử dụng Mermaid cho architecture diagrams, sequence diagrams và state machines.
+Use Mermaid for architecture diagrams, sequence diagrams, and state machines.
 
-Documentation phải phản ánh implementation thực tế.
+Documentation must reflect the actual implementation.
 
 ---
 
 ## 61. IMPLEMENTATION ROADMAP
 
-Không triển khai toàn bộ feature cùng lúc.
+Do not implement all features at once.
 
-Sử dụng vertical slices.
+Use vertical slices.
 
-Mỗi phase phải tạo ra functionality chạy được và có acceptance criteria rõ ràng.
+Each phase must produce working functionality with clear acceptance criteria.
 
 ### Phase 0 — Research & Architecture [`MVP`]
 
@@ -3201,7 +3201,7 @@ Mỗi phase phải tạo ra functionality chạy được và có acceptance cri
 
 Exit criteria:
 
-Architecture, security boundaries và development strategy được ghi nhận đầy đủ.
+Architecture, security boundaries, and development strategy are fully documented.
 
 ### Phase 1 — Application Foundation [`MVP`]
 
@@ -3218,7 +3218,7 @@ Architecture, security boundaries và development strategy được ghi nhận �
 
 Exit criteria:
 
-Desktop app chạy được, giao tiếp với daemon thật và hiển thị local device identity.
+Desktop app runs, communicates with the real daemon, and displays local device identity.
 
 ### Phase 2 — Local Discovery [`MVP`]
 
@@ -3232,7 +3232,7 @@ Desktop app chạy được, giao tiếp với daemon thật và hiển thị lo
 
 Exit criteria:
 
-Hai thiết bị chạy Lanvory có thể phát hiện nhau trong LAN mà không có Internet.
+Two devices running Lanvory can discover each other on the LAN without Internet.
 
 ### Phase 3 — Secure Pairing & Transport [`MVP`]
 
@@ -3247,7 +3247,7 @@ Hai thiết bị chạy Lanvory có thể phát hiện nhau trong LAN mà không
 
 Exit criteria:
 
-Hai thiết bị thiết lập authenticated encrypted connection và từ chối peer chưa được cấp quyền đối với privileged operations.
+Two devices establish an authenticated encrypted connection and reject unpermitted peers for privileged operations.
 
 ### Phase 4 — File Transfer [`MVP`]
 
@@ -3262,7 +3262,7 @@ Hai thiết bị thiết lập authenticated encrypted connection và từ chố
 
 Exit criteria:
 
-Hai thiết bị có thể truyền file thực tế và xác minh integrity.
+Two devices can transfer real files and verify integrity.
 
 ### Phase 5 — Service Sharing [`MVP`]
 
@@ -3275,7 +3275,7 @@ Hai thiết bị có thể truyền file thực tế và xác minh integrity.
 
 Exit criteria:
 
-Machine B có thể truy cập service bind trên localhost của Machine A thông qua authenticated LAN tunnel.
+Machine B can access a service bound on Machine A's localhost through an authenticated LAN tunnel.
 
 ### Phase 6 — Desktop Experience [`MVP` baseline]
 
@@ -3293,7 +3293,7 @@ Machine B có thể truy cập service bind trên localhost của Machine A thô
 
 Exit criteria:
 
-Ứng dụng có trải nghiệm desktop hoàn chỉnh, không phải website hoặc dashboard prototype.
+The application delivers a complete desktop experience, not a website or dashboard prototype.
 
 ### Phase 7 — Folder Synchronization [`POST_MVP`]
 
@@ -3307,7 +3307,7 @@ Exit criteria:
 
 Exit criteria:
 
-Hai thiết bị đồng bộ folder hai chiều mà không ghi đè concurrent changes một cách âm thầm.
+Two devices synchronize folders two-way without silently overwriting concurrent changes.
 
 ### Phase 8 — Device Collaboration [`POST_MVP` baseline, `FUTURE` messaging]
 
@@ -3342,7 +3342,7 @@ Hai thiết bị đồng bộ folder hai chiều mà không ghi đè concurrent 
 - Documentation.
 - Release readiness.
 
-Không đánh dấu phase hoàn thành nếu exit criteria chưa được xác minh.
+Do not mark a phase as complete if exit criteria have not been verified.
 
 ---
 
@@ -3390,40 +3390,40 @@ Apply security, privacy, testing, performance and documentation requirements to 
 
 ## 63. MVP ACCEPTANCE CRITERIA
 
-MVP chỉ được coi là verified khi:
+MVP is only considered verified when:
 
-1. Hai thiết bị độc lập chạy Lanvory.
-2. Không cần tài khoản.
-3. Không cần central server.
-4. Không cần Cloud service.
-5. Router có thể ngắt Internet.
-6. Hai thiết bị discover được lẫn nhau nếu LAN cho phép mDNS.
-7. Hai thiết bị pairing thành công.
-8. Public key được xác minh.
-9. Pairing tồn tại sau restart.
-10. Thiết lập encrypted authenticated connection.
-11. Untrusted peer bị từ chối truy cập tài nguyên.
-12. Truyền file thực tế thành công.
-13. File checksum khớp.
-14. Incoming transfer cần approval mặc định.
-15. Shared localhost service hoạt động.
-16. Local tunnel được giới hạn đúng resource.
-17. Revoked peer mất quyền truy cập.
-18. Network disconnect được xử lý.
-19. Reconnect hoạt động khi peer trở lại.
-20. UI phản ánh dữ liệu thật.
-21. Daemon hoạt động đúng lifecycle.
-22. Local settings được lưu.
-23. Secret không xuất hiện trong logs.
-24. Build thành công.
+1. Two independent devices run Lanvory.
+2. No account is required.
+3. No central server is required.
+4. No Cloud service is required.
+5. The router can have Internet disconnected.
+6. Both devices discover each other when the LAN permits mDNS.
+7. Both devices pair successfully.
+8. Public keys are verified.
+9. Pairing persists across restarts.
+10. An encrypted authenticated connection is established.
+11. Untrusted peers are denied resource access.
+12. Real file transfer succeeds.
+13. File checksums match.
+14. Incoming transfers require approval by default.
+15. Shared localhost services work.
+16. Local tunnels are scoped to the exact resource.
+17. Revoked peers lose access.
+18. Network disconnects are handled.
+19. Reconnection works when peers return.
+20. UI reflects real data.
+21. Daemon follows the proper lifecycle.
+22. Local settings are persisted.
+23. Secrets never appear in logs.
+24. Build succeeds.
 25. Automated tests pass.
-26. Known limitations được ghi nhận.
+26. Known limitations are documented.
 27. MVP acceptance measurements in §53 meet their targets on the applicable baseline.
 28. The MVP desktop rows in §52 have the required native and physical evidence. For a public release, apply the separate signing and notarization gate.
 
 Record physical evidence for criteria 1–19 through the two-device run. Local source, test, build and desktop evidence may cover criteria 20–26 where applicable. Record each measurement and matrix row separately.
 
-Không coi screenshot đẹp hoặc mock data là bằng chứng MVP hoàn thành.
+Do not treat pretty screenshots or mock data as proof of MVP completion.
 
 ---
 
@@ -3459,7 +3459,7 @@ Không coi screenshot đẹp hoặc mock data là bằng chứng MVP hoàn thàn
 - Strict mode.
 - Typed IPC contracts.
 - No unnecessary `any`.
-- Schema validation tại trust boundaries.
+- Schema validation at trust boundaries.
 - Small reusable components.
 - Feature-based organization.
 - Clear state ownership.
@@ -3488,17 +3488,17 @@ Không coi screenshot đẹp hoặc mock data là bằng chứng MVP hoàn thàn
 - Ignoring failed tests.
 - Disabling type checking.
 - Suppressing compiler errors without resolving root cause.
-- Large generated code that không có mục đích rõ ràng.
+- Large generated code with no clear purpose.
 
-Sử dụng tiếng Anh cho source code, technical naming và documentation.
+Use English for source code, technical naming, and documentation.
 
-Báo cáo tiến độ với người dùng bằng tiếng Việt.
+Report progress to the user in Vietnamese.
 
 ---
 
 ## 65. AGENT EXECUTION PROTOCOL
 
-Khi bắt đầu, phải trực tiếp làm việc trên repository.
+When starting, work directly on the repository.
 
 ### Step 1 — Inspect
 
@@ -3513,13 +3513,13 @@ Khi bắt đầu, phải trực tiếp làm việc trên repository.
 - Check platform.
 - Check available permissions.
 
-Không overwrite thay đổi hiện tại của người dùng.
+Do not overwrite existing user changes.
 
 ### Step 2 — Research
 
-Nghiên cứu technical requirements quan trọng trước khi chọn implementation.
+Study critical technical requirements before choosing an implementation.
 
-Ghi lại:
+Record:
 
 - Source.
 - Requirement.
@@ -3530,9 +3530,9 @@ Ghi lại:
 
 ### Step 3 — Plan
 
-Tạo ROADMAP.md và TASKS.md.
+Create ROADMAP.md and TASKS.md.
 
-Mỗi task phải có:
+Each task must have:
 
 - Task ID.
 - Scope (`MVP`, `POST_MVP`, or `FUTURE`).
@@ -3557,16 +3557,16 @@ DONE
 
 ### Step 4 — Implement
 
-- Chọn task có dependencies đã đáp ứng.
-- Tạo implementation thực tế.
-- Viết tests.
-- Cập nhật documentation.
-- Kiểm tra integration.
+- Pick a task whose dependencies are satisfied.
+- Create the real implementation.
+- Write tests.
+- Update documentation.
+- Verify integration.
 - Review security.
 
 ### Step 5 — Verify
 
-Thực thi:
+Execute:
 
 - Formatter.
 - Lint.
@@ -3576,22 +3576,22 @@ Thực thi:
 - Build.
 - Relevant security checks.
 
-Không tuyên bố command pass nếu chưa chạy.
+Do not claim a command passed without running it.
 
 ### Step 6 — Fix
 
-Nếu test fail:
+If a test fails:
 
-- Xác định root cause.
-- Sửa lỗi tại đúng layer.
-- Thêm regression test.
-- Chạy lại verification.
+- Identify the root cause.
+- Fix the bug at the proper layer.
+- Add a regression test.
+- Re-run verification.
 
-Không sửa test theo hướng bỏ qua behavior sai.
+Do not modify tests to ignore broken behavior.
 
 ### Step 7 — Continue
 
-Sau khi hoàn thành task:
+After completing a task:
 
 - Update TASKS.md.
 - Update ROADMAP.md.
@@ -3599,7 +3599,7 @@ Sau khi hoàn thành task:
 - Record architecture decisions.
 - Continue next task.
 
-Không dừng lại sau khi tạo scaffold.
+Do not stop after creating a scaffold.
 
 Continue independent tasks within the authorized scope when a task needs unavailable hardware, an OS, hosted CI access or signing credentials. In TASKS.md and HANDOFF.md, record the affected criteria, available evidence, missing evidence, exact prerequisites and reproduction steps. Use `UNVERIFIED` when implementation is ready and only verification is outstanding, or `BLOCKED` when the missing prerequisite prevents implementation. Keep `IN_PROGRESS` while feasible work remains on the same task. A blocked verification dependency stays open for dependent acceptance claims.
 
@@ -3609,7 +3609,7 @@ Stop when the requested scope is satisfied or every remaining in-scope task requ
 
 ## 66. PERSISTENT PROJECT MEMORY
 
-Tạo:
+Create:
 
 ```text
 AGENTS.md
@@ -3623,7 +3623,7 @@ docs/decisions/
 
 ### HANDOFF.md
 
-Phải ghi nhận:
+Must record:
 
 - Current phase.
 - Current implementation.
@@ -3640,18 +3640,18 @@ Phải ghi nhận:
 
 ### New Agent Session
 
-Khi một agent session mới bắt đầu:
+When a new agent session begins:
 
-1. Đọc instructions.
-2. Kiểm tra Git status.
-3. Đọc project documents.
-4. Kiểm tra source code thực tế.
-5. Xác minh trạng thái task.
-6. Tiếp tục task chưa hoàn thành.
-7. Không khởi tạo lại project.
-8. Không thay đổi architecture tùy tiện.
+1. Read instructions.
+2. Check Git status.
+3. Read project documents.
+4. Inspect actual source code.
+5. Verify task status.
+6. Continue unfinished tasks.
+7. Do not re-initialize the project.
+8. Do not arbitrarily change architecture.
 
-Source code, build output và test results là bằng chứng chính xác hơn progress notes.
+Source code, build output, and test results are more accurate evidence than progress notes.
 
 ---
 
@@ -3712,7 +3712,7 @@ Deliver these outputs at their milestone under §62. Cross-platform packaging an
 35. Known Limitations Report.
 36. Release Configuration.
 
-Không yêu cầu bất kỳ central server hoặc cloud infrastructure nào để chạy sản phẩm.
+Do not require any central server or cloud infrastructure to run the product.
 
 ---
 
@@ -3720,9 +3720,9 @@ Không yêu cầu bất kỳ central server hoặc cloud infrastructure nào đ�
 
 Continue work in the current repository within the user's authorized scope. For an unqualified request to implement or finish Lanvory, default to `MVP`. Start `POST_MVP` or `FUTURE` implementation only when requested.
 
-Không chỉ trả lời bằng giải thích, kế hoạch hoặc code snippets.
+Do not reply only with explanations, plans, or code snippets.
 
-Thực hiện theo thứ tự:
+Execute in order:
 
 1. Inspect repository.
 2. Research reference projects.
@@ -3753,7 +3753,7 @@ Thực hiện theo thứ tự:
 27. Apply §65 when a verification prerequisite is unavailable.
 28. For explicitly requested later milestones, follow §62 and extend platform coverage using §52.
 
-Sau mỗi phase, báo cáo bằng tiếng Việt:
+After each phase, report in Vietnamese:
 
 - Completed.
 - Modified files.
@@ -3765,13 +3765,13 @@ Sau mỗi phase, báo cáo bằng tiếng Việt:
 - Blockers.
 - Next tasks.
 
-Ưu tiên:
+Prioritize:
 
 Security > Correctness > Reliability > Functionality > User Experience > Maintainability > Performance.
 
-Không hy sinh security hoặc correctness để đẩy nhanh tiến độ.
+Do not sacrifice security or correctness to speed up progress.
 
-Lanvory phải là một ứng dụng desktop networking thực sự hoạt động trong local network, không phải prototype, không phải cloud service, không phải VPN clone và không phải generic AI-generated dashboard.
+Lanvory must be a real local-network desktop networking application, not a prototype, not a cloud service, not a VPN clone, and not a generic AI-generated dashboard.
 
 Final product philosophy:
 
