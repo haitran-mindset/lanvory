@@ -4,19 +4,12 @@ import {
   Layers3, Play, ShieldCheck, Square, Star, Terminal, Zap, ZoomIn,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { fetchMacRelease, githubRepository, githubUrl, latestReleaseUrl } from '@/lib/releases'
 import { copy, features, securityControls, technicalArchitecture } from './content'
 
 const sectionIds = ['why', 'features', 'how', 'security', 'architecture', 'roadmap']
-const githubRepository = 'haitran-mindset/lanvory'
-const githubUrl = `https://github.com/${githubRepository}`
-const releaseVersion = '0.1.0'
-const releaseTag = `v${releaseVersion}`
-const releaseUrl = `${githubUrl}/releases/tag/${releaseTag}`
-const macArm64DmgUrl = `${githubUrl}/releases/download/${releaseTag}/Lanvory-${releaseVersion}-arm64.dmg`
-const macX64DmgUrl = `${githubUrl}/releases/download/${releaseTag}/Lanvory-${releaseVersion}-x64.dmg`
 const macQuarantineCommand = 'xattr -cr /Applications/Lanvory.app'
 const starCountFormat = new Intl.NumberFormat('en')
-const downloadUrl: string | undefined = macArm64DmgUrl
 const desktopPreviewUrl = `${import.meta.env.BASE_URL}images/desktop-preview-1644.webp`
 
 function Brand() {
@@ -130,6 +123,15 @@ function ArchitectureLink({ technology, icon: Icon, description, link }: Archite
 
 export function App() {
   const [activeDemo, setActiveDemo] = useState<string | null>(null)
+  const [macRelease, setMacRelease] = useState<Awaited<ReturnType<typeof fetchMacRelease>>>(null)
+
+  useEffect(() => {
+    const controller = new AbortController()
+    void fetchMacRelease(controller.signal).then((release) => {
+      if (!controller.signal.aborted) setMacRelease(release)
+    })
+    return () => controller.abort()
+  }, [])
   const [copiedQuarantine, setCopiedQuarantine] = useState(false)
   const headerRef = useRef<HTMLElement>(null)
 
@@ -178,7 +180,7 @@ export function App() {
       </a>
       <a className="announcement flex flex-wrap items-center justify-center gap-x-3 gap-y-1 px-4 py-2.5 text-center text-xs" href="#roadmap">
         <span className="size-1.5 rounded-full bg-primary" aria-hidden="true" />
-        <span>{copy.update}</span>
+        <span>{macRelease ? `Lanvory ${macRelease.tag} is available for macOS` : 'Lanvory for macOS'}</span>
         <span className="inline-flex items-center gap-1 text-foreground underline underline-offset-4">
           {copy.nav[5]} <ArrowUpRight size={13} aria-hidden="true" />
         </span>
@@ -222,29 +224,16 @@ export function App() {
             </div>
           </div>
           <div className="mt-8 flex flex-wrap items-center gap-3">
-            {downloadUrl ? (
-              <Button asChild>
-                <a href={downloadUrl} download><ArrowDownToLine data-icon="inline-start" aria-hidden="true" /> {copy.download}</a>
-              </Button>
-            ) : (
-              <Button asChild>
-                <a href="#download"><ArrowDownToLine data-icon="inline-start" aria-hidden="true" /> Download info</a>
-              </Button>
-            )}
+            <Button asChild>
+              <a href="#download"><ArrowDownToLine data-icon="inline-start" aria-hidden="true" /> {copy.download}</a>
+            </Button>
             <Button asChild variant="outline">
               <a href="#how">{copy.nav[2]} <ArrowRight data-icon="inline-end" aria-hidden="true" /></a>
             </Button>
           </div>
-          {downloadUrl ? (
-            <p className="mt-2.5 text-xs text-muted-foreground">
-              {releaseTag} for Apple Silicon ·{' '}
-              <a className="underline underline-offset-4 hover:text-primary" href={macX64DmgUrl} download>
-                Download for Intel Mac (.dmg)
-              </a>
-            </p>
-          ) : (
-            <p className="mt-2.5 text-xs text-muted-foreground">{copy.downloadStatus}</p>
-          )}
+          <p className="mt-2.5 text-xs text-muted-foreground">
+            {macRelease ? `${macRelease.tag} · Apple Silicon and Intel` : 'Apple Silicon and Intel'}
+          </p>
 
           <ul className="mt-7 flex flex-wrap gap-2.5 text-xs">
             {features.slice(0, 5).map(({ id, title }) => (
@@ -468,24 +457,24 @@ export function App() {
                   <p>{description}</p>
                   <div className="mt-auto pt-4">
                     {id === 'macos' ? (
-                      downloadUrl ? (
+                      macRelease ? (
                         <div className="flex flex-col gap-3">
                           <div className="flex flex-wrap items-center gap-2.5">
                             <Button asChild>
-                              <a href={macArm64DmgUrl} download><ArrowDownToLine data-icon="inline-start" aria-hidden="true" /> Apple Silicon (.dmg)</a>
+                              <a href={macRelease.arm64} download><ArrowDownToLine data-icon="inline-start" aria-hidden="true" /> Apple Silicon (.dmg)</a>
                             </Button>
                             <Button asChild variant="outline">
-                              <a href={macX64DmgUrl} download><ArrowDownToLine data-icon="inline-start" aria-hidden="true" /> Intel (.dmg)</a>
+                              <a href={macRelease.x64} download><ArrowDownToLine data-icon="inline-start" aria-hidden="true" /> Intel (.dmg)</a>
                             </Button>
                           </div>
-                          <a className="text-sm underline underline-offset-4 hover:text-primary" href={releaseUrl}>
-                            Release notes ({releaseTag})
+                          <a className="text-sm underline underline-offset-4 hover:text-primary" href={macRelease.notesUrl}>
+                            Release notes ({macRelease.tag})
                           </a>
                         </div>
                       ) : (
-                        <span className="inline-block rounded-full border border-border px-3 py-2 text-xs text-muted-foreground">
-                          {copy.downloadStatus}
-                        </span>
+                        <Button asChild variant="outline">
+                          <a href={latestReleaseUrl}>View latest release <ArrowUpRight data-icon="inline-end" aria-hidden="true" /></a>
+                        </Button>
                       )
                     ) : (
                       <a className="inline-flex items-center gap-2 text-sm underline underline-offset-4 hover:text-primary" href="#roadmap">
@@ -497,7 +486,7 @@ export function App() {
               </article>
             ))}
           </div>
-          {downloadUrl && (
+          {macRelease && (
             <div className="mt-6 rounded-xl border border-border bg-card p-5">
               <div className="flex items-center gap-2.5 text-sm font-semibold">
                 <Terminal size={17} className="text-primary" aria-hidden="true" />

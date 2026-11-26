@@ -39,7 +39,6 @@ export const features = [
 
 export const copy = {
   skip: 'Skip to content',
-  update: 'Lanvory v0.1.0 is available for macOS',
   nav: ['Why Lanvory', 'Features', 'How it works', 'Security', 'Architecture', 'Roadmap'],
   tagline: 'Local network, truly yours.',
   headline: ['Your devices,', 'connected locally.'],
@@ -54,7 +53,6 @@ export const copy = {
     'Control what each device can access',
   ],
   download: 'Download for macOS',
-  downloadStatus: 'Public download coming later',
   platforms: [
     {
       id: 'macos', name: 'macOS',
@@ -113,7 +111,7 @@ export const copy = {
   ],
   roadmap: [
     {
-      phase: 'Available (v0.1.0)', title: 'macOS Desktop & Bluetooth + P2P', icon: Laptop,
+      phase: 'Available', title: 'macOS Desktop & Bluetooth + P2P', icon: Laptop,
       description: 'Apple Silicon and Intel Macs with LAN discovery, Bluetooth Low Energy + Wi-Fi P2P (AWDL), verified pairing, file transfer, folder sync, and service bridge.',
     },
     {
