@@ -15,6 +15,7 @@ import (
 	"github.com/quic-go/quic-go"
 
 	"lanvory.local/core/internal/bridge"
+	"lanvory.local/core/internal/clipboard"
 	"lanvory.local/core/internal/drop"
 	"lanvory.local/core/internal/mount"
 	"lanvory.local/core/internal/networking"
@@ -89,9 +90,11 @@ type QUICListener struct {
 	trusted      func(string) (bool, error)
 	receiver     *drop.Receiver
 	services     bridge.Lookup
-	mountReg     *mount.Registry
-	mountAllowed func(string, string) bool
-	closeOnce    sync.Once
+	mountReg         *mount.Registry
+	mountAllowed     func(string, string) bool
+	clipboardBuf     *clipboard.Buffer
+	clipboardAllowed func(string) bool
+	closeOnce        sync.Once
 }
 
 func ListenQUIC(ctx context.Context, name string, bind netip.AddrPort, key ed25519.PrivateKey,
@@ -126,13 +129,19 @@ func ListenQUIC(ctx context.Context, name string, bind netip.AddrPort, key ed255
 	if services != nil {
 		protocols = append(protocols, bridge.Protocol)
 	}
-	protocols = append(protocols, mount.Protocol)
+	protocols = append(protocols, mount.Protocol, clipboard.Protocol)
 	result.listener, err = result.transport.Listen(trustedProtocolsTLS(identity, protocols, trusted), quicConfig(true))
 	if err != nil {
 		result.Close()
 		return nil, err
 	}
 	return result, nil
+}
+
+// EnableClipboard attaches a shared clipboard buffer and authorization callback to the QUIC listener.
+func (l *QUICListener) EnableClipboard(buf *clipboard.Buffer, allowed func(string) bool) {
+	l.clipboardBuf = buf
+	l.clipboardAllowed = allowed
 }
 
 // EnableMount attaches a Live Resources registry and authorization callback to the QUIC listener.
@@ -232,22 +241,29 @@ func (l *QUICListener) serveConnection(ctx context.Context, conn *quic.Conn) {
 	if !scope() {
 		return
 	}
-	serveQUICStreamsWithMount(ctx, conn, l.trusted, scope, l.receiver, l.services, l.mountReg, l.mountAllowed)
+	serveQUICStreamsWithClipboard(ctx, conn, l.trusted, scope, l.receiver, l.services, l.mountReg, l.mountAllowed, l.clipboardBuf, l.clipboardAllowed)
 }
 
 func serveQUICStreams(ctx context.Context, conn *quic.Conn, trusted func(string) (bool, error), scope func() bool,
 	receiver *drop.Receiver, services bridge.Lookup) {
-	serveQUICStreamsWithMount(ctx, conn, trusted, scope, receiver, services, nil, nil)
+	serveQUICStreamsWithClipboard(ctx, conn, trusted, scope, receiver, services, nil, nil, nil, nil)
 }
 
 func serveQUICStreamsWithMount(ctx context.Context, conn *quic.Conn, trusted func(string) (bool, error), scope func() bool,
 	receiver *drop.Receiver, services bridge.Lookup, mountReg *mount.Registry, mountAllowed func(string, string) bool) {
+	serveQUICStreamsWithClipboard(ctx, conn, trusted, scope, receiver, services, mountReg, mountAllowed, nil, nil)
+}
+
+func serveQUICStreamsWithClipboard(ctx context.Context, conn *quic.Conn, trusted func(string) (bool, error), scope func() bool,
+	receiver *drop.Receiver, services bridge.Lookup, mountReg *mount.Registry, mountAllowed func(string, string) bool,
+	clipboardBuf *clipboard.Buffer, clipboardAllowed func(string) bool) {
 	state := conn.ConnectionState().TLS
 	protocol := state.NegotiatedProtocol
 	if protocol != quicTrustedProtocol &&
 		!(protocol == drop.Protocol && receiver != nil) &&
 		!(protocol == bridge.Protocol && services != nil) &&
-		!(protocol == mount.Protocol && mountReg != nil) {
+		!(protocol == mount.Protocol && mountReg != nil) &&
+		!(protocol == clipboard.Protocol && clipboardBuf != nil) {
 		return
 	}
 	pin, err := certificateFingerprint(state, protocol)
@@ -288,6 +304,8 @@ func serveQUICStreamsWithMount(ctx context.Context, conn *quic.Conn, trusted fun
 				err = receiver.ReceiveStream(streamCtx, wire, fingerprint, scope)
 			} else if protocol == mount.Protocol {
 				err = serveMountConn(streamCtx, wire, fingerprint, mountReg, mountAllowed, scope)
+			} else if protocol == clipboard.Protocol {
+				err = serveClipboardConn(streamCtx, wire, fingerprint, clipboardBuf, clipboardAllowed)
 			} else {
 				err = bridge.Serve(streamCtx, wire, fingerprint, services, scope)
 			}

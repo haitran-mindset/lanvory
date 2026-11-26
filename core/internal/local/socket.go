@@ -164,10 +164,10 @@ var ErrPeerNotTrusted = errors.New("peer fingerprint is not in the trust store")
 type verifyPeerFunc func(context.Context, string, netip.AddrPort, peer.Fingerprint, func() ([]networking.Interface, error)) error
 
 func Handler(device Device, dir string) http.Handler {
-	return HandlerWithResources(device, dir, nil, nil, nil, nil, nil)
+	return HandlerWithResources(device, dir, nil, nil, nil, nil, nil, nil)
 }
 
-func HandlerWithResources(device Device, dir string, receiver *drop.Receiver, tunnels *bridge.Tunnels, key ed25519.PrivateKey, pairs *pairing.Manager, listenerStatus func() ListenerStatus) http.Handler {
+func HandlerWithResources(device Device, dir string, receiver *drop.Receiver, tunnels *bridge.Tunnels, key ed25519.PrivateKey, pairs *pairing.Manager, listenerStatus func() ListenerStatus, hasP2PEndpoint func(string) bool) http.Handler {
 	withKey := func(verify func(context.Context, string, netip.AddrPort, peer.Fingerprint, func() ([]networking.Interface, error), ed25519.PrivateKey) error) verifyPeerFunc {
 		return func(ctx context.Context, adapter string, endpoint netip.AddrPort, expected peer.Fingerprint, inventory func() ([]networking.Interface, error)) error {
 			if len(key) != ed25519.PrivateKeySize {
@@ -176,20 +176,20 @@ func HandlerWithResources(device Device, dir string, receiver *drop.Receiver, tu
 			return verify(ctx, adapter, endpoint, expected, inventory, key)
 		}
 	}
-	return handlerWithReceiverAndVerifier(device, dir, receiver, peer.Verify, withKey(peer.VerifyMutual), withKey(peer.VerifyQUIC), tunnels, key, pairs, listenerStatus)
+	return handlerWithReceiverAndVerifier(device, dir, receiver, peer.Verify, withKey(peer.VerifyMutual), withKey(peer.VerifyQUIC), tunnels, key, pairs, listenerStatus, hasP2PEndpoint)
 }
 
-func handlerWithReceiverAndVerifier(device Device, dir string, receiver *drop.Receiver, verify, mutualVerify, quicVerify verifyPeerFunc, tunnels *bridge.Tunnels, key ed25519.PrivateKey, pairs *pairing.Manager, listenerStatus func() ListenerStatus) http.Handler {
+func handlerWithReceiverAndVerifier(device Device, dir string, receiver *drop.Receiver, verify, mutualVerify, quicVerify verifyPeerFunc, tunnels *bridge.Tunnels, key ed25519.PrivateKey, pairs *pairing.Manager, listenerStatus func() ListenerStatus, hasP2PEndpoint func(string) bool) http.Handler {
 	mux := http.NewServeMux()
-	registerFiles(mux, device, dir, receiver, key)
+	registerFiles(mux, device, dir, receiver, key, hasP2PEndpoint)
 	var policyMu sync.Mutex
 	registerPermissions(mux, dir, device.ID, &policyMu)
 	registerServices(mux, dir, device.ID, &policyMu)
-	registerTunnels(mux, device, dir, tunnels, key)
+	registerTunnels(mux, device, dir, tunnels, key, hasP2PEndpoint)
 	registerPairing(mux, device, dir, key, pairs)
 	registerProfile(mux, dir, device)
-	registerClipboard(mux, device, dir, clipboard.NewBuffer(), key)
-	registerSync(mux, device, dir, syncengine.NewManager(), key)
+	registerClipboard(mux, device, dir, clipboard.NewBuffer(), key, hasP2PEndpoint)
+	registerSync(mux, device, dir, syncengine.NewManager(), key, hasP2PEndpoint)
 	mux.HandleFunc("GET "+networkRoute, func(w http.ResponseWriter, r *http.Request) {
 		interfaces, err := approvedInventory(dir)
 		if err != nil {
@@ -714,7 +714,7 @@ func requestLocalTimedBody(ctx context.Context, dir, method, route string, body 
 			return errors.New("unable to establish the peer TLS connection")
 		}
 	}
-	if strings.HasPrefix(path, syncRoute+"/") && strings.HasSuffix(path, "/run") && response.StatusCode >= 400 {
+	if (path == clipboardRoute+"/send" || (strings.HasPrefix(path, syncRoute+"/") && strings.HasSuffix(path, "/run"))) && response.StatusCode >= 400 {
 		raw, _ := io.ReadAll(io.LimitReader(response.Body, 512))
 		if msg := strings.TrimSpace(string(raw)); msg != "" {
 			return errors.New(msg)

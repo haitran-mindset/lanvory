@@ -32,13 +32,17 @@ type clipboardSendRequest struct {
 }
 
 func WithClipboard(next http.Handler, buf *clipboard.Buffer, device Device, dir string, key ed25519.PrivateKey) http.Handler {
+	return WithClipboardWithNearby(next, buf, device, dir, key, nil)
+}
+
+func WithClipboardWithNearby(next http.Handler, buf *clipboard.Buffer, device Device, dir string, key ed25519.PrivateKey, hasP2PEndpoint func(string) bool) http.Handler {
 	mux := http.NewServeMux()
-	registerClipboard(mux, device, dir, buf, key)
+	registerClipboard(mux, device, dir, buf, key, hasP2PEndpoint)
 	mux.Handle("/", next)
 	return mux
 }
 
-func registerClipboard(mux *http.ServeMux, device Device, dir string, buf *clipboard.Buffer, key ed25519.PrivateKey) {
+func registerClipboard(mux *http.ServeMux, device Device, dir string, buf *clipboard.Buffer, key ed25519.PrivateKey, hasP2PEndpoint func(string) bool) {
 	if buf == nil {
 		return
 	}
@@ -95,10 +99,16 @@ func registerClipboard(mux *http.ServeMux, device Device, dir string, buf *clipb
 			http.Error(w, "Local identity unavailable", http.StatusServiceUnavailable)
 			return
 		}
-		if err := peer.SendClipboard(r.Context(), req.Interface, endpoint, fingerprint, key, req.Text, func() ([]networking.Interface, error) {
-			return approvedInventory(dir)
-		}); err != nil {
-			http.Error(w, "Clipboard send failed: "+err.Error(), http.StatusBadGateway)
+		var sendErr error
+		if req.Interface == "p2p" {
+			sendErr = peer.SendClipboardLoopback(r.Context(), endpoint, fingerprint, key, req.Text, hasP2PEndpoint)
+		} else {
+			sendErr = peer.SendClipboard(r.Context(), req.Interface, endpoint, fingerprint, key, req.Text, func() ([]networking.Interface, error) {
+				return approvedInventory(dir)
+			})
+		}
+		if sendErr != nil {
+			http.Error(w, "Clipboard send failed: "+sendErr.Error(), http.StatusBadGateway)
 			return
 		}
 		buf.MarkLocalSent(req.Text)

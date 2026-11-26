@@ -1,6 +1,6 @@
 # Folder Sync
 
-Lanvory Folder Sync exchanges files between paired devices using `lanvory-sync/1` over mutually authenticated TLS 1.3 on scoped LAN TCP. The receiving daemon checks the authenticated peer's `folder-sync` grant for the requested folder ID. The owner registers a local directory on each device and chooses send-only, receive-only, or bidirectional mode.
+Lanvory Folder Sync exchanges files between paired devices using `lanvory-sync/1` over mutually authenticated TLS 1.3 on scoped LAN TCP or a registered macOS Wi-Fi P2P loopback bridge (`SyncFolderLoopback`). The receiving daemon checks the authenticated peer's `folder-sync` grant for the requested folder ID. The owner registers a local directory on each device and chooses send-only, receive-only, or bidirectional mode.
 
 ## How SHA-256 is used
 

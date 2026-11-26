@@ -1,34 +1,72 @@
-import { type FormEvent, useEffect, useState } from 'react';
-import { SelectField, accessDurations } from '../../components/ui/select';
-import { z } from 'zod';
-import { ArrowDownLeft, ExternalLink, Laptop, Lock, Server, ShieldCheck, Trash2, Users, X } from 'lucide-react';
-import type { PeerRoute } from '../sharing/sharing';
-import { pairedDeviceName, readPairedNames } from '../../services/paired-names';
-import { readDefaultDuration } from '../../services/permission-defaults';
-import { PanelHeading } from '../../components/panel-heading';
-import { connectionError, PeerConnectionFields } from '../../components/peer-connection-fields';
+import { type FormEvent, useEffect, useState } from "react";
+import { SelectField, accessDurations } from "../../components/ui/select";
+import { z } from "zod";
+import {
+  ArrowDownLeft,
+  ExternalLink,
+  Laptop,
+  Lock,
+  Server,
+  ShieldCheck,
+  Trash2,
+  Users,
+  X,
+} from "lucide-react";
+import type { PeerRoute } from "../sharing/sharing";
+import { pairedDeviceName, readPairedNames } from "../../services/paired-names";
+import { readDefaultDuration } from "../../services/permission-defaults";
+import { PanelHeading } from "../../components/panel-heading";
+import { useNotifications } from "../../components/notifications";
+import {
+  connectionError,
+  isP2PRoute,
+  lanSuggestedEndpoint,
+  PeerConnectionFields,
+} from "../../components/peer-connection-fields";
 
 const snapshotSchema = z.object({
   services: z.array(z.object({ id: z.string(), target: z.string() })),
-  tunnels: z.array(z.object({ id: z.string(), service: z.string(), bind: z.string(), connections: z.number().nonnegative() })),
-  grants: z.array(z.object({ fingerprint: z.string(), capability: z.string(), resource: z.string(), expiresAt: z.iso.datetime().optional(), inactive: z.boolean().optional() })),
+  tunnels: z.array(
+    z.object({
+      id: z.string(),
+      service: z.string(),
+      bind: z.string(),
+      connections: z.number().nonnegative(),
+    }),
+  ),
+  grants: z.array(
+    z.object({
+      fingerprint: z.string(),
+      capability: z.string(),
+      resource: z.string(),
+      expiresAt: z.iso.datetime().optional(),
+      inactive: z.boolean().optional(),
+    }),
+  ),
   peers: z.array(z.object({ fingerprint: z.string() })),
 });
 type Snapshot = z.infer<typeof snapshotSchema>;
 
-export function Services({ ownerId, visible, routes, onPair, onRoute }: {
+export function Services({
+  ownerId,
+  visible,
+  routes,
+  onPair,
+  onRoute,
+}: {
   ownerId?: string;
   visible: boolean;
   routes: Record<string, PeerRoute>;
   onPair(): void;
   onRoute?(route: PeerRoute): void;
 }) {
-  const [names] = useState(() => ownerId ? readPairedNames(ownerId) : {});
+  const { notify } = useNotifications();
+  const [names] = useState(() => (ownerId ? readPairedNames(ownerId) : {}));
   const [snapshot, setSnapshot] = useState<Snapshot | null>();
-  const [recipient, setRecipient] = useState('');
+  const [recipient, setRecipient] = useState("");
   const [busy, setBusy] = useState(false);
   const [revision, setRevision] = useState(0);
-  const [message, setMessage] = useState('');
+  const [message, setMessage] = useState("");
   const [connectionReady, setConnectionReady] = useState(false);
 
   useEffect(() => {
@@ -36,7 +74,9 @@ export function Services({ ownerId, visible, routes, onPair, onRoute }: {
     let active = true;
     let timer: ReturnType<typeof setTimeout>;
     async function load() {
-      const result = snapshotSchema.safeParse(await window.lanvory.serviceSnapshot().catch(() => null));
+      const result = snapshotSchema.safeParse(
+        await window.lanvory.serviceSnapshot().catch(() => null),
+      );
       if (!active) return;
       setSnapshot(result.success ? result.data : null);
       if (result.success && result.data.peers.length === 1) {
@@ -46,14 +86,20 @@ export function Services({ ownerId, visible, routes, onPair, onRoute }: {
       timer = setTimeout(load, 2000);
     }
     void load();
-    return () => { active = false; clearTimeout(timer); };
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
   }, [revision, visible]);
 
   async function update(action: string, fields: Record<string, string>) {
     setBusy(true);
-    setMessage('');
+    setMessage("");
     try {
-      if (action === 'open') {
+      if (
+        action === "open" &&
+        !isP2PRoute({ adapter: fields.adapter, endpoint: fields.endpoint })
+      ) {
         const error = await connectionError(fields.adapter, fields.endpoint);
         if (error) {
           setMessage(error);
@@ -61,25 +107,49 @@ export function Services({ ownerId, visible, routes, onPair, onRoute }: {
         }
       }
       const ok = await window.lanvory.serviceAction(action, fields);
-      setMessage(ok ? 'Service settings updated.' : 'Action failed. Check the address, current peer trust and adapter approval.');
       if (ok) {
-        if (action === 'open' && fields.fingerprint && fields.adapter && fields.endpoint) {
-          onRoute?.({ fingerprint: fields.fingerprint, adapter: fields.adapter, endpoint: fields.endpoint });
+        setMessage("");
+        notify({
+          category: "services",
+          tone: "success",
+          title: "Service settings updated.",
+        });
+      } else {
+        setMessage("Action failed. Check the address, current peer trust and adapter approval.");
+      }
+      if (ok) {
+        if (
+          action === "open" &&
+          fields.fingerprint &&
+          fields.adapter &&
+          fields.endpoint
+        ) {
+          onRoute?.({
+            fingerprint: fields.fingerprint,
+            adapter: fields.adapter,
+            endpoint: fields.endpoint,
+          });
         }
         setRevision((value) => value + 1);
       }
     } catch {
-      setMessage('Unable to reach the daemon.');
+      setMessage("Unable to reach the daemon.");
     } finally {
       setBusy(false);
     }
   }
 
-  function submit(event: FormEvent<HTMLFormElement>, action: string, additional: Record<string, string> = {}) {
+  function submit(
+    event: FormEvent<HTMLFormElement>,
+    action: string,
+    additional: Record<string, string> = {},
+  ) {
     event.preventDefault();
     const fields: Record<string, string> = {};
-    new FormData(event.currentTarget).forEach((value, key) => { fields[key] = String(value).trim(); });
-    if (action === 'open' && fields.fingerprint !== selectedDevice) return;
+    new FormData(event.currentTarget).forEach((value, key) => {
+      fields[key] = String(value).trim();
+    });
+    if (action === "open" && fields.fingerprint !== selectedDevice) return;
     void update(action, { ...fields, ...additional });
   }
 
@@ -87,30 +157,72 @@ export function Services({ ownerId, visible, routes, onPair, onRoute }: {
     value: fingerprint,
     label: pairedDeviceName(fingerprint, names),
   }));
-  const selectedDevice = peerOptions.some(({ value }) => value === recipient) ? recipient : '';
+  const selectedDevice = peerOptions.some(({ value }) => value === recipient)
+    ? recipient
+    : "";
   const route = routes[selectedDevice];
   return (
-    <section className="network-panel services-panel" aria-labelledby="services-heading">
-      <h2 id="services-heading" className="sr-only">Services</h2>
+    <section
+      className="network-panel services-panel"
+      aria-labelledby="services-heading"
+    >
+      <h2 id="services-heading" className="sr-only">
+        Services
+      </h2>
       {snapshot === undefined && <p>Loading services…</p>}
-      {snapshot === null && <p role="status">Unable to load services. Reconnecting…</p>}
+      {snapshot === null && (
+        <p role="status">Unable to load services. Reconnecting…</p>
+      )}
       <div className="operation-grid services-grid">
         <section className="operation-card operation-highlight">
-          <PanelHeading icon={Server} title="Share from this device" description="Add an app running here, then grant access to a paired device." />
-          <form className="trust-form" onSubmit={(event) => submit(event, 'share')}>
-            <label>Name to share<input name="id" placeholder="my-app" required maxLength={64} pattern="[a-z0-9][a-z0-9_\-]{0,63}" /></label>
-            <label>App address on this device<input name="target" required placeholder="127.0.0.1:8080" /></label>
-            <button className="primary" type="submit" disabled={busy || !snapshot}>Share service</button>
+          <PanelHeading
+            icon={Server}
+            title="Share from this device"
+            description="Add an app running here, then grant access to a paired device."
+          />
+          <form
+            className="trust-form"
+            onSubmit={(event) => submit(event, "share")}
+          >
+            <label>
+              Name to share
+              <input
+                name="id"
+                placeholder="my-app"
+                required
+                maxLength={64}
+                pattern="[a-z0-9][a-z0-9_\-]{0,63}"
+              />
+            </label>
+            <label>
+              App address on this device
+              <input name="target" required placeholder="127.0.0.1:8080" />
+            </label>
+            <button
+              className="primary"
+              type="submit"
+              disabled={busy || !snapshot}
+            >
+              Share service
+            </button>
           </form>
-          {snapshot?.services.length === 0 && <p className="panel-empty">You haven’t shared a service yet.</p>}
+          {snapshot?.services.length === 0 && (
+            <p className="panel-empty">You haven’t shared a service yet.</p>
+          )}
           {!!snapshot?.services.length && (
             <div className="services-section-divider">
-              <span className="services-section-title">Your shared services</span>
+              <span className="services-section-title">
+                Your shared services
+              </span>
               <span className="tag">{snapshot.services.length}</span>
             </div>
           )}
           {snapshot?.services.map((service) => {
-            const serviceGrants = snapshot.grants.filter((grant) => grant.capability === 'service-connect' && grant.resource === service.id);
+            const serviceGrants = snapshot.grants.filter(
+              (grant) =>
+                grant.capability === "service-connect" &&
+                grant.resource === service.id,
+            );
             return (
               <div className="sharing-item service-card" key={service.id}>
                 <div className="service-card-header">
@@ -122,11 +234,16 @@ export function Services({ ownerId, visible, routes, onPair, onRoute }: {
                       <div className="service-title-row">
                         <strong className="service-name">{service.id}</strong>
                         <span className="service-target-badge">
-                          <span className="service-status-dot" aria-hidden="true" />
+                          <span
+                            className="service-status-dot"
+                            aria-hidden="true"
+                          />
                           {service.target}
                         </span>
                       </div>
-                      <div className={`service-access-hint${serviceGrants.length > 0 ? ' active' : ''}`}>
+                      <div
+                        className={`service-access-hint${serviceGrants.length > 0 ? " active" : ""}`}
+                      >
                         {serviceGrants.length === 0 ? (
                           <>
                             <Lock size={12} aria-hidden="true" />
@@ -135,7 +252,10 @@ export function Services({ ownerId, visible, routes, onPair, onRoute }: {
                         ) : (
                           <>
                             <Users size={12} aria-hidden="true" />
-                            <span>Shared with {serviceGrants.length} paired device{serviceGrants.length === 1 ? '' : 's'}</span>
+                            <span>
+                              Shared with {serviceGrants.length} paired device
+                              {serviceGrants.length === 1 ? "" : "s"}
+                            </span>
                           </>
                         )}
                       </div>
@@ -148,24 +268,55 @@ export function Services({ ownerId, visible, routes, onPair, onRoute }: {
                     aria-label="Remove service"
                     disabled={busy}
                     onClick={() => {
-                      if (window.confirm(`Remove ${service.id} and revoke all of its grants?`)) void update('remove', { id: service.id });
+                      if (
+                        window.confirm(
+                          `Remove ${service.id} and revoke all of its grants?`,
+                        )
+                      )
+                        void update("remove", { id: service.id });
                     }}
-                  ><Trash2 size={15} aria-hidden="true" /><span className="sr-only">Remove service</span></button>
+                  >
+                    <Trash2 size={15} aria-hidden="true" />
+                    <span className="sr-only">Remove service</span>
+                  </button>
                 </div>
 
                 {serviceGrants.length > 0 ? (
                   <div className="service-grants-list">
-                    <div className="service-sub-label">Devices with access ({serviceGrants.length})</div>
+                    <div className="service-sub-label">
+                      Devices with access ({serviceGrants.length})
+                    </div>
                     {serviceGrants.map((grant) => (
-                      <div className="service-grant-row" key={grant.fingerprint}>
+                      <div
+                        className="service-grant-row"
+                        key={grant.fingerprint}
+                      >
                         <div className="service-grant-info">
-                          <Laptop size={14} className="service-device-icon" aria-hidden="true" />
-                          <strong className="service-grant-name">{pairedDeviceName(grant.fingerprint, names)}</strong>
-                          {grant.inactive && <span className="service-grant-badge">Needs renewal</span>}
+                          <Laptop
+                            size={14}
+                            className="service-device-icon"
+                            aria-hidden="true"
+                          />
+                          <strong className="service-grant-name">
+                            {pairedDeviceName(grant.fingerprint, names)}
+                          </strong>
+                          {grant.inactive && (
+                            <span className="service-grant-badge">
+                              Needs renewal
+                            </span>
+                          )}
                           {grant.expiresAt ? (
-                            <span className="service-grant-meta">Expires {new Date(grant.expiresAt).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })}</span>
+                            <span className="service-grant-meta">
+                              Expires{" "}
+                              {new Date(grant.expiresAt).toLocaleString(
+                                undefined,
+                                { dateStyle: "short", timeStyle: "short" },
+                              )}
+                            </span>
                           ) : (
-                            <span className="service-grant-meta">Until revoked</span>
+                            <span className="service-grant-meta">
+                              Until revoked
+                            </span>
                           )}
                         </div>
                         <button
@@ -174,31 +325,66 @@ export function Services({ ownerId, visible, routes, onPair, onRoute }: {
                           title="Revoke access"
                           aria-label="Revoke access"
                           disabled={busy}
-                          onClick={() => void update('revoke', { id: service.id, fingerprint: grant.fingerprint })}
-                        ><Trash2 size={14} aria-hidden="true" /><span className="sr-only">Revoke access</span></button>
+                          onClick={() =>
+                            void update("revoke", {
+                              id: service.id,
+                              fingerprint: grant.fingerprint,
+                            })
+                          }
+                        >
+                          <Trash2 size={14} aria-hidden="true" />
+                          <span className="sr-only">Revoke access</span>
+                        </button>
                       </div>
                     ))}
                   </div>
                 ) : (
                   <div className="service-empty-grants">
                     <Lock size={13} aria-hidden="true" />
-                    <span>Only accessible on this device. Grant access below to allow paired peers to connect.</span>
+                    <span>
+                      Only accessible on this device. Grant access below to
+                      allow paired peers to connect.
+                    </span>
                   </div>
                 )}
 
                 {snapshot.peers.length === 0 ? (
-                  <p className="service-no-peers">Pair a device to grant access to this service.</p>
+                  <p className="service-no-peers">
+                    Pair a device to grant access to this service.
+                  </p>
                 ) : (
-                  <form className="trust-form service-grant-form" onSubmit={(event) => submit(event, 'grant', { id: service.id })}>
+                  <form
+                    className="trust-form service-grant-form"
+                    onSubmit={(event) =>
+                      submit(event, "grant", { id: service.id })
+                    }
+                  >
                     <div className="service-grant-form-header">
                       <ShieldCheck size={14} aria-hidden="true" />
                       <span>Grant access to a paired device</span>
                     </div>
                     <div className="service-grant-fields">
-                      <SelectField label="Paired device" name="fingerprint" required placeholder="Select a device" options={peerOptions} />
-                      <SelectField label="Access duration" name="duration" defaultValue={readDefaultDuration()} options={accessDurations} />
+                      <SelectField
+                        label="Paired device"
+                        name="fingerprint"
+                        required
+                        placeholder="Select a device"
+                        options={peerOptions}
+                      />
+                      <SelectField
+                        label="Access duration"
+                        name="duration"
+                        defaultValue={readDefaultDuration()}
+                        options={accessDurations}
+                      />
                     </div>
-                    <button className="primary service-grant-btn" type="submit" disabled={busy}>Grant access</button>
+                    <button
+                      className="primary service-grant-btn"
+                      type="submit"
+                      disabled={busy}
+                    >
+                      Grant access
+                    </button>
                   </form>
                 )}
               </div>
@@ -206,39 +392,105 @@ export function Services({ ownerId, visible, routes, onPair, onRoute }: {
           })}
         </section>
         <section className="operation-card">
-          <PanelHeading icon={ArrowDownLeft} title="Connect to another device’s service"
-            description="Use the service name and Lanvory address from the device sharing the app." />
+          <PanelHeading
+            icon={ArrowDownLeft}
+            title="Connect to another device’s service"
+            description="Use the service name and Lanvory address from the device sharing the app."
+          />
           {snapshot?.peers.length === 0 && (
             <div className="pair-required services-pair">
               <p>Pair with the device that’s sharing the app.</p>
-              <button type="button" className="refresh" onClick={onPair}>Pair a device</button>
+              <button type="button" className="refresh" onClick={onPair}>
+                Pair a device
+              </button>
             </div>
           )}
           {!!peerOptions.length && (
-            <form className="trust-form services-connect-form" onSubmit={(event) => submit(event, 'open')}>
-              <SelectField label="Device sharing the service" name="fingerprint" required placeholder="Select the sharing device"
-                options={peerOptions} value={selectedDevice} onValueChange={setRecipient} disabled={busy} />
+            <form
+              className="trust-form services-connect-form"
+              onSubmit={(event) => submit(event, "open")}
+            >
+              <SelectField
+                label="Device sharing the service"
+                name="fingerprint"
+                required
+                placeholder="Select the sharing device"
+                options={peerOptions}
+                value={selectedDevice}
+                onValueChange={setRecipient}
+                disabled={busy}
+              />
               {selectedDevice && (
                 <div key={selectedDevice} className="services-device-fields">
-                  <label>Service name on the sharing device<input name="id" required maxLength={64}
-                    pattern="[a-z0-9][a-z0-9_\-]{0,63}" placeholder="Name from the other device" /></label>
-                  <PeerConnectionFields suggestedEndpoint={route?.endpoint}
-                    endpointLabel="Lanvory address of the sharing device" adapterLabel="Network adapter on this device"
-                    disabled={busy} onReady={setConnectionReady} />
+                  {isP2PRoute(route) && (
+                    <>
+                      <input
+                        type="hidden"
+                        name="adapter"
+                        value={route!.adapter}
+                      />
+                      <input
+                        type="hidden"
+                        name="endpoint"
+                        value={route!.endpoint}
+                      />
+                      <div className="paired-device-meta-row">
+                        <span className="paired-method-badge is-p2p">
+                          Bluetooth + Wi-Fi P2P
+                        </span>
+                      </div>
+                    </>
+                  )}
+                  <label>
+                    Service name on the sharing device
+                    <input
+                      name="id"
+                      required
+                      maxLength={64}
+                      pattern="[a-z0-9][a-z0-9_\-]{0,63}"
+                      placeholder="Name from the other device"
+                    />
+                  </label>
+                  {!isP2PRoute(route) && (
+                    <PeerConnectionFields
+                      suggestedEndpoint={lanSuggestedEndpoint(route)}
+                      endpointLabel="Lanvory address of the sharing device"
+                      adapterLabel="Network adapter on this device"
+                      disabled={busy}
+                      onReady={setConnectionReady}
+                    />
+                  )}
                   <details className="trust-details services-connection">
                     <summary>Advanced · Address on this device</summary>
-                    <label>Tunnel address on this device (optional)<input name="bind" defaultValue="127.0.0.1:0"
-                      aria-describedby="services-bind-help" readOnly={busy} /></label>
-                    <p id="services-bind-help">Keep 127.0.0.1:0 to choose a port automatically.</p>
+                    <label>
+                      Tunnel address on this device (optional)
+                      <input
+                        name="bind"
+                        defaultValue="127.0.0.1:0"
+                        aria-describedby="services-bind-help"
+                        readOnly={busy}
+                      />
+                    </label>
+                    <p id="services-bind-help">
+                      Keep 127.0.0.1:0 to choose a port automatically.
+                    </p>
                   </details>
-                  <button className="refresh" type="submit" disabled={busy || !connectionReady}>Connect to service</button>
+                  <button
+                    className="refresh"
+                    type="submit"
+                    disabled={busy || (!isP2PRoute(route) && !connectionReady)}
+                  >
+                    Connect to service
+                  </button>
                 </div>
               )}
             </form>
           )}
           {!!snapshot?.tunnels.length && (
             <div className="services-section-divider">
-              <span className="services-section-title">Connections on this device</span>
+              <span className="services-section-title">
+                Connections on this device
+              </span>
               <span className="tag">{snapshot.tunnels.length}</span>
             </div>
           )}
@@ -256,13 +508,24 @@ export function Services({ ownerId, visible, routes, onPair, onRoute }: {
                         type="button"
                         className="service-target-badge service-target-link"
                         title={`Open http://${tunnel.bind} in browser`}
-                        onClick={() => void window.lanvory.openTunnelUrl(tunnel.bind)}
+                        onClick={() =>
+                          void window.lanvory.openTunnelUrl(tunnel.bind)
+                        }
                       >
-                        <span className="service-status-dot" aria-hidden="true" />
+                        <span
+                          className="service-status-dot"
+                          aria-hidden="true"
+                        />
                         <span>Open {tunnel.bind} on this device</span>
-                        <ExternalLink size={12} aria-hidden="true" className="service-link-icon" />
+                        <ExternalLink
+                          size={12}
+                          aria-hidden="true"
+                          className="service-link-icon"
+                        />
                       </button>
-                      <span className="service-grant-meta">{tunnel.connections} active</span>
+                      <span className="service-grant-meta">
+                        {tunnel.connections} active
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -272,8 +535,11 @@ export function Services({ ownerId, visible, routes, onPair, onRoute }: {
                   title="Disconnect"
                   aria-label="Disconnect"
                   disabled={busy}
-                  onClick={() => void update('stop', { id: tunnel.id })}
-                ><X size={15} aria-hidden="true" /><span className="sr-only">Disconnect</span></button>
+                  onClick={() => void update("stop", { id: tunnel.id })}
+                >
+                  <X size={15} aria-hidden="true" />
+                  <span className="sr-only">Disconnect</span>
+                </button>
               </div>
             </div>
           ))}

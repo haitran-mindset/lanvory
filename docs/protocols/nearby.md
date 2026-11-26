@@ -9,7 +9,7 @@ Lanvory can discover nearby Macs and establish a direct Wi-Fi connection without
 3. Scan from the other Mac and select a device with a Wi-Fi P2P service. The helper opens a local loopback bridge to that service. A Bluetooth result alone does not establish the Wi-Fi connection.
 4. Pair the devices by verifying the peer identity and confirming on both sides. Once paired, the resource you use still needs its own permission. See [Confirmed peer pairing](pairing.md) and [Peer resource permissions](../security/permissions.md).
 
-The helper forwards TCP bytes to the daemon's loopback listener. Lanvory terminates TLS at the two daemons, so the helper does not establish peer trust. The identity probe learns the fingerprint presented by the remote daemon. For a new peer, treat the result as a candidate and compare the pairing details on both physical devices. Daemon-side P2P pairing accepts only an endpoint registered by the local helper.
+The helper forwards TCP bytes to the daemon's loopback listener. Lanvory terminates TLS at the two daemons, so the helper does not establish peer trust. The identity probe learns the fingerprint presented by the remote daemon. For a new peer, treat the result as a candidate and compare the pairing details on both physical devices. Daemon-side P2P pairing and resource loopback operations (file transfer, shared clipboard, folder sync, service tunnels, and live mounts) accept only an endpoint registered by the local helper (`HasEndpoint`) during the active session; ephemeral `127.0.0.1:<port>` P2P routes are not persisted across desktop restarts.
 
 ## CLI and limits
 

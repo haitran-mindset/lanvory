@@ -21,7 +21,7 @@ import (
 func TestLocalOfferDecision(t *testing.T) {
 	receiver := drop.NewReceiver(t.TempDir(), func(string) (bool, error) { return true, nil }, nil)
 	mux := http.NewServeMux()
-	registerFiles(mux, Device{}, t.TempDir(), receiver, nil)
+	registerFiles(mux, Device{}, t.TempDir(), receiver, nil, nil)
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	digest := sha256.Sum256([]byte("file"))

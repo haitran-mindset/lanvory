@@ -45,10 +45,11 @@ export interface DesktopApi {
   clearSelectedFile(): Promise<boolean>;
   removeSelectedFile(index: number): Promise<string[] | null>;
   getSelectedFiles(): Promise<string[]>;
-  sendFile(adapter: string, endpoint: string, pin: string): Promise<'completed' | 'cancelled' | 'failed'>;
+  sendFile(adapter: string, endpoint: string, pin: string): Promise<'completed' | 'cancelled' | 'failed' | `failed:${string}`>;
   cancelFileSend(): Promise<void>;
   pingPeer(adapter: string, endpoint: string, pin: string): Promise<{ verified: boolean; latencyMs?: number; error?: string }>;
   clipboardState(): Promise<unknown>;
+  clipboardAccess(): Promise<string[] | null>;
   setClipboardPolicy(enabled: boolean): Promise<unknown>;
   setClipboardAccess(fingerprint: string, allowed: boolean, duration?: 'until-revoked' | 'hour' | 'day'): Promise<boolean>;
   clearClipboard(): Promise<boolean>;

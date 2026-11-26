@@ -1,6 +1,7 @@
 import { type FormEvent, useEffect, useState } from 'react';
 import {
   AlertCircle,
+  Bluetooth,
   Check,
   CheckCircle2,
   ChevronLeft,
@@ -18,6 +19,7 @@ import {
   Layers,
   MoreHorizontal,
   Music,
+  Network,
   Pencil,
   Plus,
   RefreshCw,
@@ -27,7 +29,7 @@ import {
   X,
 } from 'lucide-react';
 import { z } from 'zod';
-import { connectionError, PeerConnectionFields } from '../../components/peer-connection-fields';
+import { connectionError, lanSuggestedEndpoint, PeerConnectionFields } from '../../components/peer-connection-fields';
 import { PanelHeading } from '../../components/panel-heading';
 import { SelectField } from '../../components/ui/select';
 import { useNotifications } from '../../components/notifications';
@@ -965,34 +967,43 @@ export function LiveMountSection({
             <form className="lr-connect-inline trust-form" onSubmit={handleManualOpen}>
               {mountPeer && !p2pRoute && (
                 <PeerConnectionFields
-                  suggestedEndpoint={savedRoute?.adapter === 'p2p' ? '' : savedRoute?.endpoint}
+                  suggestedEndpoint={lanSuggestedEndpoint(savedRoute)}
                   endpointLabel="Device address"
                   adapterLabel="Network adapter"
                   disabled={busy}
                   onReady={setMountConnReady}
                 />
               )}
-              <div className="lr-connect-actions">
-                <button
-                  type="button"
-                  className="primary"
-                  disabled={busy || !effectiveReady}
-                  onClick={(e) => {
-                    const form = e.currentTarget.closest('form');
-                    if (form) void handleDiscover(form);
-                  }}
-                >
-                  <Search size={14} aria-hidden="true" />
-                  <span>Find shared folders</span>
-                </button>
+              <div className="lr-connect-toolbar">
                 {p2pRoute && (
-                  <>
-                    <span className="lr-p2p-chip">Bluetooth + Wi-Fi P2P ({p2pRoute.endpoint})</span>
-                    <button type="button" className="lr-link-btn" onClick={() => setForceLanAddress(true)}>
+                  <div className="lr-connect-route">
+                    <span className="lr-connect-route-icon"><Bluetooth size={19} aria-hidden="true" /></span>
+                    <div className="lr-connect-route-copy">
+                      <strong>Bluetooth + Wi-Fi P2P</strong>
+                      <small>Direct connection <code title="Local bridge endpoint">{p2pRoute.endpoint}</code></small>
+                    </div>
+                  </div>
+                )}
+                <div className="lr-connect-actions">
+                  {p2pRoute && (
+                    <button type="button" className="lr-connect-switch" disabled={busy} onClick={() => setForceLanAddress(true)}>
+                      <Network size={15} aria-hidden="true" />
                       Use LAN instead
                     </button>
-                  </>
-                )}
+                  )}
+                  <button
+                    type="button"
+                    className="primary"
+                    disabled={busy || !effectiveReady}
+                    onClick={(e) => {
+                      const form = e.currentTarget.form;
+                      if (form) void handleDiscover(form);
+                    }}
+                  >
+                    <Search size={15} aria-hidden="true" />
+                    <span>Find shared folders</span>
+                  </button>
+                </div>
               </div>
               {showManualId && (
                 <div className="sync-path-row" style={{ marginTop: 10 }}>

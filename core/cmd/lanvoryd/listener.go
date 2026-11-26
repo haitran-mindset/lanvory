@@ -154,6 +154,16 @@ func (l *lanListener) start(adapter string, bind netip.AddrPort, advertise, enab
 			tcp.Close()
 			return fmt.Errorf("start QUIC peer listener: %w", err)
 		}
+		if l.clipboard != nil {
+			udp.EnableClipboard(l.clipboard, func(fingerprint string) bool {
+				allowed, err := storage.HasGrant(l.dir, l.device.ID, storage.Grant{
+					Fingerprint: fingerprint,
+					Capability:  permissions.ClipboardShare,
+					Resource:    "clipboard",
+				}, time.Now())
+				return err == nil && allowed
+			})
+		}
 		if l.mountReg != nil {
 			udp.EnableMount(l.mountReg, func(fingerprint, mountID string) bool {
 				allowed, err := storage.HasGrant(l.dir, l.device.ID, storage.Grant{
@@ -206,11 +216,6 @@ func (l *lanListener) start(adapter string, bind netip.AddrPort, advertise, enab
 func (l *lanListener) ensureP2PPort() int {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	if l.current.State == "listening" {
-		if addr, err := netip.ParseAddrPort(l.current.Endpoint); err == nil && addr.Port() > 0 {
-			return int(addr.Port())
-		}
-	}
 	if l.p2pPort > 0 {
 		return l.p2pPort
 	}

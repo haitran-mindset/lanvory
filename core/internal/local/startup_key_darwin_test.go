@@ -36,7 +36,7 @@ func TestTrustedOperationsUseDaemonIdentity(t *testing.T) {
 		t.Fatal(err)
 	}
 	receiver := drop.NewReceiver(dir, func(string) (bool, error) { return false, nil }, nil)
-	handler := HandlerWithResources(device, dir, receiver, nil, key, nil, nil)
+	handler := HandlerWithResources(device, dir, receiver, nil, key, nil, nil, nil)
 	query := "?interface=lo0&endpoint=192.168.1.42%3A43110&fingerprint=" + pin
 	for _, route := range []string{verifyTrustedRoute + query, verifyQUICRoute + query, sendFileRoute + query + "&path=%2Ftmp%2Funused"} {
 		t.Run(route, func(t *testing.T) {

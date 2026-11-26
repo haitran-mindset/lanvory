@@ -193,6 +193,9 @@ func (m *Manager) readLoop(r io.Reader, cmd *exec.Cmd) {
 		case "p2p_ready", "p2p_error":
 			if ch, ok := m.pendingDial[msg.RequestID]; ok {
 				delete(m.pendingDial, msg.RequestID)
+				if msg.Event == "p2p_ready" && msg.Endpoint != "" {
+					m.endpoints[msg.Endpoint] = true
+				}
 				ch <- msg
 			}
 		}
@@ -203,6 +206,7 @@ func (m *Manager) readLoop(r io.Reader, cmd *exec.Cmd) {
 	if m.cmd == cmd {
 		m.cmd = nil
 		m.stdin = nil
+		clear(m.endpoints)
 		m.status.Advertising = false
 		m.status.Scanning = false
 		m.status.P2PListening = false
@@ -335,11 +339,6 @@ func (m *Manager) ConnectP2P(ctx context.Context, serviceName string) (P2PEndpoi
 		if msg.Event == "p2p_error" {
 			return P2PEndpoint{}, errors.New(msg.Error)
 		}
-		if msg.Endpoint != "" {
-			m.mu.Lock()
-			m.endpoints[msg.Endpoint] = true
-			m.mu.Unlock()
-		}
 		return P2PEndpoint{
 			ID:          msg.ID,
 			Endpoint:    msg.Endpoint,
@@ -357,7 +356,7 @@ func (m *Manager) ConnectP2P(ctx context.Context, serviceName string) (P2PEndpoi
 func (m *Manager) HasEndpoint(endpoint string) bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	return m.endpoints[endpoint]
+	return !m.closed && m.endpoints[endpoint]
 }
 
 // Close shuts down the helper process cleanly.

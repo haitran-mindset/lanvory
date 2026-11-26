@@ -13,6 +13,7 @@ import { SelectField } from "../../components/ui/select";
 import { z } from "zod";
 import {
   ArrowUpRight,
+  Bluetooth,
   Check,
   CheckCircle,
   Clock3,
@@ -23,6 +24,7 @@ import {
   RotateCcw,
   ShieldCheck,
   Trash2,
+  Wifi,
   X,
 } from "lucide-react";
 import { pairedDeviceName, readPairedNames } from "../../services/paired-names";
@@ -247,6 +249,28 @@ function TransferRow({
   );
 }
 
+function formatSendFailure(result: string, isP2P: boolean): string {
+  const raw = result.startsWith("failed:") ? result.slice(7).trim() : "";
+  const lower = raw.toLocaleLowerCase();
+  if (lower.includes("scope")) {
+    return isP2P
+      ? "The Bluetooth + Wi-Fi P2P session expired. Reconnect over Bluetooth + P2P or switch to LAN."
+      : "The selected network interface or address is no longer reachable.";
+  }
+  if (lower.includes("not trusted") || lower.includes("trust") || lower.includes("forbidden")) {
+    return "The recipient has not allowed file requests from this device yet.";
+  }
+  if (lower.includes("not accepted") || lower.includes("declined")) {
+    return "The recipient declined or did not approve the file in time.";
+  }
+  if (raw) {
+    return `Could not send the file (${raw}).`;
+  }
+  return isP2P
+    ? "Could not send the file. Check the recipient’s file permissions, or reconnect over Bluetooth + P2P and try again."
+    : "Could not send the file. Check that the other device is online, allows requests from you, and approves this file.";
+}
+
 const recipientSchema = z.array(
   z.object({ fingerprint: z.string().regex(/^[a-f0-9]{64}$/) }),
 );
@@ -265,6 +289,7 @@ export function Sharing({
   onPair,
   onPendingFilesChange,
   onRoute,
+  onClearP2PRoute,
 }: {
   ownerId?: string;
   visible: boolean;
@@ -272,6 +297,7 @@ export function Sharing({
   onPair(): void;
   onPendingFilesChange(count: number): void;
   onRoute?(route: PeerRoute): void;
+  onClearP2PRoute?(fingerprint: string): void;
 }) {
   const { notify } = useNotifications();
   const [recipients, setRecipients] = useState<z.infer<
@@ -282,6 +308,7 @@ export function Sharing({
   const recipientAvailable =
     recipients?.some((peer) => peer.fingerprint === recipient) === true;
   const route = routes[recipient];
+  const p2pRoute = route?.adapter === "p2p" && /^127\.0\.0\.1:\d{1,5}$/.test(route.endpoint) ? route : undefined;
 
   useEffect(() => {
     if (!visible) return;
@@ -494,30 +521,25 @@ export function Sharing({
 
   async function send(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!selected || !canSelectFile) return;
+    if (!selected || !canSelectFile || (!p2pRoute && !connectionReady)) return;
     setSending(true);
     setSendMessage("");
     const form = new FormData(event.currentTarget);
     const value = (name: string) => String(form.get(name) ?? "").trim();
+    const adapter = p2pRoute?.adapter ?? value("adapter");
+    const endpoint = p2pRoute?.endpoint ?? value("endpoint");
+    const fingerprint = value("fingerprint");
     try {
-      const error = await connectionError(value("adapter"), value("endpoint"));
+      const error = p2pRoute ? null : await connectionError(adapter, endpoint);
       if (error) {
         setSendMessage(error);
         return;
       }
-      const result = await window.lanvory.sendFile(
-        value("adapter"),
-        value("endpoint"),
-        value("fingerprint"),
-      );
+      const result = await window.lanvory.sendFile(adapter, endpoint, fingerprint);
       if (result === "completed") {
         const count = selectedFiles.length;
         setSelectedFiles([]);
-        onRoute?.({
-          fingerprint: value("fingerprint"),
-          adapter: value("adapter"),
-          endpoint: value("endpoint"),
-        });
+        onRoute?.(p2pRoute ?? { fingerprint, adapter, endpoint });
         setSendMessage(
           count > 1
             ? `The peer confirmed all ${count} files were received and verified.`
@@ -534,10 +556,13 @@ export function Sharing({
           .getSelectedFiles?.()
           .catch(() => null);
         if (Array.isArray(remaining)) setSelectedFiles(remaining);
+        if (p2pRoute && result.toLocaleLowerCase().includes("scope")) {
+          onClearP2PRoute?.(fingerprint);
+        }
         setSendMessage(
           result === "cancelled"
             ? "Send cancelled."
-            : "Could not send the file. Check that the other device is online, allows requests from you, and approves this file.",
+            : formatSendFailure(result, Boolean(p2pRoute)),
         );
       }
     } catch {
@@ -570,9 +595,7 @@ export function Sharing({
     }
     setOfferMessage(
       accepted
-        ? allow
-          ? "File offer approved."
-          : "File offer declined."
+        ? ""
         : "Unable to update the file offer. It may no longer be available.",
     );
     setReplying(undefined);
@@ -595,11 +618,12 @@ export function Sharing({
           },
       );
     }
-    setHistoryMessage(
-      removed
-        ? "Entry removed from history."
-        : "Unable to remove the history entry. Try again.",
-    );
+    if (removed) {
+      setHistoryMessage("");
+      notify({ category: "sharing", tone: "info", title: "Entry removed from history." });
+    } else {
+      setHistoryMessage("Unable to remove the history entry. Try again.");
+    }
     setRemovingHistory(false);
   }
 
@@ -621,11 +645,12 @@ export function Sharing({
           },
       );
     }
-    setHistoryMessage(
-      cleared
-        ? "Transfer history cleared."
-        : "Unable to clear transfer history. Try again.",
-    );
+    if (cleared) {
+      setHistoryMessage("");
+      notify({ category: "sharing", tone: "info", title: "Transfer history cleared." });
+    } else {
+      setHistoryMessage("Unable to clear transfer history. Try again.");
+    }
     setRemovingHistory(false);
   }
 
@@ -702,7 +727,20 @@ export function Sharing({
             {recipients === null && (
               <p role="status">Unable to load paired devices.</p>
             )}
-            {recipientAvailable && (
+            {recipientAvailable && (p2pRoute || route?.adapter) && (
+              <div className="paired-device-meta-row">
+                <span className={`paired-method-badge ${p2pRoute ? "is-p2p" : "is-lan"}`}>
+                  {p2pRoute ? <Bluetooth size={12} aria-hidden="true" /> : <Wifi size={12} aria-hidden="true" />}
+                  <span>{p2pRoute ? "Bluetooth + Wi-Fi P2P" : `Local Network (${route!.adapter})`}</span>
+                </span>
+                {!p2pRoute && route?.endpoint && (
+                  <span className="paired-meta-chip">
+                    <code>{route.endpoint}</code>
+                  </span>
+                )}
+              </div>
+            )}
+            {recipientAvailable && !p2pRoute && (
               <details
                 className="trust-details"
                 key={recipient}
@@ -826,7 +864,7 @@ export function Sharing({
                 <button
                   type="submit"
                   className="primary"
-                  disabled={!selected || !canSelectFile || !connectionReady}
+                  disabled={!selected || !canSelectFile || (!p2pRoute && !connectionReady)}
                 >
                   {selectedFiles.length > 1
                     ? `Send ${selectedFiles.length} files`

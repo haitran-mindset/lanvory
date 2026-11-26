@@ -3,6 +3,7 @@ import { SelectField, accessDurations } from '../../components/ui/select';
 import { z } from 'zod';
 import { Ban, ChevronDown, ChevronUp, Monitor, Search, ShieldCheck } from 'lucide-react';
 import { PanelHeading } from '../../components/panel-heading';
+import { useNotifications } from '../../components/notifications';
 import { pairedDeviceName, readPairedNames } from '../../services/paired-names';
 import { readDefaultDuration } from '../../services/permission-defaults';
 
@@ -20,6 +21,7 @@ async function readAccess() {
 }
 
 export function InboxAccess({ ownerId }: { ownerId?: string }) {
+  const { notify } = useNotifications();
   const [access, setAccess] = useState<z.infer<typeof schema> | null>();
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
@@ -41,9 +43,17 @@ export function InboxAccess({ ownerId }: { ownerId?: string }) {
     setBusy(true);
     const saved = await window.lanvory.setInboxAccess(fingerprint, allowed, duration).catch(() => false);
     const device = pairedDeviceName(fingerprint, names);
-    setMessage(saved ? (allowed ? `${device} can now request to send files.` : `File requests from ${device} are blocked.`)
-      : 'Unable to update who can send requests. Try again.');
-    if (saved) setEditing(undefined);
+    if (saved) {
+      setMessage('');
+      setEditing(undefined);
+      notify({
+        category: 'sharing',
+        tone: allowed ? 'success' : 'info',
+        title: allowed ? `${device} can now request to send files.` : `File requests from ${device} are blocked.`,
+      });
+    } else {
+      setMessage('Unable to update who can send requests. Try again.');
+    }
     setAccess(await readAccess());
     setBusy(false);
   }

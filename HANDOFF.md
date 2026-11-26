@@ -705,6 +705,19 @@ Implemented the requested `POST_MVP` expansion across Go core, CLI, Electron IPC
   - Added `.github/workflows/release.yml` triggered on `v*` tags (macOS `arm64` & `x64` DMGs, `smoke-macos-dmg.sh --verify-only`, `SHA256SUMS.txt`, and `softprops/action-gh-release@v2`). Removed `linux-core` from both `verify.yml` and `release.yml`.
   - Updated `apps/web/src/app.tsx` and `apps/web/src/content.ts` with direct `v0.1.0` `.dmg` downloads (`arm64` & `x64`), `xattr -cr /Applications/Lanvory.app` first-launch instructions, and BLE + Wi-Fi P2P features/architecture/roadmap updates.
 
+## Desktop UX, Notification Routing, and Full P2P Resource Support
+
+- **Full Wi-Fi P2P Loopback Support & Clipboard QUIC/TCP Fix**:
+  - Added shared `dialLoopback` (`core/internal/peer/send_file.go`) and `SendClipboardLoopback`, `SyncFolderLoopback`, and `OpenServiceLoopback` across `core/internal/peer/`, `core/internal/local/`, and `core/cmd/lanvoryd/main.go` so Sharing, Shared clipboard, Folder Sync, Services, and Live Resources all work directly over an active `p2p` bridge (`HasEndpoint`) without requiring a manual LAN IP fallback.
+  - Added `EnableClipboard` (`lanvory-clipboard/1`) to `QUICListener` (`core/internal/peer/quic.go`, `core/cmd/lanvoryd/listener.go`) and added automatic TCP fallback in `peer.SendClipboard` when a peer's QUIC listener returns `no application protocol`.
+  - Updated `core/internal/local/socket.go` (`requestLocalBody`) to read daemon error details on `/v1/clipboard/send` responses, and updated `apps/desktop/src/main/index.cjs` and `sharing.tsx` to surface actionable error messages and clear expired `p2p` routes from in-memory state (`clearP2PRoute`) while excluding ephemeral `p2p` routes from `localStorage` persistence.
+- **Devices, Sharing, and Clipboard UI Refinements**:
+  - Stacked `Pair a device` and full-width `Paired devices` in `apps/desktop/src/renderer/pages/devices.tsx`, added header search, transport method badges, Electron native clipboard IPC for Device ID copying (`copyReceivedClipboard`), and compact inline rename/revoke controls in `trusted-peers.tsx` and `app.css`.
+  - Separated `Incoming clipboard access` (single state-aware `Allow peer` / `Revoke` action backed by `lanvory:clipboard-access`) from `Send a snippet` in `clipboard-card.tsx`, and standardized `lanSuggestedEndpoint` / `isP2PRoute` helpers (`peer-connection-fields.tsx`) across `sync.tsx`, `services.tsx`, `clipboard-card.tsx`, and `live-mount.tsx`.
+- **Notification Center vs. Toast Separation**:
+  - Added `toast` and `record` options to `NotificationsProvider` (`apps/desktop/src/renderer/components/notifications.tsx`) and centered `.toast-card` vertically (`app.css`). Incoming requests (`Incoming pairing request`, `Shared clipboard updated`, `File request`) record only in the Notification Center (`toast: false, record: true`), while local CRUD/action confirmations show as toast messages without polluting the Notification Center.
+- **Verification**: `go build -o ../bin/lanvory ./cmd/lanvory && go build -o ../bin/lanvoryd ./cmd/lanvoryd`, `go vet ./internal/... ./cmd/...`, and `cd apps/desktop && pnpm typecheck && pnpm build` passed with exit code `0`.
+
 ## Open verification gates
 
 | Task | Available evidence | Missing evidence and prerequisites |

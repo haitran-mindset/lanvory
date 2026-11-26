@@ -14,6 +14,7 @@ import {
   ShieldCheck,
 } from 'lucide-react';
 import { type FormEvent, useEffect, useRef, useState } from 'react';
+import { useNotifications } from '../../components/notifications';
 import { PanelHeading } from '../../components/panel-heading';
 import { Checkbox } from '../../components/ui/checkbox';
 import { SelectField, accessDurations } from '../../components/ui/select';
@@ -52,6 +53,7 @@ export function SettingsPanel({ name, onRename, textSize, onTextSizeChange, them
   const [densitySaved, setDensitySaved] = useState(true);
   const [themeSaved, setThemeSaved] = useState(true);
   const [textSizeSaved, setTextSizeSaved] = useState(true);
+  const { notify } = useNotifications();
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
   const [openingNotices, setOpeningNotices] = useState(false);
@@ -178,7 +180,11 @@ export function SettingsPanel({ name, onRename, textSize, onTextSizeChange, them
     setCopyingReport(true);
     setReportMessage('');
     const copied = await window.lanvory.copyNetworkReport().catch(() => false);
-    setReportMessage(copied ? 'Diagnostic report copied.' : 'Unable to copy the diagnostic report.');
+    if (copied) {
+      notify({ category: 'system', tone: 'success', title: 'Diagnostic report copied.' });
+    } else {
+      setReportMessage('Unable to copy the diagnostic report.');
+    }
     setCopyingReport(false);
   }
 
@@ -193,7 +199,17 @@ export function SettingsPanel({ name, onRename, textSize, onTextSizeChange, them
 
     setSaving(true);
     const saved = await onRename(next);
-    setMessage(saved ? 'Device name saved.' : 'Unable to save the device name.');
+    if (saved) {
+      setMessage('');
+      notify({
+        category: 'system',
+        tone: 'success',
+        title: 'Device name saved.',
+        body: next,
+      });
+    } else {
+      setMessage('Unable to save the device name.');
+    }
     setSaving(false);
   }
 

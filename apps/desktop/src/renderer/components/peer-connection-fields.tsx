@@ -5,6 +5,14 @@ import { SelectField } from './ui/select';
 
 const scopeSchema = z.object({ allowed: z.boolean() });
 
+export function isP2PRoute(route?: { adapter?: string; endpoint?: string }) {
+  return route?.adapter === 'p2p' && /^127\.0\.0\.1:\d{1,5}$/.test(route.endpoint ?? '');
+}
+
+export function lanSuggestedEndpoint(route?: { adapter?: string; endpoint?: string }) {
+  return route?.adapter === 'p2p' ? '' : (route?.endpoint ?? '');
+}
+
 export function endpointAddress(endpoint: string) {
   const match = /^([0-9.]+):([0-9]{1,5})$/.exec(endpoint.trim());
   if (!match || !z.ipv4().safeParse(match[1]).success || Number(match[2]) < 1 || Number(match[2]) > 65535) return;

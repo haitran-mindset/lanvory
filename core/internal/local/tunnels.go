@@ -39,7 +39,7 @@ func parseTunnel(adapter, target, pin, service, bind string) (tunnelInput, error
 	return tunnelInput{adapter, endpoint, fingerprint, service, local}, nil
 }
 
-func registerTunnels(mux *http.ServeMux, device Device, dir string, tunnels *bridge.Tunnels, key ed25519.PrivateKey) {
+func registerTunnels(mux *http.ServeMux, device Device, dir string, tunnels *bridge.Tunnels, key ed25519.PrivateKey, hasP2PEndpoint func(string) bool) {
 	if tunnels == nil {
 		return
 	}
@@ -64,37 +64,54 @@ func registerTunnels(mux *http.ServeMux, device Device, dir string, tunnels *bri
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		inventory := func() ([]networking.Interface, error) { return approvedInventory(dir) }
-		current, err := inventory()
-		if err != nil {
-			http.Error(w, "Unable to read network policy", http.StatusServiceUnavailable)
-			return
-		}
-		initial := networking.CheckScope(current, input.adapter, input.endpoint.Addr())
-		source, err := netip.ParseAddr(initial.Source)
-		if !initial.Allowed || err != nil {
-			http.Error(w, peer.ErrPeerScope.Error(), http.StatusConflict)
-			return
-		}
-		index := networking.ListenerIndex(current, input.adapter, source)
-		if index == 0 {
-			http.Error(w, peer.ErrPeerScope.Error(), http.StatusConflict)
-			return
-		}
-		allowed := func() bool {
-			trusted, err := storage.IsTrustedPeer(dir, device.ID, input.pin.String())
-			if err != nil || !trusted {
-				return false
+		var allowed func() bool
+		var connect func(context.Context) (net.Conn, error)
+		if input.adapter == "p2p" {
+			if input.endpoint.Addr() != netip.MustParseAddr("127.0.0.1") || input.endpoint.Port() == 0 ||
+				hasP2PEndpoint == nil || !hasP2PEndpoint(input.endpoint.String()) {
+				http.Error(w, peer.ErrPeerScope.Error(), http.StatusConflict)
+				return
 			}
+			allowed = func() bool {
+				trusted, err := storage.IsTrustedPeer(dir, device.ID, input.pin.String())
+				return err == nil && trusted && hasP2PEndpoint(input.endpoint.String())
+			}
+			connect = func(ctx context.Context) (net.Conn, error) {
+				return peer.OpenServiceLoopback(ctx, input.endpoint, input.pin, key, input.service, hasP2PEndpoint)
+			}
+		} else {
+			inventory := func() ([]networking.Interface, error) { return approvedInventory(dir) }
 			current, err := inventory()
 			if err != nil {
-				return false
+				http.Error(w, "Unable to read network policy", http.StatusServiceUnavailable)
+				return
 			}
-			scope := networking.CheckScope(current, input.adapter, input.endpoint.Addr())
-			return scope.Allowed && scope.Source == initial.Source && networking.ListenerIndex(current, input.adapter, source) == index
-		}
-		connect := func(ctx context.Context) (net.Conn, error) {
-			return peer.OpenService(ctx, input.adapter, input.endpoint, input.pin, key, input.service, inventory)
+			initial := networking.CheckScope(current, input.adapter, input.endpoint.Addr())
+			source, err := netip.ParseAddr(initial.Source)
+			if !initial.Allowed || err != nil {
+				http.Error(w, peer.ErrPeerScope.Error(), http.StatusConflict)
+				return
+			}
+			index := networking.ListenerIndex(current, input.adapter, source)
+			if index == 0 {
+				http.Error(w, peer.ErrPeerScope.Error(), http.StatusConflict)
+				return
+			}
+			allowed = func() bool {
+				trusted, err := storage.IsTrustedPeer(dir, device.ID, input.pin.String())
+				if err != nil || !trusted {
+					return false
+				}
+				current, err := inventory()
+				if err != nil {
+					return false
+				}
+				scope := networking.CheckScope(current, input.adapter, input.endpoint.Addr())
+				return scope.Allowed && scope.Source == initial.Source && networking.ListenerIndex(current, input.adapter, source) == index
+			}
+			connect = func(ctx context.Context) (net.Conn, error) {
+				return peer.OpenService(ctx, input.adapter, input.endpoint, input.pin, key, input.service, inventory)
+			}
 		}
 		tunnel, err := tunnels.Open(r.Context(), input.bind, input.service, connect, allowed)
 		switch {

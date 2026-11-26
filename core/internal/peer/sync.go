@@ -29,6 +29,25 @@ func SyncFolder(ctx context.Context, adapter string, endpoint netip.AddrPort, ex
 	return syncengine.RunClientSync(ctx, conn, mgr, folderID, peerLabel)
 }
 
+// SyncFolderLoopback synchronizes a folder over a registered Wi-Fi P2P loopback bridge.
+func SyncFolderLoopback(ctx context.Context, endpoint netip.AddrPort, expected Fingerprint,
+	key ed25519.PrivateKey, mgr *syncengine.Manager, folderID, peerLabel string,
+	hasEndpoint func(string) bool) (syncengine.SyncResult, error) {
+	if !syncengine.ValidID(folderID) {
+		return syncengine.SyncResult{}, syncengine.ErrInvalidFolderID
+	}
+	config, err := clientIdentity(expected, key, syncengine.Protocol)
+	if err != nil {
+		return syncengine.SyncResult{}, err
+	}
+	conn, err := dialLoopback(ctx, endpoint, config, hasEndpoint)
+	if err != nil {
+		return syncengine.SyncResult{}, err
+	}
+	defer conn.Close()
+	return syncengine.RunClientSync(ctx, conn, mgr, folderID, peerLabel)
+}
+
 // EnableSync registers the lanvory-sync/1 mTLS handler on an existing Listener.
 func (l *Listener) EnableSync(mgr *syncengine.Manager, allowed func(fingerprint, folderID string) bool) {
 	if l == nil || mgr == nil || l.trusted == nil {

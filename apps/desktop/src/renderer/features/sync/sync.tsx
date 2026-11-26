@@ -2,7 +2,7 @@ import { type FormEvent, useEffect, useState } from 'react';
 import { AlertCircle, CheckCircle2, Folder, FolderSync, Info, Pause, Play, Plus, RefreshCw, Trash2 } from 'lucide-react';
 import { z } from 'zod';
 import { PanelHeading } from '../../components/panel-heading';
-import { connectionError, PeerConnectionFields } from '../../components/peer-connection-fields';
+import { connectionError, isP2PRoute, lanSuggestedEndpoint, PeerConnectionFields } from '../../components/peer-connection-fields';
 import { SelectField } from '../../components/ui/select';
 import { useNotifications } from '../../components/notifications';
 import { pairedDeviceName, readPairedNames } from '../../services/paired-names';
@@ -166,7 +166,7 @@ export function SyncPanel({ visible, ownerId, routes, onRoute }: {
     const scanned = folderSchema.safeParse(await window.lanvory.scanSyncFolder(id).catch(() => null));
     if (scanned.success) {
       setFolders((prev) => prev?.map((f) => (f.id === id ? scanned.data : f)) ?? [scanned.data]);
-      setListMessage({ tone: 'success', text: `Scanned “${id}”: ${scanned.data.fileCount} files indexed (${formatBytes(scanned.data.totalBytes)}).` });
+      setListMessage(null);
       notify({
         category: 'sync',
         tone: 'success',
@@ -183,13 +183,17 @@ export function SyncPanel({ visible, ownerId, routes, onRoute }: {
     event.preventDefault();
     const fp = selectedPeerByFolder[folderId];
     if (!fp) return;
+    const peerRoute = routes?.[fp];
+    const useP2P = isP2PRoute(peerRoute);
     const form = new FormData(event.currentTarget);
-    const adapter = String(form.get('adapter') ?? '').trim();
-    const endpoint = String(form.get('endpoint') ?? '').trim();
-    const validationErr = await connectionError(adapter, endpoint);
-    if (validationErr) {
-      setListMessage({ tone: 'error', text: validationErr });
-      return;
+    const adapter = useP2P ? peerRoute!.adapter : String(form.get('adapter') ?? '').trim();
+    const endpoint = useP2P ? peerRoute!.endpoint : String(form.get('endpoint') ?? '').trim();
+    if (!useP2P) {
+      const validationErr = await connectionError(adapter, endpoint);
+      if (validationErr) {
+        setListMessage({ tone: 'error', text: validationErr });
+        return;
+      }
     }
     setBusy(true);
     setListMessage({ tone: 'info', text: `Syncing “${folderId}” with ${pairedDeviceName(fp, names)}…` });
@@ -224,9 +228,10 @@ export function SyncPanel({ visible, ownerId, routes, onRoute }: {
     );
     if (updated.success) {
       setFolders((prev) => prev?.map((f) => (f.id === folder.id ? updated.data : f)) ?? null);
-      setListMessage({
+      notify({
+        category: 'sync',
         tone: 'info',
-        text: updated.data.paused ? `Paused sync for “${folder.id}”.` : `Resumed sync for “${folder.id}”.`,
+        title: updated.data.paused ? `Paused sync for “${folder.id}”.` : `Resumed sync for “${folder.id}”.`,
       });
     }
     setBusy(false);
@@ -238,7 +243,12 @@ export function SyncPanel({ visible, ownerId, routes, onRoute }: {
     const ok = await window.lanvory.removeSyncFolder(id).catch(() => false);
     if (ok) {
       setFolders((prev) => prev?.filter((f) => f.id !== id) ?? null);
-      setListMessage({ tone: 'info', text: `Removed sync folder “${id}” (local files preserved).` });
+      notify({
+        category: 'sync',
+        tone: 'info',
+        title: `Removed sync folder “${id}”`,
+        body: 'Local files preserved.',
+      });
     }
     setBusy(false);
   }
@@ -402,12 +412,17 @@ export function SyncPanel({ visible, ownerId, routes, onRoute }: {
                                   void window.lanvory
                                     .setSyncAccess(selectedPeer, folder.id, true)
                                     .then(async (ok) => {
-                                      if (ok) await refresh();
-                                      setListMessage(
-                                        ok
-                                          ? { tone: 'success', text: `Granted sync access on “${folder.id}” to ${pairedDeviceName(selectedPeer, names)}.` }
-                                          : { tone: 'error', text: 'Unable to grant folder sync permission.' },
-                                      );
+                                      if (ok) {
+                                        await refresh();
+                                        setListMessage(null);
+                                        notify({
+                                          category: 'sync',
+                                          tone: 'success',
+                                          title: `Granted sync access on “${folder.id}” to ${pairedDeviceName(selectedPeer, names)}.`,
+                                        });
+                                      } else {
+                                        setListMessage({ tone: 'error', text: 'Unable to grant folder sync permission.' });
+                                      }
                                     })
                                     .finally(() => setBusy(false));
                                 }}
@@ -424,12 +439,17 @@ export function SyncPanel({ visible, ownerId, routes, onRoute }: {
                                   void window.lanvory
                                     .setSyncAccess(selectedPeer, folder.id, false)
                                     .then(async (ok) => {
-                                      if (ok) await refresh();
-                                      setListMessage(
-                                        ok
-                                          ? { tone: 'info', text: `Revoked sync access on “${folder.id}” for ${pairedDeviceName(selectedPeer, names)}.` }
-                                          : { tone: 'error', text: 'Unable to revoke folder sync permission.' },
-                                      );
+                                      if (ok) {
+                                        await refresh();
+                                        setListMessage(null);
+                                        notify({
+                                          category: 'sync',
+                                          tone: 'info',
+                                          title: `Revoked sync access on “${folder.id}” for ${pairedDeviceName(selectedPeer, names)}.`,
+                                        });
+                                      } else {
+                                        setListMessage({ tone: 'error', text: 'Unable to revoke folder sync permission.' });
+                                      }
                                     })
                                     .finally(() => setBusy(false));
                                 }}
@@ -440,25 +460,35 @@ export function SyncPanel({ visible, ownerId, routes, onRoute }: {
                           </div>
                         )}
                       </div>
-                      {selectedPeer && isAllowed && (
+                      {selectedPeer && isAllowed && (() => {
+                        const peerRoute = routes?.[selectedPeer];
+                        const useP2P = isP2PRoute(peerRoute);
+                        return (
                         <div className="trust-form sync-peer-connect" key={selectedPeer}>
-                          <PeerConnectionFields
-                            suggestedEndpoint={routes?.[selectedPeer]?.endpoint}
-                            endpointLabel="Peer Lanvory address"
-                            adapterLabel="Network adapter"
-                            disabled={busy}
-                            onReady={(ready) => setConnectionReadyByFolder((prev) => ({ ...prev, [folder.id]: ready }))}
-                          />
+                          {useP2P ? (
+                            <div className="paired-device-meta-row">
+                              <span className="paired-method-badge is-p2p">Bluetooth + Wi-Fi P2P</span>
+                            </div>
+                          ) : (
+                            <PeerConnectionFields
+                              suggestedEndpoint={lanSuggestedEndpoint(peerRoute)}
+                              endpointLabel="Peer Lanvory address"
+                              adapterLabel="Network adapter"
+                              disabled={busy}
+                              onReady={(ready) => setConnectionReadyByFolder((prev) => ({ ...prev, [folder.id]: ready }))}
+                            />
+                          )}
                           <button
                             type="submit"
                             className="primary sync-now-btn"
-                            disabled={busy || folder.paused || !connectionReadyByFolder[folder.id]}
+                            disabled={busy || folder.paused || (!useP2P && !connectionReadyByFolder[folder.id])}
                           >
                             <RefreshCw size={14} aria-hidden="true" />
                             <span>Sync now</span>
                           </button>
                         </div>
-                      )}
+                        );
+                      })()}
                     </form>
                     );
                   })()}

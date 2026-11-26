@@ -56,6 +56,7 @@ contextBridge.exposeInMainWorld('lanvory', {
   copyPairingDetails: (expected) => ipcRenderer.invoke('lanvory:copy-pairing-details', expected),
   pingPeer: (adapter, endpoint, pin) => ipcRenderer.invoke('lanvory:ping-peer', adapter, endpoint, pin),
   clipboardState: () => ipcRenderer.invoke('lanvory:clipboard-state'),
+  clipboardAccess: () => ipcRenderer.invoke('lanvory:clipboard-access'),
   setClipboardPolicy: (enabled) => ipcRenderer.invoke('lanvory:clipboard-policy', enabled),
   setClipboardAccess: (fingerprint, allowed, duration) => ipcRenderer.invoke('lanvory:set-clipboard-access', fingerprint, allowed, duration),
   clearClipboard: () => ipcRenderer.invoke('lanvory:clipboard-clear'),

@@ -40,11 +40,16 @@ type syncRunRequest struct {
 
 // WithSync mounts folder sync endpoints backed by mgr and peer synchronization using key.
 func WithSync(next http.Handler, mgr *syncengine.Manager, device Device, dir string, key ed25519.PrivateKey) http.Handler {
+	return WithSyncWithNearby(next, mgr, device, dir, key, nil)
+}
+
+// WithSyncWithNearby mounts folder sync endpoints with optional Wi-Fi P2P bridge support.
+func WithSyncWithNearby(next http.Handler, mgr *syncengine.Manager, device Device, dir string, key ed25519.PrivateKey, hasP2PEndpoint func(string) bool) http.Handler {
 	if mgr == nil {
 		return next
 	}
 	mux := http.NewServeMux()
-	registerSync(mux, device, dir, mgr, key)
+	registerSync(mux, device, dir, mgr, key, hasP2PEndpoint)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == syncRoute || strings.HasPrefix(r.URL.Path, syncRoute+"/") {
 			mux.ServeHTTP(w, r)
@@ -54,7 +59,7 @@ func WithSync(next http.Handler, mgr *syncengine.Manager, device Device, dir str
 	})
 }
 
-func registerSync(mux *http.ServeMux, device Device, dir string, mgr *syncengine.Manager, key ed25519.PrivateKey) {
+func registerSync(mux *http.ServeMux, device Device, dir string, mgr *syncengine.Manager, key ed25519.PrivateKey, hasP2PEndpoint func(string) bool) {
 	if mgr == nil {
 		return
 	}
@@ -150,9 +155,14 @@ func registerSync(mux *http.ServeMux, device Device, dir string, mgr *syncengine
 		if label == "" {
 			label = "peer"
 		}
-		result, err := peer.SyncFolder(ctx, req.Interface, endpoint, fingerprint, key, mgr, id, label, func() ([]networking.Interface, error) {
-			return approvedInventory(dir)
-		})
+		var result syncengine.SyncResult
+		if req.Interface == "p2p" {
+			result, err = peer.SyncFolderLoopback(ctx, endpoint, fingerprint, key, mgr, id, label, hasP2PEndpoint)
+		} else {
+			result, err = peer.SyncFolder(ctx, req.Interface, endpoint, fingerprint, key, mgr, id, label, func() ([]networking.Interface, error) {
+				return approvedInventory(dir)
+			})
+		}
 		if err != nil {
 			status := http.StatusBadGateway
 			msg := err.Error()

@@ -24,7 +24,7 @@ const transfersRoute = "/v1/files/transfers"
 const sendFileRoute = "/v1/files/send"
 const sendTimeout = 4 * time.Minute
 
-func registerFiles(mux *http.ServeMux, device Device, dir string, receiver *drop.Receiver, key ed25519.PrivateKey) {
+func registerFiles(mux *http.ServeMux, device Device, dir string, receiver *drop.Receiver, key ed25519.PrivateKey, hasP2PEndpoint func(string) bool) {
 	if receiver == nil {
 		return
 	}
@@ -114,9 +114,13 @@ func registerFiles(mux *http.ServeMux, device Device, dir string, receiver *drop
 
 		ctx, cancel := context.WithTimeout(r.Context(), sendTimeout)
 		defer cancel()
-		err = peer.SendFile(ctx, adapter, endpoint, fingerprint, key, path, func() ([]networking.Interface, error) {
-			return approvedInventory(dir)
-		}, trusted, receiver.Tracker())
+		if adapter == "p2p" {
+			err = peer.SendFileLoopback(ctx, endpoint, fingerprint, key, path, hasP2PEndpoint, trusted, receiver.Tracker())
+		} else {
+			err = peer.SendFile(ctx, adapter, endpoint, fingerprint, key, path, func() ([]networking.Interface, error) {
+				return approvedInventory(dir)
+			}, trusted, receiver.Tracker())
+		}
 		switch {
 		case errors.Is(err, peer.ErrPeerScope):
 			http.Error(w, err.Error(), http.StatusConflict)

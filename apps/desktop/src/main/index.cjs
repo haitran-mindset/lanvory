@@ -752,8 +752,11 @@ if (!app.requestSingleInstanceLock()) {
           selectedFiles = selectedFiles.filter((item) => item !== filePath);
         }
         return 'completed';
-      } catch {
-        return controller.signal.aborted ? 'cancelled' : 'failed';
+      } catch (err) {
+        if (controller.signal.aborted) return 'cancelled';
+        const stderr = typeof err?.stderr === 'string' ? err.stderr.trim() : '';
+        const detail = stderr.split(/\r?\n/).filter(Boolean).pop() ?? '';
+        return detail ? `failed:${detail.slice(0, 220)}` : 'failed';
       } finally {
         activeSend = undefined;
       }
@@ -783,6 +786,20 @@ if (!app.requestSingleInstanceLock()) {
       assertTrustedFrame(event);
       return exec(path.join(bundle, 'lanvory'), ['clipboard', 'status'], { timeout: 3000, maxBuffer: 131072 })
         .then(({ stdout }) => JSON.parse(stdout), () => null);
+    });
+    ipcMain.handle('lanvory:clipboard-access', async (event) => {
+      assertTrustedFrame(event);
+      try {
+        const { stdout } = await exec(path.join(bundle, 'lanvory'), ['permissions', 'list'], { timeout: 4000, maxBuffer: 131072 });
+        const grants = JSON.parse(stdout);
+        return Array.isArray(grants)
+          ? grants
+              .filter((grant) => grant?.capability === 'clipboard-share' && grant?.resource === 'clipboard' && typeof grant?.fingerprint === 'string')
+              .map((grant) => grant.fingerprint)
+          : [];
+      } catch {
+        return null;
+      }
     });
     ipcMain.handle('lanvory:clipboard-policy', async (event, enabled) => {
       assertTrustedFrame(event);
@@ -816,8 +833,27 @@ if (!app.requestSingleInstanceLock()) {
         await exec(path.join(bundle, 'lanvory'), ['clipboard', 'send', adapter, endpoint, pin, payload], { timeout: 4000, maxBuffer: 4096 });
         return { ok: true };
       } catch (err) {
-        const detail = typeof err?.stderr === 'string' && err.stderr.trim() ? err.stderr.trim().replace(/^lanvory:\s*/, '') : 'Clipboard send failed.';
-        return { ok: false, error: detail };
+        const raw = typeof err?.stderr === 'string' && err.stderr.trim() ? err.stderr.trim().replace(/^lanvory:\s*/, '') : '';
+        const lower = raw.toLocaleLowerCase();
+        if (lower.includes('no application protocol')) {
+          return {
+            ok: false,
+            error: 'The receiving device has not enabled Shared clipboard yet. Turn on Enable shared clipboard on that device and try again.',
+          };
+        }
+        if (lower.includes('declined or disabled') || lower.includes('502 bad gateway')) {
+          return {
+            ok: false,
+            error: 'The peer did not accept the clipboard snippet. Ensure Shared clipboard is enabled and this device is allowed on the receiving device.',
+          };
+        }
+        if (lower.includes('not granted')) {
+          return {
+            ok: false,
+            error: 'Grant clipboard sharing permission for this peer first, then try again.',
+          };
+        }
+        return { ok: false, error: raw || 'Clipboard send failed.' };
       }
     });
     ipcMain.handle('lanvory:clipboard-copy-latest', (event, text) => {

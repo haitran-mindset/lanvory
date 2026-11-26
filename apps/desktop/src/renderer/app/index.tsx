@@ -24,7 +24,8 @@ const savedRoutesSchema = z.record(z.string().regex(/^[a-f0-9]{64}$/), z.object(
 
 function readPeerRoutes(owner: string): Record<string, PeerRoute> {
   try {
-    return savedRoutesSchema.safeParse(JSON.parse(localStorage.getItem(`lanvory.peer-routes.${owner}`) ?? '{}')).data ?? {};
+    const parsed = savedRoutesSchema.safeParse(JSON.parse(localStorage.getItem(`lanvory.peer-routes.${owner}`) ?? '{}')).data ?? {};
+    return Object.fromEntries(Object.entries(parsed).filter(([, route]) => route.adapter !== 'p2p'));
   } catch {
     return {};
   }
@@ -179,10 +180,23 @@ function AppContent({
     const routes = { ...peerRoutes, [peer.fingerprint]: { ...peerRoutes[peer.fingerprint], ...peer } };
     setRouteState({ owner: identity.id, routes });
     try {
-      localStorage.setItem(`lanvory.peer-routes.${identity.id}`, JSON.stringify(routes));
+      const persisted = Object.fromEntries(Object.entries(routes).filter(([, route]) => route.adapter !== 'p2p'));
+      localStorage.setItem(`lanvory.peer-routes.${identity.id}`, JSON.stringify(persisted));
     } catch {
       // The verified route remains available for this session.
     }
+  }
+
+  function clearP2PRoute(fingerprint: string) {
+    if (!identity) return;
+    const fallback = savedRoutes[fingerprint];
+    const next = { ...peerRoutes };
+    if (fallback && fallback.adapter !== 'p2p') {
+      next[fingerprint] = fallback;
+    } else {
+      delete next[fingerprint];
+    }
+    setRouteState({ owner: identity.id, routes: next });
   }
   const [pairingTarget, setPairingTarget] = useState<{ revision: number; target?: PairingTarget }>({ revision: 0 });
   const [trustRevision, setTrustRevision] = useState(0);
@@ -317,6 +331,8 @@ function AppContent({
               targetPage: 'Devices',
               actionLabel: 'Review pairing',
               dedupeKey: `pairing:${req.id}`,
+              toast: false,
+              record: true,
             });
           }
         }
@@ -333,6 +349,8 @@ function AppContent({
           targetPage: 'Sharing',
           actionLabel: 'Open Sharing',
           dedupeKey: `clipboard:${snippet.sha256}`,
+          toast: false,
+          record: true,
         });
       }
 
@@ -363,6 +381,8 @@ function AppContent({
             targetPage: 'Sharing',
             actionLabel: 'Review file',
             dedupeKey: `offer:${offer.id}`,
+            toast: false,
+            record: true,
           });
         }
         const transfers = incoming.data?.transfers ?? [];
@@ -385,6 +405,7 @@ function AppContent({
                   targetPage: 'Sharing',
                   actionLabel: 'View history',
                   dedupeKey: `transfer:${key}`,
+                  record: true,
                 });
               }
             }
@@ -430,14 +451,14 @@ function AppContent({
           }} />
         ) : page === 'Network' ? <NetworkPanel visible={windowVisible} deviceName={identity?.name} routes={peerRoutes} onRoute={rememberRoute} /> : page === 'Sync' ? <SyncPanel visible={windowVisible} ownerId={identity?.id} routes={peerRoutes} onRoute={rememberRoute} /> : page === 'Live Resources' ? <MountsPanel visible={windowVisible} ownerId={identity?.id} routes={peerRoutes} onRoute={rememberRoute} /> : page === 'Services' ? <Services key={identity?.id} ownerId={identity?.id} visible={windowVisible} routes={peerRoutes} onPair={findDeviceToPair} onRoute={rememberRoute} /> : page === 'Sharing' ? null : (
           <DevicesPage incomingPairingEnabled={listener?.pairing === true} response={response} retrying={retrying} visible={windowVisible} scanRevision={scanRevision}
-            nearbyCount={nearbyCount} counts={counts} trustRevision={trustRevision} pairingTarget={pairingTarget}
+            nearbyCount={nearbyCount} counts={counts} trustRevision={trustRevision} pairingTarget={pairingTarget} routes={peerRoutes}
             onDiscover={discover} onShare={() => navigate('Sharing')} onServices={() => navigate('Services')} onNetwork={() => navigate('Network')} onRetry={() => void retry()}
             onCount={setNearbyCount} onSelectPeer={(target) => setPairingTarget(({ revision }) => ({ revision: revision + 1, target }))}
             onClearTarget={() => setPairingTarget(({ revision }) => ({ revision: revision + 1 }))}
             onPaired={rememberRoute}
             onTrustChange={() => setTrustRevision((value) => value + 1)} />
         )}
-        {openedSharing && <div hidden={page !== 'Sharing'}><Sharing ownerId={identity?.id} onPendingFilesChange={setPendingFiles} visible={windowVisible && page === 'Sharing'} routes={peerRoutes} onPair={findDeviceToPair} onRoute={rememberRoute} /></div>}
+        {openedSharing && <div hidden={page !== 'Sharing'}><Sharing ownerId={identity?.id} onPendingFilesChange={setPendingFiles} visible={windowVisible && page === 'Sharing'} routes={peerRoutes} onPair={findDeviceToPair} onRoute={rememberRoute} onClearP2PRoute={clearP2PRoute} /></div>}
         <CommandPalette
           open={paletteOpen}
           onClose={() => setPaletteOpen(false)}

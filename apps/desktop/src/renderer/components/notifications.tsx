@@ -32,7 +32,10 @@ export type AppNotification = {
   dedupeKey?: string;
 };
 
-export type NotifyInput = Omit<AppNotification, 'id' | 'createdAt' | 'read'>;
+export type NotifyInput = Omit<AppNotification, 'id' | 'createdAt' | 'read'> & {
+  toast?: boolean;
+  record?: boolean;
+};
 
 type NotificationContextValue = {
   items: AppNotification[];
@@ -108,13 +111,18 @@ export function NotificationsProvider({
         seenKeys.current.add(input.dedupeKey);
       }
       const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const { toast = true, record = false, ...rest } = input;
       const entry: AppNotification = {
-        ...input,
+        ...rest,
         id,
         createdAt: Date.now(),
         read: false,
       };
-      setItems((prev) => [entry, ...prev].slice(0, 40));
+      if (record) {
+        setItems((prev) => [entry, ...prev].slice(0, 40));
+      }
+      if (!toast) return;
+
       setToasts((prev) => [entry, ...prev].slice(0, 4));
 
       const durationMs = input.tone === 'warning' || input.tone === 'error' ? 7500 : 5000;

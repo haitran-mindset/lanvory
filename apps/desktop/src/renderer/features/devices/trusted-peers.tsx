@@ -1,9 +1,10 @@
-import { connectionError, PeerConnectionFields } from '../../components/peer-connection-fields';
-import { Monitor, Pencil, ShieldCheck, Trash2 } from 'lucide-react';
+import { Bluetooth, Check, Copy, Monitor, Pencil, Search, ShieldCheck, Trash2, Wifi } from 'lucide-react';
 import { type FormEvent, useEffect, useState } from 'react';
 import { z } from 'zod';
+import { useNotifications } from '../../components/notifications';
 import { PanelHeading } from '../../components/panel-heading';
 import { pairedDeviceName, readPairedNames, writePairedNames } from '../../services/paired-names';
+import type { PeerRoute } from '../sharing/sharing';
 
 const fingerprintPattern = /^[0-9a-f]{64}$/i;
 const peersSchema = z.array(z.object({
@@ -13,19 +14,35 @@ const peersSchema = z.array(z.object({
 
 type Peers = z.infer<typeof peersSchema>;
 
-export function TrustedPeers({ ownerId, externalRevision = 0, visible = true, searchQuery = '' }: {
+export function TrustedPeers({ ownerId, externalRevision = 0, visible = true, routes }: {
   ownerId: string;
   externalRevision?: number;
   visible?: boolean;
-  searchQuery?: string;
+  routes?: Record<string, PeerRoute>;
 }) {
+  const { notify } = useNotifications();
   const [peers, setPeers] = useState<Peers | null>();
   const [revision, setRevision] = useState(0);
   const [busy, setBusy] = useState(false);
   const [pendingRevoke, setPendingRevoke] = useState<string>();
   const [message, setMessage] = useState('');
   const [editingName, setEditingName] = useState<string>();
+  const [copiedId, setCopiedId] = useState<string>();
+  const [searchQuery, setSearchQuery] = useState('');
   const [names, setNames] = useState(() => readPairedNames(ownerId));
+
+  async function copyFingerprint(fingerprint: string) {
+    try {
+      const ok = await window.lanvory.copyReceivedClipboard(fingerprint).catch(() => false);
+      if (!ok) {
+        await navigator.clipboard.writeText(fingerprint);
+      }
+      setCopiedId(fingerprint);
+      window.setTimeout(() => setCopiedId((prev) => (prev === fingerprint ? undefined : prev)), 1800);
+    } catch {
+      setMessage('Unable to copy the device ID.');
+    }
+  }
 
   function saveName(event: FormEvent<HTMLFormElement>, fingerprint: string) {
     event.preventDefault();
@@ -43,7 +60,13 @@ export function TrustedPeers({ ownerId, externalRevision = 0, visible = true, se
     }
     setNames(updated);
     setEditingName(undefined);
-    setMessage('Device name saved.');
+    setMessage('');
+    notify({
+      category: 'pairing',
+      tone: 'success',
+      title: 'Device name saved.',
+      body: name,
+    });
   }
 
   useEffect(() => {
@@ -66,10 +89,12 @@ export function TrustedPeers({ ownerId, externalRevision = 0, visible = true, se
     setMessage('');
     try {
       const saved = await action();
-      setMessage(saved ? success : failure);
       if (saved) {
         setPendingRevoke(undefined);
         setRevision((current) => current + 1);
+        notify({ category: 'pairing', tone: 'success', title: success });
+      } else {
+        setMessage(failure);
       }
       return saved;
     } catch {
@@ -78,29 +103,6 @@ export function TrustedPeers({ ownerId, externalRevision = 0, visible = true, se
     } finally {
       setBusy(false);
     }
-  }
-
-  const [connectionReady, setConnectionReady] = useState(false);
-  const [formRevision, setFormRevision] = useState(0);
-
-  async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const form = event.currentTarget;
-    const values = new FormData(form);
-    const adapter = String(values.get('adapter') ?? '').trim();
-    const endpoint = String(values.get('endpoint') ?? '').trim();
-    const fingerprint = String(values.get('fingerprint') ?? '').trim();
-    const error = await connectionError(adapter, endpoint);
-    if (error) {
-      setMessage(error);
-      return;
-    }
-    const saved = await update(
-      () => window.lanvory.trustPeer(adapter, endpoint, fingerprint),
-      'Peer identity verified and saved.',
-      'Peer trust could not be saved. Check the endpoint, adapter approval and device ID.',
-    );
-    if (saved) { form.reset(); setFormRevision((value) => value + 1); }
   }
 
   const query = searchQuery.trim().toLocaleLowerCase();
@@ -112,29 +114,68 @@ export function TrustedPeers({ ownerId, externalRevision = 0, visible = true, se
 
   return (
     <section className="nearby trusted-panel" aria-labelledby="trusted-heading" aria-busy={busy}>
-      <PanelHeading icon={ShieldCheck} id="trusted-heading" title="Paired devices"
-        action={!!peers?.length && <span className="tag">{peers.length}</span>} />
+      <PanelHeading
+        icon={ShieldCheck}
+        id="trusted-heading"
+        title="Paired devices"
+        badge={!!peers?.length && <span className="tag">{peers.length}</span>}
+        action={!!peers?.length && (
+          <label className="paired-search-field">
+            <Search size={14} aria-hidden="true" />
+            <input
+              type="search"
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.currentTarget.value)}
+              placeholder="Search by name or ID…"
+              aria-label="Search paired devices"
+            />
+          </label>
+        )}
+      />
       {peers === undefined && <p>Loading paired devices…</p>}
       {peers === null && <p>Unable to load paired devices. <button type="button" className="refresh" onClick={() => setRevision(revision + 1)}>Retry</button></p>}
       {peers?.length === 0 && <p>No paired devices yet.</p>}
       {!!peers?.length && filteredPeers?.length === 0 && <p className="panel-empty">No paired devices match “{searchQuery.trim()}”.</p>}
       {!!filteredPeers?.length && (
         <ul className="interface-list paired-device-list">
-          {filteredPeers.map((item) => (
-            <li key={item.fingerprint} className="trusted-row">
+          {filteredPeers.map((item) => {
+            const route = routes?.[item.fingerprint];
+            const isP2P = route?.adapter === 'p2p';
+            const hasLan = Boolean(route?.adapter && !isP2P);
+            return (
+            <li key={item.fingerprint} className="trusted-row paired-device-card">
               <div className="paired-device-main">
                 <div className="paired-device-identity">
                   <div className="paired-device-icon-wrap">
-                    <Monitor size={18} aria-hidden="true" />
+                    <Monitor size={20} aria-hidden="true" />
                   </div>
                   <div className="paired-device-info">
                     <div className="paired-device-title-row">
                       <strong className="paired-device-name">{pairedDeviceName(item.fingerprint, names)}</strong>
-                      <code className="device-fingerprint-badge" title={item.fingerprint}>
-                        {item.fingerprint.slice(0, 8)}…{item.fingerprint.slice(-6)}
-                      </code>
+                      <button
+                        type="button"
+                        className="device-fingerprint-badge device-fingerprint-copy"
+                        title={`Copy full Device ID: ${item.fingerprint}`}
+                        onClick={() => void copyFingerprint(item.fingerprint)}
+                      >
+                        <code>{item.fingerprint.slice(0, 8)}…{item.fingerprint.slice(-6)}</code>
+                        {copiedId === item.fingerprint ? <Check size={11} aria-hidden="true" /> : <Copy size={11} aria-hidden="true" />}
+                      </button>
                     </div>
-                    <small>Paired <time dateTime={item.verifiedAt}>{new Date(item.verifiedAt).toLocaleDateString(undefined, { dateStyle: 'medium' })}</time></small>
+                    <div className="paired-device-meta-row">
+                      <span className={`paired-method-badge ${isP2P ? 'is-p2p' : hasLan ? 'is-lan' : ''}`}>
+                        {isP2P ? <Bluetooth size={11} aria-hidden="true" /> : hasLan ? <Wifi size={11} aria-hidden="true" /> : <ShieldCheck size={11} aria-hidden="true" />}
+                        <span>{isP2P ? 'Bluetooth + Wi-Fi P2P' : hasLan ? `Local Network (${route!.adapter})` : 'Verified device'}</span>
+                      </span>
+                      {route?.endpoint && (
+                        <span className="paired-meta-chip">
+                          <code>{route.endpoint}</code>
+                        </span>
+                      )}
+                      <small className="paired-date-text">
+                        Paired <time dateTime={item.verifiedAt}>{new Date(item.verifiedAt).toLocaleDateString(undefined, { dateStyle: 'medium' })}</time>
+                      </small>
+                    </div>
                   </div>
                 </div>
                 {!pendingRevoke && editingName !== item.fingerprint && (
@@ -152,40 +193,37 @@ export function TrustedPeers({ ownerId, externalRevision = 0, visible = true, se
                 )}
               </div>
               {pendingRevoke === item.fingerprint && (
-                <div className="trust-actions paired-device-confirm">
+                <div className="paired-device-confirm">
                   <p>Remove access for this device?</p>
-                  <button type="button" className="refresh" disabled={busy} onClick={() => void update(
-                    () => window.lanvory.revokePeer(item.fingerprint),
-                    'Device removed.',
-                    'Could not remove the device.',
-                  )}>Confirm removal</button>
-                  <button type="button" className="refresh" disabled={busy} onClick={() => setPendingRevoke(undefined)}>Cancel</button>
+                  <div className="paired-device-confirm-actions">
+                    <button type="button" className="refresh paired-device-danger-btn" disabled={busy} onClick={() => void update(
+                      () => window.lanvory.revokePeer(item.fingerprint),
+                      'Device removed.',
+                      'Could not remove the device.',
+                    )}>Confirm removal</button>
+                    <button type="button" className="refresh" disabled={busy} onClick={() => setPendingRevoke(undefined)}>Cancel</button>
+                  </div>
                 </div>
               )}
               {editingName === item.fingerprint && (
-                <form className="trust-form paired-device-name-form" onSubmit={(event) => saveName(event, item.fingerprint)}>
-                  <label>Device name<input name="deviceName" maxLength={64} required
-                    defaultValue={pairedDeviceName(item.fingerprint, names)}
-                    placeholder="e.g. Office Mac" /></label>
-                  <div className="paired-device-actions">
+                <form className="paired-device-name-form" onSubmit={(event) => saveName(event, item.fingerprint)}>
+                  <label className="paired-name-input-wrap">
+                    <span className="sr-only">Device name</span>
+                    <input name="deviceName" maxLength={64} required autoFocus
+                      defaultValue={pairedDeviceName(item.fingerprint, names)}
+                      placeholder="e.g. Office Mac" />
+                  </label>
+                  <div className="paired-device-form-actions">
                     <button type="submit" className="primary">Save name</button>
                     <button type="button" className="refresh" onClick={() => setEditingName(undefined)}>Cancel</button>
                   </div>
                 </form>
               )}
             </li>
-          ))}
+            );
+          })}
         </ul>
       )}
-      <details className="trust-details">
-        <summary>Verify by address</summary>
-        <p>Ask the other device for its Device ID through a trusted channel.</p>
-        <form className="trust-form" onSubmit={(event) => void submit(event)}>
-          <PeerConnectionFields key={formRevision} disabled={busy} onReady={setConnectionReady} />
-          <label>Device ID<input name="fingerprint" required maxLength={64} pattern="[A-Fa-f0-9]{64}" spellCheck={false} /></label>
-          <button type="submit" className="refresh" disabled={busy || !connectionReady}>{busy ? 'Working…' : 'Verify and save trust'}</button>
-        </form>
-      </details>
       {message && <p role="status">{message}</p>}
     </section>
   );

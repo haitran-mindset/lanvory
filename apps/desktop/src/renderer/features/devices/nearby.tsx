@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { AlertCircle, ArrowRight, Bluetooth, CheckCircle2, ChevronRight, HelpCircle, Info, Laptop, Monitor, Radar, RefreshCw, ShieldCheck, Wifi } from 'lucide-react';
+import { AlertCircle, ArrowRight, Bluetooth, CheckCircle2, ChevronRight, HelpCircle, Info, Laptop, Monitor, Radio, Radar, RefreshCw, ShieldCheck, Wifi } from 'lucide-react';
 import { z } from 'zod';
 import type { PeerRoute } from '../sharing/sharing';
 
@@ -86,7 +86,8 @@ export function NearbyServices({ ready, scanRevision, trustRevision, searchQuery
 
   const [bleStatus, setBleStatus] = useState<BleStatus | null>(null);
   const [blePeers, setBlePeers] = useState<BlePeer[]>([]);
-  const [bleBusy, setBleBusy] = useState(false);
+  const [bleAction, setBleAction] = useState<'visibility' | 'scan' | 'connect' | null>(null);
+  const bleBusy = bleAction !== null;
   const [bleFeedback, setBleFeedback] = useState<BleFeedback>(null);
 
   const [matched, setMatched] = useState<Record<string, number>>({});
@@ -106,7 +107,7 @@ export function NearbyServices({ ready, scanRevision, trustRevision, searchQuery
 
   async function toggleAdvertise() {
     if (!bleStatus) return;
-    setBleBusy(true);
+    setBleAction('visibility');
     setBleFeedback(null);
     try {
       const raw = await window.lanvory.nearbyAdvertise(!bleStatus.advertising).catch(() => null);
@@ -117,12 +118,12 @@ export function NearbyServices({ ready, scanRevision, trustRevision, searchQuery
         setBleFeedback({ tone: 'error', text: raw.error });
       }
     } finally {
-      setBleBusy(false);
+      setBleAction(null);
     }
   }
 
   async function runBleScan() {
-    setBleBusy(true);
+    setBleAction('scan');
     setBleFeedback(null);
     try {
       const raw = await window.lanvory.nearbyScan().catch(() => null);
@@ -141,12 +142,12 @@ export function NearbyServices({ ready, scanRevision, trustRevision, searchQuery
         setBleFeedback({ tone: 'error', text: raw.error });
       }
     } finally {
-      setBleBusy(false);
+      setBleAction(null);
     }
   }
 
   async function connectBlePeer(peer: BlePeer) {
-    setBleBusy(true);
+    setBleAction('connect');
     setBleFeedback(null);
     try {
       const raw = await window.lanvory.nearbyConnect(peer.serviceName).catch(() => null);
@@ -159,17 +160,18 @@ export function NearbyServices({ ready, scanRevision, trustRevision, searchQuery
       if (parsed.success && parsed.data.endpoint) {
         const { endpoint, fingerprint, trusted } = parsed.data;
         if (fingerprint && trusted) {
-          onVerified({ fingerprint, adapter: 'p2p', endpoint });
+          onVerified({ fingerprint, adapter: 'p2p', endpoint, label: peer.name });
           setBleFeedback({
             tone: 'success',
-            text: `Connected to ${peer.name} via Wi-Fi P2P (${endpoint}).`,
+            text: `Direct connection ready for ${peer.name}.`,
           });
         } else if (fingerprint) {
           const pairRes = await window.lanvory.nearbyPair(endpoint, fingerprint).catch(() => ({ ok: false, error: 'Pairing failed.' }));
           if (pairRes.ok) {
+            onVerified({ fingerprint, adapter: 'p2p', endpoint, label: peer.name });
             setBleFeedback({
               tone: 'success',
-              text: `Pairing request sent to ${peer.name} over Wi-Fi P2P. Compare the code in Pair a device below.`,
+              text: `Paired with ${peer.name} over Wi-Fi P2P.`,
             });
           } else {
             setBleFeedback({ tone: 'error', text: pairRes.error || 'Unable to start pairing over Wi-Fi P2P.' });
@@ -178,14 +180,14 @@ export function NearbyServices({ ready, scanRevision, trustRevision, searchQuery
           onPair({ name: peer.name, endpoints: [endpoint] });
           setBleFeedback({
             tone: 'info',
-            text: `Wi-Fi P2P channel opened at ${endpoint}, but peer identity did not respond yet.`,
+            text: `The Wi-Fi P2P link to ${peer.name} is ready. Waiting for device verification.`,
           });
         }
       } else if (raw && typeof raw === 'object' && 'error' in raw && typeof raw.error === 'string') {
         setBleFeedback({ tone: 'error', text: raw.error });
       }
     } finally {
-      setBleBusy(false);
+      setBleAction(null);
     }
   }
 
@@ -264,9 +266,17 @@ export function NearbyServices({ ready, scanRevision, trustRevision, searchQuery
   const btReady = bleStatus?.bluetoothState === 'poweredOn';
 
   return (
-    <section className="nearby directory-discovery" aria-labelledby="nearby-title" aria-busy={scanning || bleBusy}>
+    <section className="nearby directory-discovery device-discovery-panel" aria-labelledby="nearby-title" aria-busy={scanning || bleBusy}>
       <div className="nearby-heading">
-        <h3 id="nearby-title" tabIndex={-1}>{scanMode === 'lan' ? heading : 'Bluetooth + P2P'}</h3>
+        <div className="device-discovery-heading">
+          <span className="device-discovery-emblem">
+            {scanMode === 'lan' ? <Radar size={21} aria-hidden="true" /> : <Bluetooth size={21} aria-hidden="true" />}
+          </span>
+          <div>
+            <h3 id="nearby-title" tabIndex={-1}>{scanMode === 'lan' ? heading : 'Bluetooth + P2P'}</h3>
+            <p>{scanMode === 'lan' ? 'Find devices on your local network.' : 'Find nearby devices and connect directly.'}</p>
+          </div>
+        </div>
         {scanMode === 'lan' ? (
           !needsNetwork && !scan?.unavailable && (
             <button type="button" className="refresh" disabled={!ready || scanning || resolving} onClick={() => void discover()}>
@@ -274,17 +284,16 @@ export function NearbyServices({ ready, scanRevision, trustRevision, searchQuery
             </button>
           )
         ) : (
-          <button type="button" className="refresh" disabled={!ready || bleBusy || !bleStatus?.available} onClick={() => void runBleScan()}>
-            <RefreshCw size={15} aria-hidden="true" /> {bleBusy ? 'Scanning…' : 'Scan Bluetooth'}
+          <button type="button" className="refresh device-discovery-scan" disabled={!ready || bleBusy || !bleStatus?.available} onClick={() => void runBleScan()}>
+            <RefreshCw size={15} aria-hidden="true" /> {bleAction === 'scan' ? 'Scanning…' : 'Scan Bluetooth'}
           </button>
         )}
       </div>
 
-      <div className="ble-scan-options" role="radiogroup" aria-label="Scan method">
+      <div className="ble-scan-options" role="group" aria-label="Scan method">
         <button
           type="button"
-          role="radio"
-          aria-checked={scanMode === 'lan'}
+          aria-pressed={scanMode === 'lan'}
           className={`ble-scan-option ${scanMode === 'lan' ? 'is-active' : ''}`}
           onClick={() => setScanMode('lan')}
         >
@@ -294,8 +303,7 @@ export function NearbyServices({ ready, scanRevision, trustRevision, searchQuery
 
         <button
           type="button"
-          role="radio"
-          aria-checked={scanMode === 'ble'}
+          aria-pressed={scanMode === 'ble'}
           className={`ble-scan-option ${scanMode === 'ble' ? 'is-active' : ''}`}
           onClick={() => setScanMode('ble')}
         >
@@ -312,11 +320,15 @@ export function NearbyServices({ ready, scanRevision, trustRevision, searchQuery
       </div>
 
       {scanMode === 'ble' ? (
-        <div style={{ display: 'grid', gap: 12 }}>
-          <div className="ble-action-bar">
-            <span className="ble-action-hint">
-              {bleStatus?.advertising ? 'Visible to nearby devices' : 'Hidden from nearby scans'}
-            </span>
+        <div className="device-discovery-body">
+          <div className="ble-action-bar device-discovery-visibility">
+            <div className="device-discovery-visibility-copy">
+              <Radio size={17} aria-hidden="true" />
+              <div>
+                <strong>Device visibility</strong>
+                <small>{bleStatus?.advertising ? 'Visible to nearby devices' : 'Hidden from nearby scans'}</small>
+              </div>
+            </div>
             <button
               type="button"
               role="switch"
@@ -337,20 +349,24 @@ export function NearbyServices({ ready, scanRevision, trustRevision, searchQuery
           )}
 
           {bleFeedback && (
-            <div className={`sync-feedback-banner is-${bleFeedback.tone}`} role="status">
+            <div className={`sync-feedback-banner device-discovery-feedback is-${bleFeedback.tone}`} role="status">
               {bleFeedback.tone === 'success' ? <CheckCircle2 size={15} aria-hidden="true" /> : bleFeedback.tone === 'error' ? <AlertCircle size={15} aria-hidden="true" /> : <Info size={15} aria-hidden="true" />}
               <span>{bleFeedback.text}</span>
             </div>
           )}
 
           {filteredBlePeers.length > 0 ? (
-            <ul className="nearby-devices">
+            <ul className="nearby-devices device-discovery-results" aria-label="Nearby Bluetooth devices">
               {filteredBlePeers.map((peer) => (
                 <li key={peer.id}>
-                  <span className="panel-icon"><Bluetooth size={20} aria-hidden="true" /></span>
-                  <div>
-                    <strong className="service-name">{peer.name}</strong>
-                    <small>{peer.p2pReady ? 'Wi-Fi P2P ready' : 'Bluetooth'} · {signalLabel(peer.rssi)}</small>
+                  <span className="device-discovery-peer-icon"><Laptop size={19} aria-hidden="true" /></span>
+                  <div className="device-discovery-peer-copy">
+                    <strong className="service-name" title={peer.name}>{peer.name}</strong>
+                    <small>
+                      {peer.p2pReady ? 'Wi-Fi P2P ready' : 'Bluetooth'}
+                      <span aria-hidden="true"> · </span>
+                      {signalLabel(peer.rssi)} signal
+                    </small>
                   </div>
                   <button
                     type="button"

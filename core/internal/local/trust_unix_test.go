@@ -32,7 +32,7 @@ func TestTrustRequiresVerificationAndRevocationBlocksMutual(t *testing.T) {
 		mutualCalls++
 		return nil
 	}
-	handler := handlerWithReceiverAndVerifier(Device{ID: owner, Fingerprint: strings.Repeat("b", 64)}, dir, nil, verify, mutual, mutual, nil, nil, nil, nil)
+	handler := handlerWithReceiverAndVerifier(Device{ID: owner, Fingerprint: strings.Repeat("b", 64)}, dir, nil, verify, mutual, mutual, nil, nil, nil, nil, nil)
 	query := url.Values{"interface": {"en0"}, "endpoint": {"192.168.1.40:1234"}, "fingerprint": {pin}}.Encode()
 	request := func(method, path string, want int) {
 		response := httptest.NewRecorder()

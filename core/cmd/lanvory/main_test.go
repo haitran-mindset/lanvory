@@ -97,6 +97,7 @@ func TestCLIStatusAndDoctorWithMockDaemon(t *testing.T) {
 			priv,
 			nil,
 			func() local.ListenerStatus { return status },
+			nil,
 		),
 		func() local.ListenerStatus { return status },
 		func(string, netip.AddrPort, bool, bool, bool) error { return nil },
