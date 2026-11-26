@@ -95,6 +95,12 @@ jobs:
         with:
           tag_name: ${{ github.ref_name }}
           name: Lanvory ${{ github.ref_name }}
+          body: |
+            ### First launch on macOS
+            Current builds are ad-hoc signed and not yet notarized by Apple. After dragging `Lanvory.app` to `Applications`, run:
+            ```sh
+            xattr -cr /Applications/Lanvory.app
+            ```
           generate_release_notes: true
           prerelease: ${{ contains(github.ref_name, '-') }}
           files: release-assets/*

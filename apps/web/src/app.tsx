@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import {
-  ArrowDownToLine, ArrowRight, ArrowUpRight, Check, ChevronDown, Github,
-  Layers3, Play, ShieldCheck, Square, Star, Zap, ZoomIn,
+  ArrowDownToLine, ArrowRight, ArrowUpRight, Check, ChevronDown, Copy, Github,
+  Layers3, Play, ShieldCheck, Square, Star, Terminal, Zap, ZoomIn,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { copy, features, securityControls, technicalArchitecture } from './content'
@@ -14,6 +14,7 @@ const releaseTag = `v${releaseVersion}`
 const releaseUrl = `${githubUrl}/releases/tag/${releaseTag}`
 const macArm64DmgUrl = `${githubUrl}/releases/download/${releaseTag}/Lanvory-${releaseVersion}-arm64.dmg`
 const macX64DmgUrl = `${githubUrl}/releases/download/${releaseTag}/Lanvory-${releaseVersion}-x64.dmg`
+const macQuarantineCommand = 'xattr -cr /Applications/Lanvory.app'
 const starCountFormat = new Intl.NumberFormat('en')
 const downloadUrl: string | undefined = macArm64DmgUrl
 const desktopPreviewUrl = `${import.meta.env.BASE_URL}images/desktop-preview-1644.webp`
@@ -137,9 +138,20 @@ function ArchitectureNodes({
 
 export function App() {
   const [activeDemo, setActiveDemo] = useState<string | null>(null)
+  const [copiedQuarantine, setCopiedQuarantine] = useState(false)
 
   function toggleDemo(demo: string) {
     setActiveDemo((current) => current === demo ? null : demo)
+  }
+
+  async function copyQuarantineCommand() {
+    try {
+      await navigator.clipboard.writeText(macQuarantineCommand)
+      setCopiedQuarantine(true)
+      window.setTimeout(() => setCopiedQuarantine(false), 2000)
+    } catch {
+      // Clipboard API may be unavailable in restricted contexts.
+    }
   }
 
   return (
@@ -459,6 +471,26 @@ export function App() {
               </article>
             ))}
           </div>
+          {downloadUrl && (
+            <div className="mt-6 rounded-xl border border-border bg-card p-5">
+              <div className="flex items-center gap-2.5 text-sm font-semibold">
+                <Terminal size={17} className="text-primary" aria-hidden="true" />
+                <span>First launch on macOS (unsigned build)</span>
+              </div>
+              <p className="mt-2 text-sm text-muted-foreground">
+                Current macOS releases are ad-hoc signed and not yet notarized by Apple. After dragging{' '}
+                <code className="rounded bg-background px-1.5 py-0.5 text-xs text-foreground">Lanvory.app</code> to{' '}
+                <code className="rounded bg-background px-1.5 py-0.5 text-xs text-foreground">Applications</code>, run this command in Terminal before opening the app:
+              </p>
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-background px-3.5 py-2.5">
+                <code className="text-xs sm:text-sm text-foreground">{macQuarantineCommand}</code>
+                <Button type="button" variant="outline" className="min-h-8 px-2.5 text-xs" onClick={copyQuarantineCommand}>
+                  {copiedQuarantine ? <Check data-icon="inline-start" aria-hidden="true" /> : <Copy data-icon="inline-start" aria-hidden="true" />}
+                  {copiedQuarantine ? 'Copied' : 'Copy'}
+                </Button>
+              </div>
+            </div>
+          )}
         </section>
 
         <section id="faq" className="detail-section" aria-labelledby="faq-title">

@@ -99,6 +99,7 @@ export const copy = {
     ['Send your first file', 'Open Sharing, pick a file and a trusted recipient, then send it. On the receiving device, select Accept file and open the Inbox.'],
   ],
   faq: [
+    ['macOS says Lanvory is damaged or from an unidentified developer?', 'Current builds are ad-hoc signed without Apple notarization. Drag Lanvory.app to Applications, then run "xattr -cr /Applications/Lanvory.app" in Terminal before launching it.'],
     ['Does Lanvory need internet access?', 'Once installed, Lanvory can discover devices, pair, and transfer files over a shared local network without an internet connection.'],
     ['Why can’t I see the other device?', 'Check that both devices are on the same local network and have enabled LAN access. Some guest Wi-Fi networks isolate devices from each other.'],
     ['Can I connect if automatic discovery fails?', 'Yes. In the pairing screen, enter the other device’s local address and Device ID. Both devices still need to be reachable on the same local network.'],
