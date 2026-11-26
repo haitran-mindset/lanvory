@@ -33,6 +33,56 @@ Lanvory runs as a local Go daemon (`lanvoryd`), CLI (`lanvory`), and Electron + 
 
 ---
 
+## Architecture Overview
+
+```mermaid
+flowchart TB
+  subgraph Desktop["Electron Desktop App (apps/desktop)"]
+    Renderer["Sandboxed Renderer (React + Vite)"]
+    Preload["Preload Bridge (contextBridge · window.lanvory)"]
+    Main["Main Process (Electron / Node)"]
+    Renderer <-->|"Typed IPC"| Preload
+    Preload <-->|"ipcMain.handle"| Main
+  end
+
+  subgraph GoCore["Go Core (core/)"]
+    CLI["lanvory CLI (core/cmd/lanvory)"]
+    Daemon["lanvoryd Daemon (core/cmd/lanvoryd)"]
+    Storage["Local Storage (SQLite · Keychain Ed25519)"]
+    Resources["Resource Engines (Drop · Sync · Clipboard · Bridge · Mount)"]
+    Transport["Peer Transport (mTLS 1.3 · QUIC · Scoped LAN · Loopback)"]
+
+    CLI <-->|"Owner-only Unix Socket IPC"| Daemon
+    Daemon <--> Storage
+    Daemon <--> Resources
+    Resources <--> Transport
+  end
+
+  subgraph NativeHelper["macOS Nearby Helper (lanvory-nearby.swift)"]
+    BLE["CoreBluetooth (BLE Scan & Advertise)"]
+    AWDL["Network.framework (Wi-Fi P2P / AWDL Bridge)"]
+  end
+
+  Remote["Remote Lanvory Peer"]
+
+  Main -->|"Spawns & calls CLI"| CLI
+  Main <-->|"HTTP over Unix Socket"| Daemon
+  Daemon <-->|"JSON stdin/stdout"| NativeHelper
+  AWDL <-->|"127.0.0.1 Loopback Proxy"| Transport
+  Transport <-->|"Approved LAN (TCP / QUIC)"| Remote
+  AWDL <-->|"Direct Wi-Fi P2P (AWDL)"| Remote
+  BLE -.->|"Nearby Discovery"| Remote
+```
+
+1. **Electron Renderer & Preload (`apps/desktop/src/renderer`, `src/preload`)**: Runs in a sandboxed browser context with no direct filesystem, socket, or shell access. All privileged operations pass through the narrow `window.lanvory` preload API.
+2. **Electron Main Process (`apps/desktop/src/main/index.cjs`)**: Manages the desktop window, menu bar tray, native file pickers, OS clipboard, and `lanvoryd` lifecycle, forwarding commands to `bin/lanvory` or the daemon's Unix socket.
+3. **Go Daemon & CLI (`core/cmd/lanvoryd`, `core/cmd/lanvory`, `core/internal/`)**: Owns the Ed25519 identity (macOS Keychain), SQLite state (trusted peers, grants, transfer history, sync metadata), interface scope checks, and all mTLS 1.3 / QUIC peer protocols (`Drop`, `Sync`, `Clipboard`, `Bridge`, `Mount`).
+4. **macOS Native Nearby Helper (`core/native/darwin/lanvory-nearby.swift`)**: Communicates with `lanvoryd` over newline-delimited JSON to run BLE advertising/scanning and open local `127.0.0.1` loopback bridges over Apple AWDL Wi-Fi P2P without a shared router.
+
+For deeper design details, see [`docs/architecture/overview.md`](docs/architecture/overview.md) and [`docs/protocols/ipc.md`](docs/protocols/ipc.md).
+
+---
+
 ## Download & Install (macOS)
 
 Open the [latest stable GitHub Release](https://github.com/haitran-mindset/lanvory/releases/latest) and select the disk image for your Mac under **Assets**.
