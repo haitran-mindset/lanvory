@@ -15,7 +15,7 @@ const releaseUrl = `${githubUrl}/releases/tag/${releaseTag}`
 const macArm64DmgUrl = `${githubUrl}/releases/download/${releaseTag}/Lanvory-${releaseVersion}-arm64.dmg`
 const macX64DmgUrl = `${githubUrl}/releases/download/${releaseTag}/Lanvory-${releaseVersion}-x64.dmg`
 const starCountFormat = new Intl.NumberFormat('en')
-const downloadUrl: string | undefined = releaseUrl
+const downloadUrl: string | undefined = macArm64DmgUrl
 const desktopPreviewUrl = `${import.meta.env.BASE_URL}images/desktop-preview-1644.webp`
 
 function Brand() {
@@ -193,7 +193,7 @@ export function App() {
           <div className="mt-8 flex flex-wrap items-center gap-3">
             {downloadUrl ? (
               <Button asChild>
-                <a href={downloadUrl}><ArrowDownToLine data-icon="inline-start" aria-hidden="true" /> {copy.download}</a>
+                <a href={downloadUrl} download><ArrowDownToLine data-icon="inline-start" aria-hidden="true" /> {copy.download}</a>
               </Button>
             ) : (
               <Button asChild>
@@ -204,7 +204,16 @@ export function App() {
               <a href="#how">{copy.nav[2]} <ArrowRight data-icon="inline-end" aria-hidden="true" /></a>
             </Button>
           </div>
-          {!downloadUrl && <p className="mt-2.5 text-xs text-muted-foreground">{copy.downloadStatus}</p>}
+          {downloadUrl ? (
+            <p className="mt-2.5 text-xs text-muted-foreground">
+              {releaseTag} for Apple Silicon ·{' '}
+              <a className="underline underline-offset-4 hover:text-primary" href={macX64DmgUrl} download>
+                Download for Intel Mac (.dmg)
+              </a>
+            </p>
+          ) : (
+            <p className="mt-2.5 text-xs text-muted-foreground">{copy.downloadStatus}</p>
+          )}
 
           <ul className="mt-7 flex flex-wrap gap-2.5 text-xs">
             {features.slice(0, 5).map(({ id, title }) => (
@@ -425,10 +434,10 @@ export function App() {
                         <div className="flex flex-col gap-3">
                           <div className="flex flex-wrap items-center gap-2.5">
                             <Button asChild>
-                              <a href={macArm64DmgUrl}><ArrowDownToLine data-icon="inline-start" aria-hidden="true" /> Apple Silicon (.dmg)</a>
+                              <a href={macArm64DmgUrl} download><ArrowDownToLine data-icon="inline-start" aria-hidden="true" /> Apple Silicon (.dmg)</a>
                             </Button>
                             <Button asChild variant="outline">
-                              <a href={macX64DmgUrl}><ArrowDownToLine data-icon="inline-start" aria-hidden="true" /> Intel (.dmg)</a>
+                              <a href={macX64DmgUrl} download><ArrowDownToLine data-icon="inline-start" aria-hidden="true" /> Intel (.dmg)</a>
                             </Button>
                           </div>
                           <a className="text-sm underline underline-offset-4 hover:text-primary" href={releaseUrl}>
