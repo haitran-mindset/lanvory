@@ -63,6 +63,11 @@ body {
 
 .site-nav { display: flex; flex-wrap: wrap; gap: .75rem clamp(.9rem, 2vw, 1.75rem); font-size: .8125rem; color: var(--color-muted-foreground); }
 .site-nav a:hover { color: var(--color-primary); }
+.site-header .site-nav a[aria-current="location"] {
+  color: var(--color-primary);
+  text-decoration: underline;
+  text-underline-offset: .4em;
+}
 .brand-mark {
   display: inline-block;
   width: 1.85rem;
@@ -292,7 +297,7 @@ body {
   --roadmap-gap: 1rem;
   --roadmap-connect-animation: roadmap-connect;
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: var(--roadmap-gap);
 }
 
@@ -305,6 +310,7 @@ body {
 }
 
 .roadmap-milestone[aria-current] { --milestone-color: var(--color-foreground); }
+.roadmap-milestone[data-completed] { --milestone-color: var(--color-foreground); }
 .roadmap-milestone:not(:last-child)::before,
 .roadmap-milestone:not(:last-child)::after {
   content: "";
@@ -321,6 +327,8 @@ body {
   background: linear-gradient(90deg, var(--milestone-color), var(--color-border));
 }
 
+.roadmap-milestone[data-completed]::after { background: var(--color-foreground); }
+
 .roadmap-node {
   position: relative;
   z-index: 1;
@@ -332,6 +340,20 @@ body {
   border-radius: .8rem;
   background: var(--color-card);
   color: var(--milestone-color);
+}
+
+.roadmap-complete-mark {
+  position: absolute;
+  right: -.3rem;
+  bottom: -.3rem;
+  display: grid;
+  width: 1.15rem;
+  height: 1.15rem;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--color-foreground);
+  color: var(--color-background);
+  box-shadow: 0 0 0 2px var(--color-background);
 }
 
 .roadmap-card { border-top-color: color-mix(in srgb, var(--milestone-color) 55%, var(--color-border)); }
@@ -370,6 +392,9 @@ body {
   .principles { gap: 1rem; padding-block: 1.15rem; }
   .principle { padding-inline: 0; }
   .principle + .principle { padding-top: 1rem; border-left: 0; border-top: 1px solid var(--color-border); }
+}
+
+@media (max-width: 63.99rem) {
   .roadmap-timeline {
     --roadmap-connect-animation: roadmap-connect-vertical;
     grid-template-columns: minmax(0, 1fr);

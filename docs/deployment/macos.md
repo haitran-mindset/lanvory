@@ -26,15 +26,15 @@ GitHub Actions automates `arm64` and `x64` `.dmg` builds, `smoke-macos-dmg.sh --
 
 Packaged macOS builds check the latest stable GitHub Release once per launch when the app window is opened. If a newer release includes a DMG for the running architecture, Lanvory offers to open the download in your browser. Quit Lanvory, replace the app in Applications, and launch it again after installing. Builds shipped before this notification feature need one manual update to start receiving notices. A failed or offline check leaves the running app usable.
 
-The ad hoc build is for local testing with an interactive macOS login and accessible Keychain. The ad hoc signing branch leaves hardened runtime disabled to load the bundled Electron framework without a Developer ID Team ID. The Developer ID branch retains the standard hardened-runtime signing behavior and requires notarization before distribution. Existing Lanvory device identity and settings remain in the login Keychain and per-user state directory.
+The ad hoc build can be tested with an interactive macOS login. The ad hoc signing branch leaves hardened runtime disabled to load the bundled Electron framework without a Developer ID Team ID. The Developer ID branch retains the standard hardened-runtime signing behavior and requires notarization before distribution. Lanvory keeps its owner-only identity file and settings in the per-user state directory.
 
-For an isolated launch test, set `LANVORY_STATE_DIR` to a short absolute path under a private test directory. Both the app and any companion CLI invocation must inherit the same value. It selects the Unix socket, SQLite file and inbox location. The device key still belongs to the current login Keychain.
+For an isolated launch test, set `LANVORY_STATE_DIR` to a short absolute path under a private test directory. Both the app and any companion CLI invocation must inherit the same value. It selects the Unix socket, identity file, SQLite database, and inbox location.
 
 Run `sh scripts/smoke-macos-dmg.sh PATH_TO_LANVORY_DMG` to check a local test image in an interactive macOS login. The script verifies the adjacent checksum, mounts the image read-only, checks the app signature and bundled notices, and starts the app with isolated state. It confirms the bundled CLI can read identity from the app-owned daemon and detaches the image when finished.
 
 When the adjacent CycloneDX inventory is present, the smoke also uses Node.js to compare its two binary hashes against the mounted app before launching it.
 
-Use `--verify-only` for a non-interactive runner. This mode requires the adjacent inventory, verifies the image and signed bundle, and detaches without launching the app or accessing its Keychain identity.
+Use `--verify-only` for a non-interactive runner. This mode requires the adjacent inventory, verifies the image and signed bundle, and detaches without launching the app.
 
 ## Developer ID distribution
 

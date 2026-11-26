@@ -53,7 +53,7 @@ function GitHubStar() {
   return (
     <Button asChild variant="outline" className="min-h-9 gap-1.5 px-2.5 text-xs">
       <a href={githubUrl} aria-label={count === null ? 'Star Lanvory on GitHub' : `Star Lanvory on GitHub (${count} ${stars === 1 ? 'star' : 'stars'})`}>
-        <Star data-icon="inline-start" aria-hidden="true" />
+        <Star className="fill-yellow-400 text-yellow-400" data-icon="inline-start" aria-hidden="true" />
         Star
         {count !== null && <span className="border-l border-border pl-1.5 tabular-nums">{count}</span>}
       </a>
@@ -133,6 +133,7 @@ export function App() {
     return () => controller.abort()
   }, [])
   const [copiedQuarantine, setCopiedQuarantine] = useState(false)
+  const [activeSection, setActiveSection] = useState<string | null>(null)
   const headerRef = useRef<HTMLElement>(null)
 
   useEffect(() => {
@@ -140,21 +141,35 @@ export function App() {
     if (!header) return
 
     const rootStyle = document.documentElement.style
+    const sections = Array.from(document.querySelectorAll('#main > section[id]')).reverse()
+    let frame = 0
+    const updateNavigation = () => {
+      frame = 0
+      header.toggleAttribute('data-scrolled', window.scrollY > 0)
+
+      const readingLine = header.offsetHeight + 48
+      const section = sections.find((item) => item.getBoundingClientRect().top <= readingLine)
+      const id = section?.id === 'quick-start' ? 'how' : section?.id
+      setActiveSection(id && sectionIds.includes(id) ? id : null)
+    }
+    const scheduleNavigationUpdate = () => {
+      if (!frame) frame = window.requestAnimationFrame(updateNavigation)
+    }
     const updateHeaderHeight = () => {
       rootStyle.setProperty('--site-header-height', `${header.offsetHeight}px`)
-    }
-    const updateHeaderBackdrop = () => {
-      header.toggleAttribute('data-scrolled', window.scrollY > 0)
+      scheduleNavigationUpdate()
     }
 
     updateHeaderHeight()
-    updateHeaderBackdrop()
     const observer = new ResizeObserver(updateHeaderHeight)
     observer.observe(header)
-    window.addEventListener('scroll', updateHeaderBackdrop, { passive: true })
+    window.addEventListener('scroll', scheduleNavigationUpdate, { passive: true })
+    window.addEventListener('resize', scheduleNavigationUpdate)
     return () => {
       observer.disconnect()
-      window.removeEventListener('scroll', updateHeaderBackdrop)
+      window.cancelAnimationFrame(frame)
+      window.removeEventListener('scroll', scheduleNavigationUpdate)
+      window.removeEventListener('resize', scheduleNavigationUpdate)
       rootStyle.removeProperty('--site-header-height')
     }
   }, [])
@@ -190,7 +205,15 @@ export function App() {
         <div className="shell site-header">
           <Brand />
           <nav aria-label="Main navigation" className="site-nav">
-            {copy.nav.map((label, index) => <a key={sectionIds[index]} href={`#${sectionIds[index]}`}>{label}</a>)}
+            {copy.nav.map((label, index) => (
+              <a
+                key={sectionIds[index]}
+                href={`#${sectionIds[index]}`}
+                aria-current={activeSection === sectionIds[index] ? 'location' : undefined}
+              >
+                {label}
+              </a>
+            ))}
           </nav>
           <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
             <a className="inline-flex items-center gap-2 text-sm hover:text-primary" href={githubUrl}>
@@ -297,6 +320,11 @@ export function App() {
                 </div>
                 <h3>{feature.title}</h3>
                 <p>{feature.description}</p>
+                {'docs' in feature && (
+                  <a className="mt-3 inline-flex items-center gap-2 text-xs underline underline-offset-4 hover:text-primary" href={`${githubUrl}/blob/main/${feature.docs}`}>
+                    Bluetooth + P2P protocol <ArrowUpRight size={14} aria-hidden="true" />
+                  </a>
+                )}
               </article>
             ))}
           </div>
@@ -425,9 +453,17 @@ export function App() {
         <section id="roadmap" className="detail-section">
           <h2>{copy.nav[5]}</h2>
           <ol className="roadmap-timeline mt-8" role="list">
-            {copy.roadmap.map(({ phase, title, description, icon: Icon }, index) => (
-              <li key={title} className="roadmap-milestone" aria-current={index === 1 ? 'step' : undefined}>
-                <span className="roadmap-node" aria-hidden="true"><Icon size={20} /></span>
+            {copy.roadmap.map(({ phase, title, description, icon: Icon }) => (
+              <li
+                key={title}
+                className="roadmap-milestone"
+                aria-current={phase === 'Current focus' ? 'step' : undefined}
+                data-completed={phase === 'Available' ? '' : undefined}
+              >
+                <span className="roadmap-node" aria-hidden="true">
+                  <Icon size={20} />
+                  {phase === 'Available' && <span className="roadmap-complete-mark"><Check size={12} strokeWidth={3} /></span>}
+                </span>
                 <article className="detail-card roadmap-card">
                   <span className="roadmap-phase">{phase}</span>
                   <h3>{title}</h3>

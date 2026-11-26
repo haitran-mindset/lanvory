@@ -10,12 +10,11 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/haitran-mindset/lanvory/releases/tag/v0.1.0">Download v0.1.0 (macOS)</a> ·
+  <a href="https://github.com/haitran-mindset/lanvory/releases/latest">Download for macOS</a> ·
   <a href="apps/web">Website (<code>apps/web</code>)</a> ·
   <a href="docs/architecture/overview.md">Architecture</a> ·
   <a href="docs/security/threat-model.md">Security Model</a> ·
   <a href="ROADMAP.md">Roadmap</a> ·
-  <a href="HANDOFF.md">Handoff</a>
 </p>
 
 <p align="center">
@@ -34,16 +33,16 @@ Lanvory runs as a local Go daemon (`lanvoryd`), CLI (`lanvory`), and Electron + 
 
 ---
 
-## Download & Install (macOS v0.1.0)
+## Download & Install (macOS)
 
-Pre-built macOS disk images are published on [GitHub Releases](https://github.com/haitran-mindset/lanvory/releases/tag/v0.1.0):
+Open the [latest stable GitHub Release](https://github.com/haitran-mindset/lanvory/releases/latest) and select the disk image for your Mac under **Assets**.
 
-- **Apple Silicon (M1–M4 / `arm64`)**: [Lanvory-0.1.0-arm64.dmg](https://github.com/haitran-mindset/lanvory/releases/download/v0.1.0/Lanvory-0.1.0-arm64.dmg)
-- **Intel (`x64`)**: [Lanvory-0.1.0-x64.dmg](https://github.com/haitran-mindset/lanvory/releases/download/v0.1.0/Lanvory-0.1.0-x64.dmg)
+- **Apple Silicon:** choose the DMG ending in `-arm64.dmg`.
+- **Intel:** choose the DMG ending in `-x64.dmg`.
 
 ### First launch on macOS (ad-hoc signed build)
 
-Current `v0.1.0` macOS builds are ad-hoc signed and not yet notarized by Apple. After dragging `Lanvory.app` to `Applications`, remove the macOS quarantine attribute in Terminal before opening the app:
+Check the release notes for the build’s signing status. For an ad-hoc signed build, drag `Lanvory.app` to `Applications` and run the following command before opening the app.
 
 ```sh
 xattr -cr /Applications/Lanvory.app
@@ -53,15 +52,15 @@ xattr -cr /Applications/Lanvory.app
 
 ## Features
 
-| Feature | Description |
-| --- | --- |
-| **Device Discovery (LAN & BLE + P2P)** | On-demand Bonjour (`_lanvory._tcp` / `_lanvory._udp`) on approved LAN adapters, plus macOS CoreBluetooth + Wi-Fi P2P (`AWDL` via `lanvory-nearby`) without a router, and manual IPv4 endpoint fallback. |
-| **Verified Pairing & Trust** | Ed25519 device identity (`~/.lanvory/identity.key`), mutual TLS 1.3 + QUIC (with TCP fallback), and TLS-bound confirmation codes verified on both devices. |
-| **File Transfer (Drop)** | Single-file offers with explicit recipient approval, streaming SHA-256 verification, atomic writes to `~/.lanvory/inbox`, cancellation, and persisted history. |
-| **Folder Sync** | Send-only, receive-only, and two-way folder synchronization with SHA-256 change detection and conflict copies. |
-| **Live Resource Mount** | Share local folders with trusted peers as live WebDAV volumes (`lanvory-mount/1` over mTLS) with read-only or read-write access grants. |
-| **Service Bridge & Tunnels** | Expose local loopback TCP services to trusted peers and access them through local loopback client tunnels with timed or revocable grants. |
-| **Shared Clipboard & Network Explorer** | Clipboard sharing between trusted peers, adapter eligibility & IPv4 scope diagnostics, and authenticated peer `ping` latency checks. |
+| Feature                                 | Description                                                                                                                                                                                             |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Device Discovery (LAN & BLE + P2P)**  | On-demand Bonjour (`_lanvory._tcp` / `_lanvory._udp`) on approved LAN adapters, plus macOS CoreBluetooth + Wi-Fi P2P (`AWDL` via `lanvory-nearby`) without a router, and manual IPv4 endpoint fallback. |
+| **Verified Pairing & Trust**            | Ed25519 device identity (`~/.lanvory/identity.key`), mutual TLS 1.3 + QUIC (with TCP fallback), and TLS-bound confirmation codes verified on both devices.                                              |
+| **File Transfer (Drop)**                | Single-file offers with explicit recipient approval, streaming SHA-256 verification, atomic writes to `~/.lanvory/inbox`, cancellation, and persisted history.                                          |
+| **Folder Sync**                         | Send-only, receive-only, and two-way folder synchronization with SHA-256 change detection and conflict copies.                                                                                          |
+| **Live Resource Mount**                 | Share local folders with trusted peers as live WebDAV volumes (`lanvory-mount/1` over mTLS) with read-only or read-write access grants.                                                                 |
+| **Service Bridge & Tunnels**            | Expose local loopback TCP services to trusted peers and access them through local loopback client tunnels with timed or revocable grants.                                                               |
+| **Shared Clipboard & Network Explorer** | Clipboard sharing between trusted peers, adapter eligibility & IPv4 scope diagnostics, and authenticated peer `ping` latency checks.                                                                    |
 
 ---
 
@@ -147,14 +146,16 @@ In **Network**, choose **Turn on LAN** to approve the selected adapter and start
 
 ### Bluetooth + Wi-Fi P2P (AWDL) nearby discovery on macOS
 
-On macOS, `make build` compiles `core/native/darwin/lanvory-nearby.swift` to `bin/lanvory-nearby` using CoreBluetooth and `NSIncludesPeerToPeer`. Toggle **Bluetooth + P2P** in the desktop sidebar's dual status card, or use the CLI:
+On macOS, `make build` compiles `core/native/darwin/lanvory-nearby.swift` to `bin/lanvory-nearby` using CoreBluetooth and Network.framework peer-to-peer networking. Toggle **Bluetooth + P2P** in the desktop sidebar's dual status card, or use the CLI:
 
 ```sh
 ./bin/lanvory nearby status
-./bin/lanvory nearby start
+./bin/lanvory nearby advertise on
 ./bin/lanvory nearby scan
-./bin/lanvory nearby stop
+./bin/lanvory nearby advertise off
 ```
+
+See the [Bluetooth and Wi-Fi P2P protocol](docs/protocols/nearby.md) for the discovery, bridge, and pairing flow.
 
 ### Peer listener, verification, pairing & trust
 
@@ -229,6 +230,8 @@ Verify, ping, pair, and manage trusted peers:
 ```
 
 ### Live Resource Mount & Folder Sync
+
+See [Folder Sync](docs/protocols/sync.md) for SHA-256 change detection and conflict copies, and [Live Resource Mount](docs/protocols/mount.md) for WebDAV access and permissions.
 
 ```sh
 ./bin/lanvory mounts

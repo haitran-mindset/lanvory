@@ -11,3 +11,5 @@ The macOS socket sets `IP_BOUND_IF` and binds the selected IPv4 address explicit
 Drop and Bridge prefer QUIC with the same timeout-only fallback rule before opening an application stream. Both reuse the same authenticated receive and forwarding logic as TCP. A permission failure, declined offer or broken stream never triggers an automatic resend or reopen over TCP. QUIC sessions use a 60-second idle timeout and a 15-second keepalive period to cover the file approval window. A stream supports deadline, cancellation and a graceful write half-close. The daemon keeps application operations on demand. Connection pooling across separate client operations and two-device LAN verification remain open.
 
 The packet filter currently uses the generic Go packet interface. quic-go reports that this wrapper cannot tune UDP buffers automatically. Throughput testing and tuning remain open.
+
+[Live Resource Mount](mount.md) also supports a mutually authenticated QUIC stream on the approved LAN transport. [Bluetooth + Wi-Fi P2P](nearby.md) uses a separate TCP bridge through the native helper.

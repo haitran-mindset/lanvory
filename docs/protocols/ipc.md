@@ -13,6 +13,11 @@ The daemon listens on a Unix domain socket at `~/.lanvory/daemon.sock` by defaul
 | GET | `/v1/network/scope?interface=NAME&address=IPv4` | Evaluates address policy against the current interface inventory. Returns a decision with a source/subnet or a rejection reason. Invalid input returns 400. |
 | POST | `/v1/discovery/resolve?interface=NAME&name=INSTANCE` | Scoped SRV/A lookup. Optional `transport=udp` selects the UDP service; TCP is the default. Returns candidate IPv4 endpoints and a rejected-address count, or 404 if the service cannot be resolved. |
 | POST | `/v1/discovery/scan` | Bounded DNS-SD snapshot over active approved interfaces. Returns 429 when discovery or an approval write is in progress, or 503 when the scan fails. |
+| GET | `/v1/nearby/status` | Reports the Bluetooth and Wi-Fi P2P helper state. |
+| POST | `/v1/nearby/advertise` | Enables or disables advertising based on the JSON `enabled` field. |
+| POST | `/v1/nearby/scan` | Returns nearby Bluetooth and Wi-Fi P2P discovery candidates. |
+| POST | `/v1/nearby/connect` | Establishes a helper-managed loopback bridge for a discovered Wi-Fi P2P service. |
+| POST | `/v1/nearby/pair` | Starts confirmed pairing against a registered helper-managed bridge endpoint. |
 | POST | `/v1/peer/verify?interface=NAME&endpoint=IPv4:PORT&fingerprint=HEX` | Verifies the peer key over TLS 1.3 on the approved adapter. Returns 204 on success, 409 on scope denial, or 422 on a failed key/protocol check. |
 | POST | `/v1/peers/trust?interface=NAME&endpoint=IPv4:PORT&fingerprint=HEX` | Verify the remote key before persisting approval for this local identity. |
 | GET | `/v1/peers/trust` | List fingerprints and first verification timestamps for this local identity. |

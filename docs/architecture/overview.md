@@ -8,27 +8,37 @@ flowchart LR
     P --> M[Electron main]
     M --> D[Go daemon]
     C[CLI] --> D
-    D --> K[OS credential storage]
+    D --> K[Owner-only identity file]
     D --> S[Local SQLite]
     D --> L[Approved LAN interface]
     D --> N[BLE + Wi-Fi P2P helper]
     L --> B[Peer daemon]
-    N --> B
+    N -->|Direct Wi-Fi TCP bridge| B
+    M -. Release metadata check .-> G[GitHub Releases]
 ```
 
 The macOS daemon provides owner-authenticated IPC over a private Unix socket. Its Ed25519 identity seed is persisted locally under `~/.lanvory/identity.key` (`0600`) inside an owner-only (`0700`) directory, while SQLite holds profile metadata, adapter approvals, trusted peers, grants, sync state, and transfer history. DNS-SD advertises availability using a random label. Resolving a record checks the approved interface and subnet without granting trust.
 
-On macOS, the daemon can also spawn the bundled `lanvory-nearby` Swift helper (`core/native/darwin/lanvory-nearby.swift`) when the user enables **Bluetooth + P2P**, using CoreBluetooth BLE and AWDL (`NSIncludesPeerToPeer`) to discover nearby Macs without a shared router.
+## Peer paths and resource protocols
 
-Opt-in peer listeners bind to the approved interface. Pairing uses a dedicated TCP TLS 1.3 protocol, pins the receiver key, and requires approval on both devices. Drop, Bridge, Folder Sync, and Live Resource Mount (`lanvory-mount/1` WebDAV over mTLS) use mutually authenticated QUIC by preference, with pinned TCP fallback after a UDP handshake timeout. The daemon checks resource grants separately from identity and rechecks them during active operations. Bridge uses locally registered loopback destinations. Drop asks for consent on each incoming offer.
+LAN discovery uses DNS-SD on approved interfaces. The macOS Nearby helper uses BLE to discover nearby devices and Network.framework's peer-to-peer Wi-Fi transport to bridge TCP between the two daemons. In both paths, names and discovery metadata are candidate hints until pairing verifies the peer.
 
-See [IPC](../protocols/ipc.md), [pairing](../protocols/pairing.md), [QUIC](../protocols/quic.md), and the [threat model](../security/threat-model.md) for the respective boundaries.
+| Capability | Protocol and boundary |
+| --- | --- |
+| Discovery | [LAN DNS-SD](../protocols/discovery.md) and [Bluetooth + Wi-Fi P2P](../protocols/nearby.md) provide distinct discovery paths. |
+| Pairing | [Confirmed pairing](../protocols/pairing.md) uses TLS 1.3, an Ed25519 peer identity, and a session-derived confirmation code. Both devices approve. |
+| Drop and Bridge | [Drop](../protocols/drop.md) verifies each approved file with SHA-256. [Bridge](../protocols/bridge.md) forwards only to locally registered loopback services. Over LAN, both prefer [QUIC](../protocols/quic.md) and fall back to pinned TCP after a handshake timeout. |
+| Folder Sync | [Folder Sync](../protocols/sync.md) runs over scoped TCP with mutual TLS. It compares SHA-256 hashes and attempts to keep conflict copies during bidirectional writes. |
+| Live Resource Mount | [Live Resource Mount](../protocols/mount.md) exposes individually granted WebDAV exports through a local loopback proxy using mutually authenticated TCP or QUIC. |
+| Release notices | The Electron main process checks GitHub for a newer stable release. The user's download action opens the matching DMG in the browser for manual installation. See [macOS packaging](../deployment/macos.md). |
+
+See [local IPC](../protocols/ipc.md), [peer permissions](../security/permissions.md), and the [threat model](../security/threat-model.md) for the trust boundaries.
 
 ## Reference decisions
 
 - [RFC 6762](https://datatracker.ietf.org/doc/rfc6762/) and [RFC 6763](https://datatracker.ietf.org/doc/html/rfc6763) define multicast discovery and service records. Treat records as untrusted and minimize metadata.
 - [LocalSend](https://github.com/localsend/protocol/blob/main/README.md) demonstrates direct offline transfer. Lanvory will use its own wire format and approval model.
-- [Electron safeStorage](https://www.electronjs.org/docs/latest/api/safe-storage) documents platform differences. The daemon must own the key to support standalone operation. A missing secure store requires a visible failure or a separately designed fallback.
+- [Electron safeStorage](https://www.electronjs.org/docs/latest/api/safe-storage) documents platform differences. Lanvory currently keeps identity ownership in the daemon and uses the owner-only state directory for key storage.
 
 ## Distributed dependency notices
 

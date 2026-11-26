@@ -111,12 +111,16 @@ export const copy = {
   ],
   roadmap: [
     {
-      phase: 'Available', title: 'macOS Desktop & Bluetooth + P2P', icon: Laptop,
-      description: 'Apple Silicon and Intel Macs with LAN discovery, Bluetooth Low Energy + Wi-Fi P2P (AWDL), verified pairing, file transfer, folder sync, and service bridge.',
+      phase: 'Available', title: 'macOS desktop', icon: Laptop,
+      description: 'Apple Silicon and Intel builds with Bluetooth + Wi-Fi P2P, file sharing, Folder Sync, Live Resource Mount, and update notices.',
     },
     {
-      phase: 'In progress', title: 'Live Resource Mount & Signed Releases', icon: HardDrive,
-      description: 'Expand Live Resource Mount workflows and add Apple Developer ID signing and notarization for seamless macOS installation.',
+      phase: 'Current focus', title: 'Two-device validation', icon: Network,
+      description: 'Verify offline discovery, pairing, file transfer, sync, and live mounts across two physical devices.',
+    },
+    {
+      phase: 'Next', title: 'Signed macOS releases', icon: ShieldCheck,
+      description: 'Add Apple Developer ID signing and notarization to simplify installation and prepare for in-app updates.',
     },
     {
       phase: 'Future', title: 'Windows and Linux', icon: Monitor,
@@ -141,7 +145,7 @@ export const securityControls = [
   },
   {
     title: 'Local identity keys', icon: KeyRound,
-    description: 'Each device generates its own Ed25519 identity. On macOS, Lanvory protects the private key with Keychain.',
+    description: 'Each device generates its own Ed25519 identity and stores the seed in an owner-only local file.',
   },
   {
     title: 'Resource-level permissions', icon: SlidersHorizontal,
@@ -166,7 +170,7 @@ export const technicalArchitecture = {
         {
           technology: 'BLE + Wi-Fi P2P', icon: Bluetooth,
           description: 'Discover nearby devices over BLE and connect directly via peer-to-peer Wi-Fi.',
-          link: 'core/internal/nearby/nearby.go',
+          link: 'docs/protocols/nearby.md',
         },
       ],
     },
@@ -200,7 +204,7 @@ export const technicalArchitecture = {
     {
       technology: 'SHA-256 + conflict copies', icon: FolderSync,
       description: 'Detect file changes and preserve conflicting versions where possible.',
-      link: 'core/internal/sync/protocol.go',
+      link: 'docs/protocols/sync.md',
     },
     {
       technology: 'Per-peer grants + SQLite', icon: SlidersHorizontal,
