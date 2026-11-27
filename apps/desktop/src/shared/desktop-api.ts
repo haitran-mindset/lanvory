@@ -1,3 +1,10 @@
+export type ScreenSource = {
+  id: string;
+  name: string;
+  kind: 'display' | 'window';
+  thumbnail?: Uint8Array;
+};
+
 export type LoginItemState = 'enabled' | 'disabled' | 'requires-approval' | 'not-found';
 
 export interface DesktopApi {
@@ -26,6 +33,14 @@ export interface DesktopApi {
   decidePairing(id: string, approve: boolean, code?: string): Promise<boolean>;
   matchTrustedPeer(adapter: string, endpoint: string): Promise<string | null>;
   trustedPeers(): Promise<unknown>;
+  screenSignaling(action: "pending" | "send" | "decide" | "stop" | "view", command?: unknown): Promise<unknown>;
+  screenPreviewAvailable(): Promise<boolean>;
+  openScreenRecordingSettings(): Promise<boolean>;
+  screenPreviewSources(): Promise<
+    | { status: "ready"; sources: ScreenSource[] }
+    | { status: "denied" | "restricted" | "not-determined" | "unavailable" }
+  >;
+  selectScreenPreviewSource(id: string): Promise<boolean>;
   openInbox(): Promise<'opened' | 'missing' | 'failed'>;
   openNotices(): Promise<'opened' | 'unavailable' | 'failed'>;
   openTunnelUrl(endpoint: string): Promise<boolean>;

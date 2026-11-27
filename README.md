@@ -109,6 +109,7 @@ xattr -cr /Applications/Lanvory.app
 | **Device Discovery (LAN & BLE + P2P)**  | On-demand Bonjour (`_lanvory._tcp` / `_lanvory._udp`) on approved LAN adapters, plus macOS CoreBluetooth + Wi-Fi P2P (`AWDL` via `lanvory-nearby`) without a router, and manual IPv4 endpoint fallback. |
 | **Verified Pairing & Trust**            | Ed25519 device identity (`~/.lanvory/identity.key`), mutual TLS 1.3 + QUIC (with TCP fallback), and TLS-bound confirmation codes verified on both devices.                                              |
 | **File Transfer (Drop)**                | Single-file offers with explicit recipient approval, streaming SHA-256 verification, atomic writes to `~/.lanvory/inbox`, cancellation, and persisted history.                                          |
+| **Screen Sharing** | Share one window or display with a paired Mac over LAN. The viewer approves each session. See [Screen Sharing](docs/protocols/screen-sharing.md). |
 | **Folder Sync**                         | Send-only, receive-only, and two-way folder synchronization with SHA-256 change detection and conflict copies.                                                                                          |
 | **Live Resource Mount**                 | Share local folders with trusted peers as live WebDAV volumes (`lanvory-mount/1` over mTLS) with read-only or read-write access grants.                                                                 |
 | **Service Bridge & Tunnels**            | Expose local loopback TCP services to trusted peers and access them through local loopback client tunnels with timed or revocable grants.                                                               |
@@ -280,6 +281,12 @@ Verify, ping, pair, and manage trusted peers:
 ./bin/lanvory tunnels list
 ./bin/lanvory tunnels stop "$tunnel_id"
 ```
+
+### Screen Sharing
+
+On both Macs, enable LAN, pair the devices, and open **Workspace → Screen Sharing**. Select and preview a window or display on the sender, then invite the viewer. The viewer selects **Accept**. Either side can end the session.
+
+See the [Screen Sharing guide](docs/protocols/screen-sharing.md) and [expansion roadmap](ROADMAP.md#screen-sharing-roadmap).
 
 ### Live Resource Mount & Folder Sync
 

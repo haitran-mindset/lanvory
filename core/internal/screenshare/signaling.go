@@ -1,0 +1,224 @@
+// Package screenshare manages incoming screen-sharing invitations.
+package screenshare
+
+import (
+	"bytes"
+	"encoding/hex"
+	"errors"
+	"image/jpeg"
+	"sync"
+	"time"
+)
+
+const (
+	Protocol        = "lanvory-screen-signaling/1"
+	MaxDescription  = 10 * 1024
+	MaxFrame        = 42 * 1024
+	JPEGFormat      = "jpeg/1"
+	MaxMessage      = 6*MaxDescription + 1024
+	inviteLifetime  = 45 * time.Second
+	sessionLifetime = 2 * time.Hour
+	frameTimeout    = 15 * time.Second
+	maxSessions     = 16
+)
+
+var ErrUnavailable = errors.New("screen sharing invitation unavailable")
+
+type Request struct {
+	Action    string    `json:"action"`
+	ID        string    `json:"id"`
+	Offer     string    `json:"offer,omitempty"`
+	CreatedAt time.Time `json:"createdAt,omitzero"`
+	Frame     []byte    `json:"frame,omitempty"`
+	Sequence  uint64    `json:"sequence,omitempty"`
+}
+
+type Reply struct {
+	State  string `json:"state"`
+	Answer string `json:"answer,omitempty"`
+}
+
+type Invitation struct {
+	ID        string    `json:"id"`
+	Peer      string    `json:"peer"`
+	Offer     string    `json:"offer"`
+	ExpiresAt time.Time `json:"expiresAt"`
+}
+
+type View struct {
+	State    string `json:"state"`
+	Frame    []byte `json:"frame,omitempty"`
+	Sequence uint64 `json:"sequence,omitempty"`
+}
+
+type session struct {
+	Invitation
+	CreatedAt time.Time
+	reply     Reply
+	frame     []byte
+	sequence  uint64
+	frameAt   time.Time
+}
+
+type Manager struct {
+	mu       sync.Mutex
+	sessions map[string]session
+	now      func() time.Time
+}
+
+func New() *Manager {
+	return &Manager{sessions: make(map[string]session), now: time.Now}
+}
+
+func validID(id string) bool {
+	value, err := hex.DecodeString(id)
+	return err == nil && len(value) == 16
+}
+
+func (m *Manager) prune(now time.Time) {
+	for id, s := range m.sessions {
+		if !now.Before(s.ExpiresAt) {
+			delete(m.sessions, id)
+		} else if s.reply.State == "accepted" && now.Sub(s.frameAt) >= frameTimeout {
+			s.reply = Reply{State: "stopped"}
+			s.frame = nil
+			s.ExpiresAt = now.Add(inviteLifetime + 10*time.Second)
+			m.sessions[id] = s
+		}
+	}
+}
+
+// Handle takes the fingerprint from the authenticated transport, never from the request.
+func (m *Manager) Handle(peer string, req Request) (Reply, error) {
+	if peer == "" || !validID(req.ID) || len(req.Offer) > MaxDescription || len(req.Frame) > MaxFrame ||
+		(req.Action != "frame" && (len(req.Frame) != 0 || req.Sequence != 0)) {
+		return Reply{}, ErrUnavailable
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	now := m.now()
+	m.prune(now)
+	current, exists := m.sessions[req.ID]
+	if exists && current.Peer != peer {
+		return Reply{}, ErrUnavailable
+	}
+	switch req.Action {
+	case "offer":
+		if req.Offer == "" || req.CreatedAt.After(now.Add(10*time.Second)) || !now.Before(req.CreatedAt.Add(inviteLifetime)) {
+			return Reply{}, ErrUnavailable
+		}
+		if exists {
+			if current.Offer != req.Offer || !current.CreatedAt.Equal(req.CreatedAt) {
+				return Reply{}, ErrUnavailable
+			}
+			return current.reply, nil
+		}
+		if len(m.sessions) >= maxSessions {
+			return Reply{}, ErrUnavailable
+		}
+		for _, existing := range m.sessions {
+			if existing.reply.State == "pending" || existing.reply.State == "accepted" {
+				return Reply{}, ErrUnavailable
+			}
+		}
+		current = session{
+			Invitation: Invitation{ID: req.ID, Peer: peer, Offer: req.Offer, ExpiresAt: req.CreatedAt.Add(inviteLifetime)},
+			CreatedAt:  req.CreatedAt,
+			reply:      Reply{State: "pending"},
+		}
+	case "frame":
+		if !exists || current.reply.State != "accepted" || current.reply.Answer != JPEGFormat ||
+			req.Sequence <= current.sequence || req.Offer != "" || !validFrame(req.Frame) {
+			return Reply{}, ErrUnavailable
+		}
+		current.frame = req.Frame
+		current.sequence = req.Sequence
+		current.frameAt = now
+	case "status", "stop":
+		if !exists || req.Offer != "" {
+			return Reply{}, ErrUnavailable
+		}
+		if req.Action == "stop" {
+			current.reply = Reply{State: "stopped"}
+			current.frame = nil
+			current.ExpiresAt = now.Add(inviteLifetime + 10*time.Second)
+		}
+	default:
+		return Reply{}, ErrUnavailable
+	}
+	m.sessions[req.ID] = current
+	return current.reply, nil
+}
+
+func (m *Manager) Pending() []Invitation {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.prune(m.now())
+	invitations := make([]Invitation, 0, len(m.sessions))
+	for _, s := range m.sessions {
+		if s.reply.State == "pending" {
+			invitations = append(invitations, s.Invitation)
+		}
+	}
+	return invitations
+}
+
+func (m *Manager) Decide(id string, accept bool, answer string) error {
+	if accept != (answer != "") || len(answer) > MaxDescription {
+		return ErrUnavailable
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	now := m.now()
+	m.prune(now)
+	current, exists := m.sessions[id]
+	if !exists || current.reply.State != "pending" {
+		return ErrUnavailable
+	}
+	current.reply = Reply{State: "declined"}
+	if accept {
+		current.reply = Reply{State: "accepted", Answer: answer}
+		current.ExpiresAt = now.Add(sessionLifetime)
+		current.frameAt = now
+	}
+	m.sessions[id] = current
+	return nil
+}
+
+func (m *Manager) Stop(id string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	now := m.now()
+	m.prune(now)
+	current, exists := m.sessions[id]
+	if !exists {
+		return ErrUnavailable
+	}
+	current.reply = Reply{State: "stopped"}
+	current.frame = nil
+	current.ExpiresAt = now.Add(inviteLifetime + 10*time.Second)
+	m.sessions[id] = current
+	return nil
+}
+
+func validFrame(frame []byte) bool {
+	config, err := jpeg.DecodeConfig(bytes.NewReader(frame))
+	return err == nil && config.Width > 0 && config.Height > 0 && config.Width <= 1600 && config.Height <= 1200 &&
+		len(frame) >= 2 && frame[len(frame)-2] == 0xff && frame[len(frame)-1] == 0xd9
+}
+
+func (m *Manager) View(id string, after uint64, trusted func(string) bool) View {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	now := m.now()
+	m.prune(now)
+	current, exists := m.sessions[id]
+	if !exists || !trusted(current.Peer) {
+		return View{State: "stopped"}
+	}
+	view := View{State: current.reply.State}
+	if current.reply.State == "accepted" && current.sequence > after && now.Sub(current.frameAt) <= 3*time.Second {
+		view.Frame, view.Sequence = current.frame, current.sequence
+	}
+	return view
+}

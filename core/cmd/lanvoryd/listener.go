@@ -23,20 +23,22 @@ import (
 	"lanvory.local/core/internal/pairing"
 	"lanvory.local/core/internal/peer"
 	"lanvory.local/core/internal/permissions"
+	"lanvory.local/core/internal/screenshare"
 	"lanvory.local/core/internal/storage"
 	syncengine "lanvory.local/core/internal/sync"
 )
 
 type lanListener struct {
-	parent    context.Context
-	dir       string
-	device    local.Device
-	key       ed25519.PrivateKey
-	receiver  *drop.Receiver
-	pairs     *pairing.Manager
-	clipboard *clipboard.Buffer
-	syncMgr   *syncengine.Manager
-	mountReg  *mount.Registry
+	parent        context.Context
+	dir           string
+	device        local.Device
+	key           ed25519.PrivateKey
+	receiver      *drop.Receiver
+	pairs         *pairing.Manager
+	clipboard     *clipboard.Buffer
+	screenSignals *screenshare.Manager
+	syncMgr       *syncengine.Manager
+	mountReg      *mount.Registry
 
 	mu        sync.Mutex
 	current   local.ListenerStatus
@@ -115,6 +117,7 @@ func (l *lanListener) start(adapter string, bind netip.AddrPort, advertise, enab
 		cancel()
 		return fmt.Errorf("start peer listener: %w", err)
 	}
+	tcp.EnableScreenSignaling(l.screenSignals)
 	tcp.EnableServiceList(func(fingerprint string) ([]string, error) {
 		return storage.AuthorizedServices(l.dir, l.device.ID, fingerprint, time.Now())
 	})

@@ -1,6 +1,11 @@
 const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
 contextBridge.exposeInMainWorld('lanvory', {
+  screenSignaling: (action, command) => ipcRenderer.invoke('lanvory:screen-signaling', action, command),
+  screenPreviewAvailable: () => ipcRenderer.invoke('lanvory:screen-preview-available'),
+  openScreenRecordingSettings: () => ipcRenderer.invoke('lanvory:screen-preview-settings'),
+  screenPreviewSources: () => ipcRenderer.invoke('lanvory:screen-preview-sources'),
+  selectScreenPreviewSource: (id) => ipcRenderer.invoke('lanvory:screen-preview-select', id),
   serviceSnapshot: () => ipcRenderer.invoke('lanvory:service-snapshot'),
   serviceAction: (action, input) => ipcRenderer.invoke('lanvory:service-action', action, input),
   openInbox: () => ipcRenderer.invoke('lanvory:open-inbox'),

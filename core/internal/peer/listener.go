@@ -19,6 +19,7 @@ import (
 	"lanvory.local/core/internal/mount"
 	"lanvory.local/core/internal/networking"
 	"lanvory.local/core/internal/pairing"
+	"lanvory.local/core/internal/screenshare"
 	syncengine "lanvory.local/core/internal/sync"
 )
 
@@ -36,6 +37,7 @@ type Listener struct {
 	services         bridge.Lookup
 	serviceList      bridge.ListLookup
 	pairs            *pairing.Manager
+	screenSignaling  *screenshare.Manager
 	clipboardBuf     *clipboard.Buffer
 	clipboardAllowed func(string) bool
 	syncMgr          *syncengine.Manager
@@ -185,6 +187,8 @@ func (l *Listener) Serve(ctx context.Context) error {
 					return
 				}
 				l.receiveFile(ctx, session, remote, pin.String())
+			case screenshare.Protocol:
+				l.receiveScreenSignal(session, remote)
 			case clipboard.Protocol:
 				if l.clipboardBuf == nil {
 					return

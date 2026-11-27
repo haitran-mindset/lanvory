@@ -1,4 +1,7 @@
-const { app, BrowserWindow, clipboard, dialog, ipcMain, Notification, shell } = require('electron');
+const { app, BrowserWindow, clipboard, desktopCapturer, dialog, ipcMain, Notification, nativeTheme, shell, systemPreferences } = require('electron');
+const { createScreenStream } = require('./screen-stream.cjs');
+const { installScreenPreview } = require('./screen-preview.cjs');
+const { confirmScreenPreview } = require('./screen-preview-confirmation.cjs');
 const { execFile, spawn } = require('node:child_process');
 const http = require('node:http');
 const { existsSync, lstatSync, readdirSync, writeFileSync, rmSync } = require('node:fs');
@@ -11,6 +14,8 @@ const { checkForDesktopUpdate } = require('./release-update.cjs');
 const exec = promisify(execFile);
 const bundle = app.isPackaged ? process.resourcesPath : path.resolve(__dirname, '../../../../bin');
 const index = path.join(__dirname, '../../dist/index.html');
+const screenSender = createScreenStream(path.join(bundle, 'lanvory'));
+const screenViewer = createScreenStream(path.join(bundle, 'lanvory'));
 let window;
 let daemon;
 let stopping = false;
@@ -190,6 +195,8 @@ function pairingAlertsEnabled() {
   return Notification.isSupported() && !existsSync(profileFlag('mute-pairing-notifications'));
 }
 
+let screenPreview;
+
 function createWindow(show = true) {
   const devIcon = path.join(__dirname, '../../assets/icon.png');
   const hasDevIcon = !app.isPackaged && existsSync(devIcon);
@@ -216,13 +223,19 @@ function createWindow(show = true) {
   window.webContents.on('will-navigate', (event) => event.preventDefault());
   window.webContents.session.setPermissionRequestHandler((_contents, _permission, reply) => reply(false));
   window.webContents.session.setPermissionCheckHandler(() => false);
+  screenPreview = process.platform === 'darwin'
+    ? installScreenPreview({
+        window, indexUrl: pathToFileURL(index).href, desktopCapturer,
+        confirmPreview: (name) => confirmScreenPreview(BrowserWindow, window, name, nativeTheme.shouldUseDarkColors),
+      })
+    : undefined;
   window.on('close', (event) => {
     if (process.platform === 'darwin' && menuBar && !stopping) {
       event.preventDefault();
       window.hide();
     }
   });
-  window.on('closed', () => { window = undefined; selectedFiles = []; activeSend?.abort(); });
+  window.on('closed', () => { screenPreview = undefined; window = undefined; selectedFiles = []; activeSend?.abort(); });
   return window.loadFile(index);
 }
 
@@ -283,6 +296,52 @@ if (!app.requestSingleInstanceLock()) {
   app.on('second-instance', openWindow);
   app.on('activate', openWindow);
   app.whenReady().then(async () => {
+    let screenCommands = 0;
+    ipcMain.handle('lanvory:screen-signaling', (event, action, command) => {
+      assertTrustedFrame(event);
+      if (!screenPreview || !['pending', 'send', 'decide', 'stop', 'view'].includes(action)) return null;
+      if (action === 'send' && command?.signal?.action === 'frame') return screenSender.request(action, command);
+      if (action === 'view') return screenViewer.request(action, command);
+      const input = JSON.stringify(command ?? {});
+      if (Buffer.byteLength(input) > 62 * 1024 || screenCommands >= 4) return null;
+      screenCommands++;
+      return new Promise((resolve) => {
+        const child = execFile(path.join(bundle, 'lanvory'), ['screen-signaling', action],
+          { timeout: 3500, maxBuffer: 64 * 1024 }, (error, stdout) => {
+            screenCommands--;
+            if (error) return resolve(null);
+            try { resolve(JSON.parse(stdout)); } catch { resolve(null); }
+          });
+        child.stdin.on('error', () => {});
+        child.stdin.end(input);
+      });
+    });
+    ipcMain.handle('lanvory:screen-preview-available', (event) => {
+      assertTrustedFrame(event);
+      return Boolean(screenPreview);
+    });
+    ipcMain.handle('lanvory:screen-preview-sources', async (event) => {
+      assertTrustedFrame(event);
+      if (!screenPreview) return { status: 'unavailable' };
+      const permission = () => systemPreferences.getMediaAccessStatus('screen');
+      const before = permission();
+      if (before === 'denied' || before === 'restricted') return { status: before };
+      const sources = await screenPreview.list().catch(() => null);
+      const after = permission();
+      if (after === 'denied' || after === 'restricted') return { status: after };
+      return sources?.length ? { status: 'ready', sources }
+        : { status: after === 'not-determined' ? 'not-determined' : 'unavailable' };
+    });
+    ipcMain.handle('lanvory:screen-preview-settings', async (event) => {
+      assertTrustedFrame(event);
+      if (!screenPreview) return false;
+      return shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture')
+        .then(() => true, () => false);
+    });
+    ipcMain.handle('lanvory:screen-preview-select', (event, id) => {
+      assertTrustedFrame(event);
+      return screenPreview?.select(id) ?? false;
+    });
     ipcMain.handle('lanvory:identity', async (event, retry = false) => {
       assertTrustedFrame(event);
       if (typeof retry !== 'boolean') throw new Error('Invalid identity request');
@@ -1350,6 +1409,8 @@ if (!app.requestSingleInstanceLock()) {
     void offerDesktopUpdate();
   }).catch(failStartup);
   app.on('before-quit', (event) => {
+    screenSender.close();
+    screenViewer.close();
     if (quitWait) {
       event.preventDefault();
       return;

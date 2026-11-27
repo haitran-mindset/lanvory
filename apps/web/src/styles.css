@@ -693,14 +693,15 @@ body {
 .architecture-resources {
   position: relative;
   padding-top: 2rem;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .architecture-resources::before {
   content: "";
   position: absolute;
   top: 0;
-  left: calc(100% / 6);
-  right: calc(100% / 6);
+  left: 12.5%;
+  right: 12.5%;
   height: 1rem;
   border-bottom: 1px solid var(--architecture-line);
   background: linear-gradient(var(--architecture-line), var(--architecture-line)) center / 1px 100% no-repeat;

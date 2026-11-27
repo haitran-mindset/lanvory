@@ -7,9 +7,18 @@ Lanvory Desktop ships ad-hoc macOS builds for Apple Silicon and Intel. The MVP a
 | Status | Milestone | Scope |
 | --- | --- | --- |
 | Available | macOS desktop | The [latest stable release](https://github.com/haitran-mindset/lanvory/releases/latest) includes LAN and Bluetooth + Wi-Fi P2P discovery, device pairing, Drop, Bridge, Folder Sync, Live Resource Mount, and update notices that link to a manual DMG install. |
-| Current focus | Two-device validation | Verify offline discovery, pairing, file transfer, service sharing, Folder Sync, and Live Resource Mount across physical devices. Record the results using the [LAN validation runbook](docs/development/lan-validation.md). |
+| Current focus | Two-device validation | Verify offline discovery, pairing, file transfer, service sharing, Folder Sync, Live Resource Mount, and Screen Sharing across physical devices. Record the results using the [LAN validation runbook](docs/development/lan-validation.md). |
 | Next | Signed macOS releases | Configure Developer ID signing and notarization, verify installation on both Mac architectures, and prepare for in-app updates. |
 | Future | Windows and Linux | Extend native desktop coverage to Linux and plan Windows support. |
+
+## Screen Sharing roadmap
+
+| Stage | Scope |
+| --- | --- |
+| Implemented in source | One sender and one viewer on macOS over a shared LAN, with source previews, per-session consent, and a stop action on either side. [Screen Sharing guide](docs/protocols/screen-sharing.md) |
+| Current focus | Validate two physical Macs with WAN disconnected. Measure time to first frame, frame rate, and latency. Test interruption, revocation, and stopping from either side. [Validation plan](docs/development/screen-sharing-plan.md#two-mac-acceptance) |
+| Next | Improve text clarity and motion. Keep the latest-frame behavior and evaluate a persistent media connection or video codec with enforceable LAN adapter scope. |
+| Future | Validate direct Wi-Fi (AWDL) without a shared router. Evaluate optional system audio with separate consent, then extend capture and viewing to additional desktop platforms. |
 
 ## Acceptance scope
 
@@ -32,6 +41,7 @@ Terminal, SSH, and remote command execution are deferred outside the current imp
 | Pairing and transport | Pinned identity verification, explicit confirmation on both devices, persisted trust, revocation, mutual TLS, scoped QUIC, and timeout-only TCP fallback | Physical pairing, restart persistence, scope and revocation, and preferred/fallback transport checks |
 | Drop and Bridge | Approved single-file transfer, progress and history, service grants, and local-only tunnel binding, with automated and native desktop smoke checks | File approval, checksum, and history from actual transfers, plus remote tunnel relay and revocation on two physical hosts |
 | Sync, Mount, and Clipboard | Folder Sync (`send-only`, `receive-only`, `two-way`), Live Resource Mount V2 (`lanvory-mount/1` WebDAV over mTLS), shared clipboard, and Network Explorer `ping` | Physical two-host validation for concurrent sync, live WebDAV mount editing, and clipboard exchange |
+| Screen Sharing | Local capture verified in Electron; automated consent, frame transport, and session cleanup checks | Full offline session, latency, and sustained frame-rate measurements on two physical Macs |
 | Desktop and packaging | Fixed navigation and page headings, dual status card (`Local Network` + `Bluetooth + P2P`), sidebar version badge, native window lifecycle, hosted verification of ad-hoc macOS DMGs (`arm64`/`x64`) with SBOM/SHA-256, GitHub Release update notices, and the `apps/web` site | Full offline MVP acceptance, Developer ID signing and Apple notarization |
 | Later phases | The macOS desktop and core feature set are implemented locally | Native Intel, Linux, and Windows desktop acceptance |
 

@@ -30,6 +30,7 @@ LAN discovery uses DNS-SD on approved interfaces. The macOS Nearby helper uses B
 | Drop and Bridge | [Drop](../protocols/drop.md) verifies each approved file with SHA-256. [Bridge](../protocols/bridge.md) forwards only to locally registered loopback services. Over LAN, both prefer [QUIC](../protocols/quic.md) and fall back to pinned TCP after a handshake timeout. |
 | Folder Sync | [Folder Sync](../protocols/sync.md) runs over scoped TCP with mutual TLS. It compares SHA-256 hashes and attempts to keep conflict copies during bidirectional writes. |
 | Live Resource Mount | [Live Resource Mount](../protocols/mount.md) exposes individually granted WebDAV exports through a local loopback proxy using mutually authenticated TCP or QUIC. |
+| Screen Sharing | [Screen Sharing](../protocols/screen-sharing.md) uses Electron screen capture and bounded JPEG frames over LAN-scoped mutual TLS, with per-session acceptance and in-memory viewing. |
 | Release notices | The Electron main process checks GitHub for a newer stable release. The user's download action opens the matching DMG in the browser for manual installation. See [macOS packaging](../deployment/macos.md). |
 
 See [local IPC](../protocols/ipc.md), [peer permissions](../security/permissions.md), and the [threat model](../security/threat-model.md) for the trust boundaries.

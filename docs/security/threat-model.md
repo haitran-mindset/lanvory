@@ -20,6 +20,10 @@ Live Resource Mount authorizes individual exports for an authenticated peer. A r
 
 Folder Sync checks a per-peer folder grant before accepting the session and verifies incoming bytes against the SHA-256 digest. Modification times select transfer direction in bidirectional mode, and conflict copies are best effort. See the [sync protocol](../protocols/sync.md) for scope and failure behavior.
 
+## Screen Sharing
+
+A saved trust relationship allows a peer to send an invitation. The viewer must accept before the daemon will expose frames. The sender grants macOS capture access, selects a source, and confirms the local preview. Scoped mutual TLS authenticates peer requests. Frame size and dimensions are bounded, and the receiver keeps the latest frame in memory. The viewer can still copy visible material using OS tools. See the [Screen Sharing protocol](../protocols/screen-sharing.md).
+
 ## Release distribution
 
 The packaged macOS app checks the public GitHub Releases endpoint for a newer stable tag. It checks the expected asset name and URL for the running architecture and opens the download in the browser after the user chooses **Download update**. The user installs the DMG manually.

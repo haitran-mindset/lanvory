@@ -566,6 +566,15 @@ export function App() {
                         </li>
                       ))}
                     </ul>
+                    {"guide" in current && (
+                      <a
+                        className="mt-3 inline-flex items-center gap-1.5 text-sm text-primary underline-offset-4 hover:underline"
+                        href={`${githubUrl}/blob/main/${current.guide}`}
+                      >
+                        Read the Screen Sharing guide{" "}
+                        <ArrowUpRight size={14} aria-hidden="true" />
+                      </a>
+                    )}
                   </div>
                 </article>
               );

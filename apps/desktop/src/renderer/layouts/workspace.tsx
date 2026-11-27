@@ -5,6 +5,7 @@ import {
   HardDrive,
   Layers,
   Monitor,
+  ScreenShare,
   Network,
   RefreshCw,
   Search,
@@ -21,6 +22,7 @@ const navigation = [
       ["Devices", Monitor],
       ["Sharing", Layers],
       ["Sync", RefreshCw],
+      ["Screen Sharing", ScreenShare],
       ["Live Resources", HardDrive],
       ["Services", Boxes],
     ],
@@ -46,6 +48,7 @@ export function Workspace({
   bleActive = false,
   bleReady = false,
   pendingFiles,
+  screenSharingAvailable,
   action,
   children,
 }: {
@@ -58,6 +61,7 @@ export function Workspace({
   bleActive?: boolean;
   bleReady?: boolean;
   pendingFiles: number;
+  screenSharingAvailable: boolean;
   action?: ReactNode;
   children: ReactNode;
 }) {
@@ -81,7 +85,7 @@ export function Workspace({
           {navigation.map(({ label: group, pages }) => (
             <div key={group} className="sidebar-nav-group" role="group" aria-label={group}>
               <span className="sidebar-nav-label" aria-hidden="true">{group}</span>
-              {pages.map(([label, Icon]) => (
+              {pages.filter(([label]) => label !== "Screen Sharing" || screenSharingAvailable).map(([label, Icon]) => (
                 <button
                   key={label}
                   aria-current={label === page ? "page" : undefined}

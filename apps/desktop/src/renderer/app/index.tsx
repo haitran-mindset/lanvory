@@ -3,6 +3,8 @@ import { createRoot } from 'react-dom/client';
 import { z } from 'zod';
 import { Services } from '../features/services/services';
 import { Sharing, type PeerRoute } from '../features/sharing/sharing';
+import { ScreenPreview } from '../features/screen-sharing/screen-preview';
+import { readPairedNames } from '../services/paired-names';
 import type { PairingTarget } from '../features/devices/nearby';
 import { SettingsPanel, type TextSize, type Theme, type Density } from '../features/settings/settings';
 import { NetworkPanel } from '../features/network/network';
@@ -170,6 +172,16 @@ function AppContent({
   const identityRevision = useRef(0);
   const [retrying, setRetrying] = useState(false);
   const identity = response?.device;
+  const [screenSharingAvailable, setScreenSharingAvailable] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    void window.lanvory.screenPreviewAvailable().then((available) => {
+      if (active) setScreenSharingAvailable(available);
+    }).catch(() => {});
+    return () => { active = false; };
+  }, []);
+
   const [windowVisible, setWindowVisible] = useState(() => !document.hidden);
   const [routeState, setRouteState] = useState<{ owner: string; routes: Record<string, PeerRoute> }>();
   const savedRoutes = useMemo(() => identity?.id ? readPeerRoutes(identity.id) : {}, [identity?.id]);
@@ -440,6 +452,7 @@ function AppContent({
       onNavigate={navigate}
       onOpenPalette={() => setPaletteOpen(true)}
       pendingFiles={identity ? pendingFiles : 0}
+      screenSharingAvailable={screenSharingAvailable}
     >
         {page === 'Settings' ? (
           <SettingsPanel ownerId={identity?.id} fingerprint={identity?.fingerprint} reducedMotion={reducedMotion} onReducedMotionChange={changeReducedMotion} density={density} onDensityChange={changeDensity} theme={theme} onThemeChange={changeTheme} textSize={textSize} onTextSizeChange={changeTextSize} name={identity?.name} protocolVersion={identity?.protocolVersion} daemonVersion={identity?.daemonVersion} onRename={async (name) => {
@@ -449,7 +462,9 @@ function AppContent({
             setResponse({ device: result.data });
             return true;
           }} />
-        ) : page === 'Network' ? <NetworkPanel visible={windowVisible} deviceName={identity?.name} routes={peerRoutes} onRoute={rememberRoute} /> : page === 'Sync' ? <SyncPanel visible={windowVisible} ownerId={identity?.id} routes={peerRoutes} onRoute={rememberRoute} /> : page === 'Live Resources' ? <MountsPanel visible={windowVisible} ownerId={identity?.id} routes={peerRoutes} onRoute={rememberRoute} /> : page === 'Services' ? <Services key={identity?.id} ownerId={identity?.id} visible={windowVisible} routes={peerRoutes} onPair={findDeviceToPair} onRoute={rememberRoute} /> : page === 'Sharing' ? null : (
+        ) : page === 'Network' ? <NetworkPanel visible={windowVisible} deviceName={identity?.name} routes={peerRoutes} onRoute={rememberRoute} /> : page === 'Sync' ? <SyncPanel visible={windowVisible} ownerId={identity?.id} routes={peerRoutes} onRoute={rememberRoute} /> : page === 'Live Resources' ? <MountsPanel visible={windowVisible} ownerId={identity?.id} routes={peerRoutes} onRoute={rememberRoute} /> : page === 'Services' ? <Services key={identity?.id} ownerId={identity?.id} visible={windowVisible} routes={peerRoutes} onPair={findDeviceToPair} onRoute={rememberRoute} /> : page === 'Sharing' ? null : page === 'Screen Sharing' ? (
+          screenSharingAvailable && windowVisible && <ScreenPreview key={identity?.id} routes={peerRoutes} names={identity ? readPairedNames(identity.id) : {}} />
+        ) : (
           <DevicesPage incomingPairingEnabled={listener?.pairing === true} response={response} retrying={retrying} visible={windowVisible} scanRevision={scanRevision}
             nearbyCount={nearbyCount} counts={counts} trustRevision={trustRevision} pairingTarget={pairingTarget} routes={peerRoutes}
             onDiscover={discover} onShare={() => navigate('Sharing')} onServices={() => navigate('Services')} onNetwork={() => navigate('Network')} onRetry={() => void retry()}
@@ -465,6 +480,7 @@ function AppContent({
           commands={[
             { id: 'nav-devices', category: 'Navigate', label: 'Go to Devices', shortcut: '⌘1', run: () => navigate('Devices') },
             { id: 'nav-sharing', category: 'Navigate', label: 'Go to Sharing', shortcut: '⌘2', run: () => navigate('Sharing') },
+            ...(screenSharingAvailable ? [{ id: 'nav-screen-sharing', category: 'Navigate', label: 'Go to Screen Sharing', run: () => navigate('Screen Sharing') }] : []),
             { id: 'nav-sync', category: 'Navigate', label: 'Go to Sync', shortcut: '⌘6', run: () => navigate('Sync') },
             { id: 'nav-mounts', category: 'Navigate', label: 'Go to Live Resources', shortcut: '⌘7', run: () => navigate('Live Resources') },
             { id: 'nav-services', category: 'Navigate', label: 'Go to Services', shortcut: '⌘3', run: () => navigate('Services') },

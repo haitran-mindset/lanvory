@@ -1,5 +1,5 @@
 import {
-  Bluetooth, Fingerprint, FolderSync, FolderUp, HardDrive, KeyRound, Laptop, LockKeyhole, Monitor, Network, Radar, ShieldCheck, SlidersHorizontal, Unplug,
+  Bluetooth, Fingerprint, FolderSync, FolderUp, HardDrive, KeyRound, Laptop, LockKeyhole, Monitor, Network, Radar, ScreenShare, ShieldCheck, SlidersHorizontal, Unplug,
 } from 'lucide-react'
 
 export const features = [
@@ -8,6 +8,13 @@ export const features = [
     description: 'Send files to paired devices with recipient approval. Track progress and review completed or failed transfers in your history.',
     highlights: ['Recipient approves every incoming file', 'Automatic integrity check before saving', 'Cancel anytime & keep local transfer history'],
     flow: ['Pick file', 'Approve on receiver', 'Saved to Inbox'],
+  },
+  {
+    id: 'screen-sharing', title: 'Screen Sharing', icon: ScreenShare, status: 'macOS',
+    description: 'Show a window or display to one paired Mac over your local network, without an internet relay.',
+    highlights: ['Choose a window or display from local previews', 'The viewer accepts each invitation', 'Either device can end the session'],
+    flow: ['Choose a source', 'Invite a paired Mac', 'Accept & view'],
+    guide: 'docs/protocols/screen-sharing.md',
   },
   {
     id: 'live-resource-mount', title: 'Live Resource Mount', icon: HardDrive, status: 'Prototype',
@@ -88,7 +95,7 @@ export const copy = {
     ['Watch & open without waiting.', 'Browse shared folders and stream large videos or files right away—without copying gigabytes onto your drive.'],
     ['Share local apps, safely.', 'Let a trusted device open an app running on your computer without exposing it to the internet or the rest of the network.'],
   ],
-  featureIntro: 'Discover nearby devices, share files and services, and work across your local network.',
+  featureIntro: 'Discover nearby devices, share files, screens, and services, and work across your local network.',
   steps: [
     {
       demo: 'discover',
@@ -122,6 +129,8 @@ export const copy = {
     ['Does Lanvory need internet access?', 'Once installed, Lanvory can discover devices, pair, and transfer files over a shared local network or Bluetooth + P2P without an internet connection.'],
     ['Why can’t I see the other device?', 'Check that both devices have Local Network or Bluetooth + P2P enabled. Some guest Wi-Fi networks isolate devices from each other—in that case, use Bluetooth + P2P.'],
     ['Can I connect if automatic discovery fails?', 'Yes. In the pairing screen, enter the other device’s local address and Device ID. Both devices still need to be reachable on the same local network.'],
+    ['How do I share my screen?', 'In Lanvory 0.1.6 or later, pair both Macs on the same LAN and open Screen Sharing on both. The sender chooses a source, previews it, and invites the viewer. The viewer selects Accept.'],
+    ['Does Screen Sharing work over Bluetooth + Wi-Fi P2P?', 'Screen Sharing currently uses a shared LAN. Screen streaming over direct Wi-Fi is a separate roadmap milestone.'],
     ['Where do received files go?', 'After you accept a file, Lanvory verifies it and saves it to the Inbox. Open Sharing and select Open inbox to find it.'],
     ['When will Windows and Linux be supported?', 'Both are on the roadmap. Release dates for Windows and Linux have yet to be announced.'],
   ],
@@ -132,11 +141,19 @@ export const copy = {
     },
     {
       phase: 'Current focus', title: 'Two-device validation', icon: Network,
-      description: 'Verify offline discovery, pairing, file transfer, sync, and live mounts across two physical devices.',
+      description: 'Verify offline discovery, pairing, file transfer, sync, live mounts, and Screen Sharing across two physical devices.',
     },
     {
       phase: 'Next', title: 'Signed macOS releases', icon: ShieldCheck,
       description: 'Add Apple Developer ID signing and notarization to simplify installation and prepare for in-app updates.',
+    },
+    {
+      phase: 'Next', title: 'Smoother Screen Sharing', icon: ScreenShare,
+      description: 'Measure latency on real LANs, then improve text clarity and motion with adaptive quality and a lower-overhead media path.',
+    },
+    {
+      phase: 'Future', title: 'Screen Sharing over direct Wi-Fi', icon: Bluetooth,
+      description: 'Validate screen streaming between nearby Macs without a shared router and assess optional system audio with explicit consent.',
     },
     {
       phase: 'Future', title: 'Windows and Linux', icon: Monitor,
@@ -221,6 +238,11 @@ export const technicalArchitecture = {
       technology: 'SHA-256 + conflict copies', icon: FolderSync,
       description: 'Detect file changes and preserve conflicting versions where possible.',
       link: 'docs/protocols/sync.md',
+    },
+    {
+      technology: 'Adaptive JPEG + scoped mTLS', icon: ScreenShare,
+      description: 'Stream bounded screen frames over authenticated LAN TCP after the viewer accepts.',
+      link: 'docs/protocols/screen-sharing.md',
     },
     {
       technology: 'Per-peer grants + SQLite', icon: SlidersHorizontal,

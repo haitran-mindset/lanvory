@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -78,6 +79,7 @@ func main() {
 		(len(arguments) == 4 || len(arguments) == 5) && arguments[0] == "discover" && arguments[1] == "resolve",
 		len(arguments) == 4 && arguments[0] == "network" && arguments[1] == "check",
 		len(arguments) == 3 && arguments[0] == "network" && (arguments[1] == "approve" || arguments[1] == "revoke"),
+		len(arguments) == 2 && arguments[0] == "screen-signaling",
 		slices.Equal(arguments, []string{"clipboard", "status"}),
 		slices.Equal(arguments, []string{"clipboard", "enable"}),
 		slices.Equal(arguments, []string{"clipboard", "disable"}),
@@ -137,6 +139,23 @@ func run(arguments []string) error {
 		case "stop":
 			return local.StopTunnel(ctx, dir, arguments[2])
 		}
+	}
+	if arguments[0] == "screen-signaling" {
+		if arguments[1] == "stream" {
+			return screenStream(ctx, dir, os.Stdin, os.Stdout)
+		}
+		var response json.RawMessage
+		var body io.Reader
+		if arguments[1] != "pending" {
+			body = os.Stdin
+		}
+		if err := local.ScreenSignaling(ctx, dir, arguments[1], body, &response); err != nil {
+			return err
+		}
+		if response == nil {
+			return output.Encode(true)
+		}
+		return output.Encode(response)
 	}
 	if arguments[0] == "clipboard" {
 		switch arguments[1] {

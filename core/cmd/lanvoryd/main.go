@@ -12,6 +12,7 @@ import (
 	"net/netip"
 	"os"
 	"os/signal"
+	"runtime"
 	"syscall"
 	"time"
 
@@ -24,6 +25,7 @@ import (
 	"lanvory.local/core/internal/nearby"
 	"lanvory.local/core/internal/pairing"
 	"lanvory.local/core/internal/permissions"
+	"lanvory.local/core/internal/screenshare"
 	"lanvory.local/core/internal/storage"
 	syncengine "lanvory.local/core/internal/sync"
 )
@@ -93,11 +95,15 @@ func run(peerInterface string, peerBind netip.AddrPort, advertise, enableQUIC, e
 		return storage.SetPeerTrust(dir, device.ID, pin, true)
 	})
 	clipBuf := clipboard.NewBuffer()
+	var screenSignals *screenshare.Manager
+	if runtime.GOOS == "darwin" {
+		screenSignals = screenshare.New()
+	}
 	syncMgr := syncengine.NewManager()
 	mountReg := mount.NewRegistry()
 	nearbyMgr := nearby.NewManager(device.Name, device.Fingerprint[:12])
 	defer nearbyMgr.Close()
-	lan := &lanListener{parent: ctx, dir: dir, device: device, key: key, receiver: receiver, pairs: pairs, clipboard: clipBuf, syncMgr: syncMgr, mountReg: mountReg}
+	lan := &lanListener{parent: ctx, dir: dir, device: device, key: key, receiver: receiver, pairs: pairs, clipboard: clipBuf, screenSignals: screenSignals, syncMgr: syncMgr, mountReg: mountReg}
 	defer lan.stop()
 	if peerInterface != "" {
 		if err := lan.start(peerInterface, peerBind, advertise, enableQUIC, enablePairing); err != nil {
@@ -108,6 +114,7 @@ func run(peerInterface string, peerBind netip.AddrPort, advertise, enableQUIC, e
 	defer tunnels.Close()
 	handler := local.WithListenerStatus(local.HandlerWithResources(device, dir, receiver, tunnels, key, pairs, lan.status, nearbyMgr.HasEndpoint), lan.status, lan.start, lan.stop)
 	handler = local.WithClipboardWithNearby(handler, clipBuf, device, dir, key, nearbyMgr.HasEndpoint)
+	handler = local.WithScreenSignaling(handler, screenSignals, device, dir, key)
 	handler = local.WithSyncWithNearby(handler, syncMgr, device, dir, key, nearbyMgr.HasEndpoint)
 	handler = local.WithMountsWithNearby(handler, mountReg, device, dir, key, nearbyMgr)
 	handler = local.WithNearby(handler, nearbyMgr, lan.ensureP2PPort, device, dir, key, pairs)
