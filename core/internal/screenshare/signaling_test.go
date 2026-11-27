@@ -146,3 +146,85 @@ func TestStalledScreenSessionReleasesInviteSlot(t *testing.T) {
 		t.Fatalf("stalled session blocked a new invitation: %+v %v", reply, err)
 	}
 }
+
+func TestScreenHDRequiresBothPeersAndKeepsLegacyLimits(t *testing.T) {
+	m := New()
+	now := time.Now()
+	m.now = func() time.Time { return now }
+	offer := Request{Action: "offer", ID: strings.Repeat("06", 16), Offer: JPEGFormat, CreatedAt: now}
+	if _, err := m.Handle("sender", offer); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Decide(offer.ID, true, HDJPEGFormat); !errors.Is(err, ErrUnavailable) {
+		t.Fatalf("legacy sender unexpectedly negotiated HD: %v", err)
+	}
+	if err := m.Decide(offer.ID, true, JPEGFormat); err != nil {
+		t.Fatal(err)
+	}
+	var jpegData bytes.Buffer
+	if err := jpeg.Encode(&jpegData, image.NewRGBA(image.Rect(0, 0, 1920, 1080)), nil); err != nil {
+		t.Fatal(err)
+	}
+	// A valid JPEG comment segment makes the fixture exceed the legacy byte cap.
+	frameBytes := append([]byte{0xff, 0xd8, 0xff, 0xfe, 0xc0, 0x02}, make([]byte, 0xc000)...)
+	frameBytes = append(frameBytes, jpegData.Bytes()[2:]...)
+	frame := Request{Action: "frame", ID: offer.ID, Frame: frameBytes, Sequence: 1}
+	if _, err := m.Handle("sender", frame); !errors.Is(err, ErrUnavailable) {
+		t.Fatalf("legacy session accepted an HD frame: %v", err)
+	}
+	if err := m.Stop(offer.ID); err != nil {
+		t.Fatal(err)
+	}
+	offer.ID, offer.HD = strings.Repeat("07", 16), true
+	if _, err := m.Handle("sender", offer); err != nil {
+		t.Fatal(err)
+	}
+	if pending := m.Pending(); len(pending) != 1 || !pending[0].HD {
+		t.Fatalf("viewer did not receive HD capability: %+v", pending)
+	}
+	if err := m.Decide(offer.ID, true, HDJPEGFormat); err != nil {
+		t.Fatal(err)
+	}
+	frame.ID = offer.ID
+	if reply, err := m.Handle("sender", frame); err != nil || reply.Answer != HDJPEGFormat {
+		t.Fatalf("HD session rejected a valid large frame: %+v %v", reply, err)
+	}
+	if got := m.View(offer.ID, 0, func(string) bool { return true }); !bytes.Equal(got.Frame, frameBytes) {
+		t.Fatal("HD frame was not passed to the viewer")
+	}
+}
+
+func TestUHDFramesRequireUHDNegotiation(t *testing.T) {
+	m := New()
+	offer := Request{Action: "offer", ID: strings.Repeat("08", 16), Offer: JPEGFormat, HD: true, CreatedAt: time.Now()}
+	if _, err := m.Handle("sender", offer); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Decide(offer.ID, true, UHDJPEGFormat); !errors.Is(err, ErrUnavailable) {
+		t.Fatalf("HD-only sender negotiated UHD: %v", err)
+	}
+	if err := m.Stop(offer.ID); err != nil {
+		t.Fatal(err)
+	}
+	offer.ID, offer.UHD = strings.Repeat("09", 16), true
+	if _, err := m.Handle("sender", offer); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Decide(offer.ID, true, UHDJPEGFormat); err != nil {
+		t.Fatal(err)
+	}
+	var data bytes.Buffer
+	if err := jpeg.Encode(&data, image.NewGray(image.Rect(0, 0, 3840, 2160)), nil); err != nil {
+		t.Fatal(err)
+	}
+	if validFrame(data.Bytes(), HDJPEGFormat) {
+		t.Fatal("HD validated an image with UHD dimensions")
+	}
+	frame := Request{Action: "frame", ID: offer.ID, Frame: data.Bytes(), Sequence: 1}
+	if reply, err := m.Handle("sender", frame); err != nil || reply.Answer != UHDJPEGFormat {
+		t.Fatalf("UHD frame rejected: %+v %v", reply, err)
+	}
+	if got := m.View(offer.ID, 0, func(string) bool { return true }); !bytes.Equal(got.Frame, frame.Frame) {
+		t.Fatal("UHD frame was not passed to the viewer")
+	}
+}

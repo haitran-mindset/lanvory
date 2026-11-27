@@ -1,6 +1,7 @@
 const { app, BrowserWindow, clipboard, desktopCapturer, dialog, ipcMain, Notification, nativeTheme, shell, systemPreferences } = require('electron');
 const { createScreenStream } = require('./screen-stream.cjs');
-const { installScreenPreview } = require('./screen-preview.cjs');
+const { createScreenViewer } = require('./screen-viewer.cjs');
+const { createScreenSourceFinder, installScreenPreview } = require('./screen-preview.cjs');
 const { confirmScreenPreview } = require('./screen-preview-confirmation.cjs');
 const { execFile, spawn } = require('node:child_process');
 const http = require('node:http');
@@ -13,6 +14,10 @@ const { checkForDesktopUpdate } = require('./release-update.cjs');
 
 const exec = promisify(execFile);
 const bundle = app.isPackaged ? process.resourcesPath : path.resolve(__dirname, '../../../../bin');
+const findScreenSources = createScreenSourceFinder({
+  permission: () => systemPreferences.getMediaAccessStatus('screen'),
+  requestPermission: () => require(path.join(bundle, 'screen-permission.node')).requestScreenAccess(),
+});
 const index = path.join(__dirname, '../../dist/index.html');
 const screenSender = createScreenStream(path.join(bundle, 'lanvory'));
 const screenViewer = createScreenStream(path.join(bundle, 'lanvory'));
@@ -71,17 +76,8 @@ async function daemonStatus(retry = false) {
     const device = await readIdentity();
     if (daemon === observedDaemon) daemonStartedAt = undefined;
     if (!stopping && menuBar) {
-      const [listener, trusted, transfers] = await Promise.all([
-        readListener().catch(() => null),
-        exec(path.join(bundle, 'lanvory'), ['peer', 'trusted'], { timeout: 2000, maxBuffer: 65536 })
-          .then(({ stdout }) => JSON.parse(stdout).length).catch(() => undefined),
-        exec(path.join(bundle, 'lanvory'), ['files', 'transfers'], { timeout: 2000, maxBuffer: 65536 })
-          .then(({ stdout }) => JSON.parse(stdout).transfers?.filter((t) => t.state === 'streaming' || t.state === 'waiting').length).catch(() => undefined),
-      ]);
-      if (!stopping) {
-        menuBar.setStatus(listener?.state === 'listening' ? 'listening' : 'online');
-        menuBar.setDetails({ endpoint: listener?.state === 'listening' ? listener.endpoint : undefined, trusted, transfers });
-      }
+      menuBar.setStatus('online');
+      if (!window?.isVisible()) void readListener().catch(() => {});
     }
     return { device };
   } catch {
@@ -104,8 +100,15 @@ function readInterfaces() {
 }
 
 async function readListener() {
-  const { stdout } = await exec(path.join(bundle, 'lanvory'), ['network', 'listener'], { timeout: 4000, maxBuffer: 4096 });
-  return JSON.parse(stdout);
+  try {
+    const { stdout } = await exec(path.join(bundle, 'lanvory'), ['network', 'listener'], { timeout: 4000, maxBuffer: 4096 });
+    const listener = JSON.parse(stdout);
+    menuBar?.setLocalNetwork(listener?.state === 'listening');
+    return listener;
+  } catch (error) {
+    menuBar?.setLocalNetwork(false);
+    throw error;
+  }
 }
 
 function assertTrustedFrame(event) {
@@ -150,6 +153,7 @@ function readPairingRequests() {
 
 let pairingNotification;
 let notifiedOffers = new Set();
+let notifiedScreenInvite;
 const alertPairing = createPairingAlerts(() => {
   pairingNotification?.close();
   const notice = new Notification({
@@ -196,6 +200,7 @@ function pairingAlertsEnabled() {
 }
 
 let screenPreview;
+let screenViewerWindow;
 
 function createWindow(show = true) {
   const devIcon = path.join(__dirname, '../../assets/icon.png');
@@ -235,7 +240,8 @@ function createWindow(show = true) {
       window.hide();
     }
   });
-  window.on('closed', () => { screenPreview = undefined; window = undefined; selectedFiles = []; activeSend?.abort(); });
+  window.webContents.on('render-process-gone', () => { menuBar?.setScreenSharing(false); screenViewerWindow?.close(); });
+  window.on('closed', () => { screenViewerWindow?.close(); menuBar?.setScreenSharing(false); screenPreview = undefined; window = undefined; selectedFiles = []; activeSend?.abort(); });
   return window.loadFile(index);
 }
 
@@ -296,18 +302,23 @@ if (!app.requestSingleInstanceLock()) {
   app.on('second-instance', openWindow);
   app.on('activate', openWindow);
   app.whenReady().then(async () => {
+    screenViewerWindow = createScreenViewer();
     let screenCommands = 0;
     ipcMain.handle('lanvory:screen-signaling', (event, action, command) => {
       assertTrustedFrame(event);
       if (!screenPreview || !['pending', 'send', 'decide', 'stop', 'view'].includes(action)) return null;
       if (action === 'send' && command?.signal?.action === 'frame') return screenSender.request(action, command);
-      if (action === 'view') return screenViewer.request(action, command);
+      if (action === 'view') return screenViewer.request(action, command).then((reply) => {
+        screenViewerWindow.update(command?.id, reply);
+        return reply;
+      });
       const input = JSON.stringify(command ?? {});
       if (Buffer.byteLength(input) > 62 * 1024 || screenCommands >= 4) return null;
       screenCommands++;
       return new Promise((resolve) => {
+        const p2pOffer = action === 'send' && command?.adapter === 'p2p' && command?.signal?.action === 'offer';
         const child = execFile(path.join(bundle, 'lanvory'), ['screen-signaling', action],
-          { timeout: 3500, maxBuffer: 64 * 1024 }, (error, stdout) => {
+          { timeout: p2pOffer ? 8500 : 3500, maxBuffer: 64 * 1024 }, (error, stdout) => {
             screenCommands--;
             if (error) return resolve(null);
             try { resolve(JSON.parse(stdout)); } catch { resolve(null); }
@@ -323,20 +334,30 @@ if (!app.requestSingleInstanceLock()) {
     ipcMain.handle('lanvory:screen-preview-sources', async (event) => {
       assertTrustedFrame(event);
       if (!screenPreview) return { status: 'unavailable' };
-      const permission = () => systemPreferences.getMediaAccessStatus('screen');
-      const before = permission();
-      if (before === 'denied' || before === 'restricted') return { status: before };
-      const sources = await screenPreview.list().catch(() => null);
-      const after = permission();
-      if (after === 'denied' || after === 'restricted') return { status: after };
-      return sources?.length ? { status: 'ready', sources }
-        : { status: after === 'not-determined' ? 'not-determined' : 'unavailable' };
+      if (!window?.isVisible() || window.isMinimized()) return { status: 'unavailable' };
+      return findScreenSources(screenPreview.list);
     });
     ipcMain.handle('lanvory:screen-preview-settings', async (event) => {
       assertTrustedFrame(event);
       if (!screenPreview) return false;
       return shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture')
         .then(() => true, () => false);
+    });
+    ipcMain.handle('lanvory:screen-session-active', (event, active) => {
+      assertTrustedFrame(event);
+      if (!screenPreview || typeof active !== 'boolean') return;
+      menuBar?.setScreenSharing(active);
+      if (!active) screenViewerWindow.close();
+    });
+    ipcMain.handle('lanvory:open-screen-viewer', (event, id) => {
+      assertTrustedFrame(event);
+      if (!screenPreview || typeof id !== 'string' || !/^[a-f0-9]{32}$/.test(id)) return false;
+      screenViewerWindow.open(window, id);
+      return true;
+    });
+    ipcMain.handle('lanvory:screen-preview-release', (event) => {
+      assertTrustedFrame(event);
+      screenPreview?.release();
     });
     ipcMain.handle('lanvory:screen-preview-select', (event, id) => {
       assertTrustedFrame(event);
@@ -480,7 +501,9 @@ if (!app.requestSingleInstanceLock()) {
       }
       try {
         const { stdout } = await exec(path.join(bundle, 'lanvory'), args, { timeout: 4000, maxBuffer: 4096 });
-        return JSON.parse(stdout);
+        const listener = JSON.parse(stdout);
+        menuBar?.setLocalNetwork(listener?.state === 'listening');
+        return listener;
       } catch {
         return null;
       }
@@ -1374,12 +1397,33 @@ if (!app.requestSingleInstanceLock()) {
             window?.webContents.send('lanvory:navigate', targetPage);
           }
         },
+        stopScreenSharing: () => window?.webContents.send('lanvory:stop-screen-sharing'),
         retry: () => { void daemonStatus(true); },
         quit: () => app.quit(),
       });
       if (menuBar) backgroundCheck = setInterval(() => {
-        if (window?.isVisible()) return;
+        if (window?.isVisible() && !window.isMinimized()) return;
         void daemonStatus();
+        if (Notification.isSupported()) {
+          void exec(path.join(bundle, 'lanvory'), ['screen-signaling', 'pending'], { timeout: 3500, maxBuffer: 16384 })
+            .then(({ stdout }) => JSON.parse(stdout))
+            .then((invites) => {
+              if (stopping || (window?.isVisible() && !window.isMinimized()) || !Array.isArray(invites)) return;
+              const invite = invites.find((item) => /^[a-f0-9]{32}$/.test(item?.id ?? '')
+                && Date.parse(item.expiresAt) > Date.now());
+              if (!invite || invite.id === notifiedScreenInvite) return;
+              notifiedScreenInvite = invite.id;
+              const notice = new Notification({
+                title: 'Lanvory screen sharing invitation',
+                body: 'Open Lanvory to review the invitation.',
+              });
+              notice.once('click', () => {
+                openWindow();
+                window?.webContents.send('lanvory:navigate', 'Screen Sharing');
+              });
+              notice.show();
+            }).catch(() => {});
+        }
         if (pairingAlertsEnabled()) {
           void readPairingRequests().then((requests) => {
             if (!stopping && !window?.isVisible() && pairingAlertsEnabled()) alertPairing(requests);

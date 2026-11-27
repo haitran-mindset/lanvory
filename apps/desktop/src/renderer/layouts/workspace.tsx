@@ -49,6 +49,7 @@ export function Workspace({
   bleReady = false,
   pendingFiles,
   screenSharingAvailable,
+  screenSessionActive,
   action,
   children,
 }: {
@@ -62,6 +63,7 @@ export function Workspace({
   bleReady?: boolean;
   pendingFiles: number;
   screenSharingAvailable: boolean;
+  screenSessionActive: boolean;
   action?: ReactNode;
   children: ReactNode;
 }) {
@@ -92,13 +94,18 @@ export function Workspace({
                   type="button"
                   onClick={() => onNavigate(label)}
                   aria-label={
-                    label === "Sharing" && pendingFiles > 0
+                    label === "Screen Sharing" && screenSessionActive
+                      ? "Screen Sharing, session active"
+                      : label === "Sharing" && pendingFiles > 0
                       ? `Sharing, ${pendingFiles} incoming ${pendingFiles === 1 ? "file" : "files"} waiting`
                       : undefined
                   }
                 >
                   <Icon size={21} aria-hidden="true" />
                   {label}
+                  {label === "Screen Sharing" && screenSessionActive && (
+                    <span className="screen-sharing-nav-indicator" aria-hidden="true" />
+                  )}
                   {label === "Sharing" && pendingFiles > 0 && (
                     <span className="nav-pending-files" aria-hidden="true">
                       {pendingFiles}

@@ -54,7 +54,8 @@ try {
 } catch (error) {
   if (error.code !== 'ENOENT') throw error;
 }
-const packagedBinaries = hasNearbyBinary ? [...binaries, nearbyBinary] : binaries;
+const packagedBinaries = [...binaries, path.join(binaryDir, 'screen-permission.node')];
+if (hasNearbyBinary) packagedBinaries.push(nearbyBinary);
 const expectedArch = arch === 'x64' ? 'x86_64' : arch;
 async function verifyArchitecture(binary) {
   const { stdout } = await exec('/usr/bin/lipo', ['-archs', binary]);
@@ -192,6 +193,7 @@ try {
     extendInfo: {
       NSLocalNetworkUsageDescription: 'Lanvory uses your local network to discover and connect to approved devices.',
       NSBluetoothAlwaysUsageDescription: 'Lanvory uses Bluetooth and peer-to-peer Wi-Fi to discover nearby devices.',
+      NSScreenCaptureUsageDescription: 'Lanvory captures the window or display you choose to preview and share.',
       NSBonjourServices: ['_lanvory._tcp', '_lanvory._udp'],
     },
     osxSign: {

@@ -37,9 +37,9 @@ This document records the known technical limitations, architectural boundaries,
 
 ## Screen Sharing
 
-- [Screen Sharing](../protocols/screen-sharing.md) supports one viewer on a shared LAN between paired Macs. AWDL screen sharing, system audio, remote control, and recording are excluded.
+- [Screen Sharing](../protocols/screen-sharing.md) supports one viewer between paired Macs over LAN or Bluetooth + Wi-Fi P2P. Router-free AWDL acceptance on two physical Macs remains pending. System audio, remote control, and recording are excluded.
 - The adaptive JPEG path targets up to 12 fps. Frame rate and readability depend on network latency, capture size, and machine load. Offline end-to-end acceptance on two physical Macs is still pending.
-- Leaving the feature or hiding the app stops the active session. The sender needs macOS Screen Recording permission.
+- Closing the Lanvory window stops the active session. The session continues if the window is hidden or minimized. The sender needs macOS Screen Recording permission.
 
 ## 3. Platform & Packaging Constraints
 

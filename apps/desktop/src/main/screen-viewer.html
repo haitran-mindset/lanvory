@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; script-src 'self'; style-src 'self'; img-src data:; base-uri 'none'; form-action 'none'"
+    />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Lanvory · Screen Viewer</title>
+    <link rel="stylesheet" href="screen-viewer.css" />
+    <script src="screen-viewer.js" defer></script>
+  </head>
+  <body>
+    <header>
+      <div>
+        <strong>Screen Viewer</strong>
+        <span id="dimensions"></span>
+      </div>
+      <div class="actions">
+        <button id="fullscreen" type="button" aria-pressed="false">
+          Full screen
+        </button>
+        <button id="close" type="button">Close viewer</button>
+      </div>
+    </header>
+    <main>
+      <p id="waiting" role="status">Waiting for the shared screen…</p>
+      <img id="frame" alt="Shared screen from paired device" hidden />
+    </main>
+  </body>
+</html>

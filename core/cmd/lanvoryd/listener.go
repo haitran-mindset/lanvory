@@ -240,6 +240,7 @@ func (l *lanListener) ensureP2PPort() int {
 	loop.EnableServiceList(func(fingerprint string) ([]string, error) {
 		return storage.AuthorizedServices(l.dir, l.device.ID, fingerprint, time.Now())
 	})
+	loop.EnableScreenSignaling(l.screenSignals)
 	if l.clipboard != nil {
 		loop.EnableClipboard(l.clipboard, func(fingerprint string) bool {
 			allowed, err := storage.HasGrant(l.dir, l.device.ID, storage.Grant{

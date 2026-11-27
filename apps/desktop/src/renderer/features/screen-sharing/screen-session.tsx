@@ -1,27 +1,70 @@
 import { useEffect, useRef, useState, type RefObject } from 'react';
+import { Unplug } from 'lucide-react';
 import { z } from 'zod';
 import { SelectField } from '../../components/ui/select';
+import { useNotifications } from '../../components/notifications';
 import { pairedDeviceName } from '../../services/paired-names';
 import type { PeerRoute } from '../sharing/sharing';
 
 const format = 'jpeg/1';
+const hdFormat = 'jpeg/2';
+const uhdFormat = 'jpeg/3';
 const frameInterval = 83;
-const maxFrameBytes = 42 * 1024;
-const frameProfiles = [
+const uhdFrameBytes = 640 * 1024;
+const legacyProfiles = [
   { width: 1280, quality: 0.68 },
   { width: 960, quality: 0.62 },
   { width: 640, quality: 0.6 },
   { width: 480, quality: 0.54 },
 ];
+const hdProfiles = [
+  { width: 1920, quality: 0.88 },
+  { width: 1600, quality: 0.85 },
+  { width: 1280, quality: 0.82 },
+  { width: 960, quality: 0.76 },
+  ...legacyProfiles.slice(1),
+];
+const qualityModes = {
+  [format]: {
+    profiles: legacyProfiles,
+    maxBytes: 42 * 1024,
+    maxHeight: 900,
+    slowFrame: 130,
+  },
+  [hdFormat]: {
+    profiles: hdProfiles,
+    maxBytes: 160 * 1024,
+    maxHeight: 1440,
+    slowFrame: 180,
+  },
+  [uhdFormat]: {
+    profiles: [
+      { width: 3840, quality: 0.92 },
+      { width: 3840, quality: 0.8 },
+      { width: 3200, quality: 0.88 },
+      { width: 2560, quality: 0.87 },
+      ...hdProfiles,
+    ],
+    maxBytes: uhdFrameBytes,
+    maxHeight: 2160,
+    slowFrame: 180,
+  },
+};
+type FrameFormat = keyof typeof qualityModes;
 const invitation = z.object({
   id: z.string().regex(/^[a-f0-9]{32}$/),
   peer: z.string().regex(/^[a-f0-9]{64}$/),
   offer: z.literal(format),
+  hd: z.boolean().optional(),
+  uhd: z.boolean().optional(),
 });
 const view = z.object({
   state: z.string(),
   answer: z.string().optional(),
-  frame: z.string().max(57344).optional(),
+  frame: z
+    .string()
+    .max(4 * Math.ceil(uhdFrameBytes / 3))
+    .optional(),
   sequence: z.number().int().positive().optional(),
 });
 type Invitation = z.infer<typeof invitation>;
@@ -40,6 +83,25 @@ function tell(route: PeerRoute, signal: object) {
     .catch(() => null);
 }
 
+function inviteError(route: PeerRoute, state?: string) {
+  if (route.adapter !== 'p2p')
+    return 'Could not invite this device. Check its LAN connection and Screen Sharing availability.';
+  switch (state) {
+    case 'p2p-route-expired':
+      return 'The Wi-Fi P2P connection expired. In Devices, choose Bluetooth + Wi-Fi P2P and connect again.';
+    case 'peer-not-trusted':
+      return 'This device is no longer trusted. Check Paired devices on both Macs.';
+    case 'peer-identity-mismatch':
+      return 'The device identity could not be verified. Reconnect to the correct device from Devices.';
+    case 'peer-invitation-unavailable':
+      return 'The other Mac could not accept a new invitation. End any existing Screen Sharing session and try again.';
+    case 'p2p-timeout':
+      return 'The Wi-Fi P2P connection timed out. Keep both Macs awake and close together, then reconnect in Devices.';
+    default:
+      return 'Could not reach Screen Sharing over Wi-Fi P2P. Keep Lanvory open and Discoverable enabled on the other Mac, check that both Macs have a build with P2P Screen Sharing, then reconnect.';
+  }
+}
+
 function end(session: Session) {
   return session.direction === 'send'
     ? tell(session.route, { action: 'stop', id: session.id })
@@ -52,28 +114,50 @@ async function encodeFrame(
   video: HTMLVideoElement,
   canvas: HTMLCanvasElement,
   level: number,
+  frameFormat: FrameFormat,
 ) {
   if (!video.videoWidth || !video.videoHeight) return undefined;
   const context = canvas.getContext('2d', { alpha: false });
   if (!context) return undefined;
+  const {
+    profiles: frameProfiles,
+    maxBytes: maxFrameBytes,
+    maxHeight,
+  } = qualityModes[frameFormat];
   for (let index = level; index < frameProfiles.length; index++) {
     const { width, quality } = frameProfiles[index];
     const ratio = Math.min(
       1,
       width / video.videoWidth,
-      900 / video.videoHeight,
+      maxHeight / video.videoHeight,
     );
     const w = Math.max(1, Math.round(video.videoWidth * ratio));
     const h = Math.max(1, Math.round(video.videoHeight * ratio));
     if (canvas.width !== w) canvas.width = w;
     if (canvas.height !== h) canvas.height = h;
+    context.imageSmoothingQuality = 'high';
     context.drawImage(video, 0, 0, w, h);
     const jpeg = await new Promise<Blob | null>((resolve) =>
       canvas.toBlob(resolve, 'image/jpeg', quality),
     );
     if (!jpeg || jpeg.size > maxFrameBytes) continue;
-    const bytes = new Uint8Array(await jpeg.arrayBuffer());
-    return { frame: btoa(String.fromCharCode(...bytes)), level: index };
+    const frame = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const data = reader.result;
+        if (
+          typeof data === 'string' &&
+          data.startsWith('data:image/jpeg;base64,')
+        ) {
+          resolve(data.slice('data:image/jpeg;base64,'.length));
+        } else {
+          reject(new Error('Invalid JPEG output'));
+        }
+      };
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(jpeg);
+    });
+    return { frame, level: index };
   }
 }
 
@@ -83,34 +167,50 @@ export function ScreenSession({
   stopCapture,
   routes,
   names,
+  windowVisible,
+  onSessionActive,
+  error,
+  setError,
 }: {
   video: RefObject<HTMLVideoElement | null>;
   captureActive: boolean;
   stopCapture(): void;
   routes: Record<string, PeerRoute>;
   names: Record<string, string>;
+  windowVisible: boolean;
+  onSessionActive(active: boolean): void;
+  error: string;
+  setError(message: string): void;
 }) {
+  const { notify } = useNotifications();
   const [target, setTarget] = useState('');
   const [incoming, setIncoming] = useState<Invitation>();
   const [session, setSession] = useState<Session>();
   const [phase, setPhase] = useState('');
-  const [image, setImage] = useState('');
+  const [image, setImage] = useState<{
+    url: string;
+    width: number;
+    height: number;
+  }>();
+  const hasSession = session !== undefined;
+  useEffect(() => {
+    onSessionActive(hasSession);
+    return () => onSessionActive(false);
+  }, [hasSession, onSessionActive]);
   const [busy, setBusy] = useState(false);
   const current = useRef<Session | undefined>(undefined);
   const frameURL = useRef('');
   const epoch = useRef(0);
   const stopCaptureRef = useRef(stopCapture);
   stopCaptureRef.current = stopCapture;
-  const choices = Object.values(routes).filter(
-    (route) => route.adapter !== 'p2p',
-  );
+  const choices = Object.values(routes);
 
   function clearFrame() {
     if (frameURL.current) URL.revokeObjectURL(frameURL.current);
     frameURL.current = '';
   }
 
-  function finish(message: string) {
+  function finish(message: string, toast = false) {
     const old = current.current;
     current.current = undefined;
     epoch.current++;
@@ -119,10 +219,12 @@ export function ScreenSession({
       if (old.direction === 'send') stopCaptureRef.current();
     }
     clearFrame();
-    setImage('');
+    setImage(undefined);
     setSession(undefined);
     setBusy(false);
-    setPhase(message);
+    setPhase('');
+    setError(toast ? '' : message);
+    if (toast) notify({ category: 'sharing', tone: 'info', title: message });
   }
 
   useEffect(
@@ -135,13 +237,33 @@ export function ScreenSession({
     [],
   );
 
+  useEffect(
+    () =>
+      window.lanvory.onScreenWindowClosing(() => {
+        if (current.current)
+          finish(
+            'Screen sharing stopped because the Lanvory window was closed.',
+            true,
+          );
+      }),
+    [],
+  );
+
+  useEffect(
+    () =>
+      window.lanvory.onStopScreenSharing(() => {
+        if (current.current) finish('Screen sharing stopped.', true);
+      }),
+    [],
+  );
+
   useEffect(() => {
     if (!captureActive && current.current?.direction === 'send')
       finish('Screen capture ended.');
   }, [captureActive]);
 
   useEffect(() => {
-    if (session || busy) return;
+    if (!windowVisible || session || busy) return;
     let disposed = false;
     let timer: ReturnType<typeof setTimeout>;
     async function poll() {
@@ -158,7 +280,22 @@ export function ScreenSession({
       disposed = true;
       clearTimeout(timer);
     };
-  }, [session, busy]);
+  }, [windowVisible, session, busy]);
+
+  useEffect(() => {
+    if (!incoming || !windowVisible) return;
+    notify({
+      category: 'sharing',
+      tone: 'info',
+      title: 'Screen sharing invitation',
+      body: `${pairedDeviceName(incoming.peer, names)} wants to share their screen.`,
+      targetPage: 'Screen Sharing',
+      actionLabel: 'Review invitation',
+      dedupeKey: `screen-sharing:${incoming.id}`,
+      toast: false,
+      record: true,
+    });
+  }, [incoming, names, notify, windowVisible]);
 
   useEffect(() => {
     if (!session) return;
@@ -166,6 +303,8 @@ export function ScreenSession({
     let timer: ReturnType<typeof setTimeout>;
     let sequence = 0;
     let accepted = false;
+    let frameFormat: FrameFormat = format;
+    let slowFrames = 0;
     let level = 0;
     let fastFrames = 0;
     let lastFrame = Date.now();
@@ -178,9 +317,12 @@ export function ScreenSession({
         if (!video.current) return;
         let signal: object = { id: session.id, action: 'status' };
         if (accepted && video.current.readyState >= 2) {
-          const encoded = await encodeFrame(video.current, canvas, level).catch(
-            () => undefined,
-          );
+          const encoded = await encodeFrame(
+            video.current,
+            canvas,
+            level,
+            frameFormat,
+          ).catch(() => undefined);
           if (disposed || current.current !== session) return;
           if (encoded) {
             level = encoded.level;
@@ -202,28 +344,48 @@ export function ScreenSession({
             reply.success && reply.data.state === 'declined'
               ? 'Invitation declined.'
               : 'The screen-sharing session ended.',
+            reply.success && reply.data.state === 'declined',
           );
           return;
         }
         if (!accepted && reply.data.state === 'accepted') {
-          if (reply.data.answer !== format) {
+          if (
+            reply.data.answer !== format &&
+            reply.data.answer !== hdFormat &&
+            reply.data.answer !== uhdFormat
+          ) {
             finish('This device does not support the screen-sharing format.');
             return;
           }
+          frameFormat = reply.data.answer;
           accepted = true;
-          setPhase('Sharing your screen');
+          setPhase('');
+          notify({
+            category: 'sharing',
+            tone: 'success',
+            title: 'Sharing your screen',
+          });
         }
-        if (accepted && performance.now() - start > 130) {
-          level = Math.min(level + 1, frameProfiles.length - 1);
-          fastFrames = 0;
-        } else if (
-          accepted &&
-          level > 0 &&
-          performance.now() - start < 50 &&
-          ++fastFrames >= 24
-        ) {
-          level--;
-          fastFrames = 0;
+        if (accepted) {
+          const elapsed = performance.now() - start;
+          const mode = qualityModes[frameFormat];
+          if (elapsed > mode.slowFrame) {
+            fastFrames = 0;
+            if (++slowFrames >= 3) {
+              level = Math.min(level + 1, mode.profiles.length - 1);
+              slowFrames = 0;
+            }
+          } else {
+            slowFrames = 0;
+            if (level > 0 && elapsed < frameInterval) {
+              if (++fastFrames >= 24) {
+                level--;
+                fastFrames = 0;
+              }
+            } else {
+              fastFrames = 0;
+            }
+          }
         }
       } else {
         const raw = await window.lanvory
@@ -234,7 +396,7 @@ export function ScreenSession({
         if (
           !reply.success ||
           reply.data.state !== 'accepted' ||
-          Date.now() - lastFrame > 8000
+          (!reply.data.frame && Date.now() - lastFrame > 8000)
         ) {
           finish(
             'The screen-sharing session ended or the connection was lost.',
@@ -244,7 +406,7 @@ export function ScreenSession({
         const { frame, sequence: next } = reply.data;
         if (!frame && Date.now() - lastFrame > 3000 && frameURL.current) {
           clearFrame();
-          setImage('');
+          setImage(undefined);
         }
         if (frame && next && next > sequence) {
           try {
@@ -270,7 +432,11 @@ export function ScreenSession({
             }
             clearFrame();
             frameURL.current = url;
-            setImage(url);
+            setImage({
+              url,
+              width: nextImage.naturalWidth,
+              height: nextImage.naturalHeight,
+            });
             sequence = next;
             lastFrame = Date.now();
           } catch {
@@ -296,16 +462,18 @@ export function ScreenSession({
 
   async function invite() {
     const route = routes[target];
-    if (!captureActive || !route || route.adapter === 'p2p' || current.current)
-      return;
+    if (!captureActive || !route || current.current) return;
     const id = crypto.randomUUID().replaceAll('-', '');
     const next: Session = { id, direction: 'send', route };
     current.current = next;
     const generation = ++epoch.current;
+    setError('');
     setBusy(true);
     const reply = view.safeParse(
       await tell(route, {
         action: 'offer',
+        hd: true,
+        uhd: true,
         id,
         offer: format,
         createdAt: new Date().toISOString(),
@@ -316,9 +484,7 @@ export function ScreenSession({
       return;
     }
     if (!reply.success || reply.data.state !== 'pending') {
-      finish(
-        'Could not invite this device. Check its LAN connection and Screen Sharing availability.',
-      );
+      finish(inviteError(route, reply.data?.state));
       return;
     }
     setBusy(false);
@@ -334,9 +500,20 @@ export function ScreenSession({
     const next: Session = { id, direction: 'view', peer };
     const generation = ++epoch.current;
     if (accept) current.current = next;
+    setError('');
     setBusy(true);
     const result = await window.lanvory
-      .screenSignaling('decide', { id, accept, answer: accept ? format : '' })
+      .screenSignaling('decide', {
+        id,
+        accept,
+        answer: accept
+          ? incoming.uhd
+            ? uhdFormat
+            : incoming.hd
+              ? hdFormat
+              : format
+          : '',
+      })
       .catch(() => null);
     if (epoch.current !== generation) {
       if (accept && result === true) void end(next);
@@ -346,14 +523,19 @@ export function ScreenSession({
     setIncoming(undefined);
     if (result !== true) {
       current.current = undefined;
-      setPhase('That invitation is no longer available.');
+      setError('That invitation is no longer available.');
       return;
     }
     if (accept) {
       setSession(next);
       setPhase(`Viewing ${pairedDeviceName(peer, names)}`);
     } else {
-      setPhase('Invitation declined.');
+      setPhase('');
+      notify({
+        category: 'sharing',
+        tone: 'info',
+        title: 'Invitation declined.',
+      });
     }
   }
 
@@ -390,7 +572,7 @@ export function ScreenSession({
             label="Share with"
             name="screenPeer"
             value={target}
-            placeholder="Select a paired LAN device"
+            placeholder="Select a paired device"
             disabled={busy}
             onValueChange={setTarget}
             options={choices.map(({ fingerprint }) => ({
@@ -400,35 +582,78 @@ export function ScreenSession({
           />
           {!choices.length && (
             <p>
-              Connect to a paired device over LAN before sending an invitation.
+              Connect to a paired device over LAN or Bluetooth + Wi-Fi P2P
+              before sending an invitation.
             </p>
           )}
           <button
             type="button"
             className="primary"
-            disabled={busy || !target}
+            disabled={busy || !routes[target]}
             onClick={() => void invite()}
           >
             Invite to view
           </button>
         </>
       )}
-      {phase && <p role="status">{phase}</p>}
+      {(error || phase) && <p role="status">{error || phase}</p>}
       {session && (
         <button
           type="button"
-          className="refresh"
-          onClick={() => finish('Screen sharing stopped.')}
+          className="screen-stop-action screen-end-session"
+          onClick={() => finish('Screen sharing stopped.', true)}
         >
+          <Unplug size={17} aria-hidden="true" />
           End session
         </button>
       )}
       {image && (
-        <img
-          className="screen-preview-video"
-          src={image}
-          alt="Shared screen from paired device"
-        />
+        <div className="screen-viewer">
+          <div className="screen-viewer-toolbar">
+            <span>
+              {image.width} × {image.height}
+            </span>
+            {session?.direction === 'view' && (
+              <button
+                type="button"
+                className="screen-viewer-open"
+                onClick={() => {
+                  void window.lanvory
+                    .openScreenViewer(session.id)
+                    .then((opened) => {
+                      if (!opened)
+                        notify({
+                          category: 'sharing',
+                          tone: 'error',
+                          title: 'Could not open the screen viewer.',
+                        });
+                    })
+                    .catch(() =>
+                      notify({
+                        category: 'sharing',
+                        tone: 'error',
+                        title: 'Could not open the screen viewer.',
+                      }),
+                    );
+                }}
+              >
+                Open viewer
+              </button>
+            )}
+          </div>
+          <div
+            className="screen-viewer-image"
+            role="region"
+            aria-label="Shared screen viewport"
+          >
+            <img
+              src={image.url}
+              width={image.width}
+              height={image.height}
+              alt="Shared screen from paired device"
+            />
+          </div>
+        </div>
       )}
     </div>
   );

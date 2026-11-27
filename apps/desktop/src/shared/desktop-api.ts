@@ -34,6 +34,11 @@ export interface DesktopApi {
   matchTrustedPeer(adapter: string, endpoint: string): Promise<string | null>;
   trustedPeers(): Promise<unknown>;
   screenSignaling(action: "pending" | "send" | "decide" | "stop" | "view", command?: unknown): Promise<unknown>;
+  releaseScreenPreview(): Promise<void>;
+  onScreenWindowClosing(callback: () => void): () => void;
+  setScreenSessionActive(active: boolean): Promise<void>;
+  onStopScreenSharing(callback: () => void): () => void;
+  openScreenViewer(sessionId: string): Promise<boolean>;
   screenPreviewAvailable(): Promise<boolean>;
   openScreenRecordingSettings(): Promise<boolean>;
   screenPreviewSources(): Promise<

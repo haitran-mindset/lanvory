@@ -729,12 +729,15 @@ func requestLocalTimedBody(ctx context.Context, dir, method, route string, body 
 	if destination == nil {
 		return nil
 	}
-	const limit = 64 * 1024
+	limit := int64(64 * 1024)
+	if path == screenRoute+"/view" {
+		limit = screenViewLimit
+	}
 	data, err := io.ReadAll(io.LimitReader(response.Body, limit+1))
 	if err != nil {
 		return err
 	}
-	if len(data) > limit {
+	if int64(len(data)) > limit {
 		return errors.New("daemon response exceeds size limit")
 	}
 	return json.Unmarshal(data, destination)

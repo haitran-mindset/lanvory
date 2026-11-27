@@ -172,6 +172,11 @@ function AppContent({
   const identityRevision = useRef(0);
   const [retrying, setRetrying] = useState(false);
   const identity = response?.device;
+  const [screenSessionActive, setScreenSessionActive] = useState(false);
+
+  useEffect(() => {
+    void window.lanvory.setScreenSessionActive(screenSessionActive).catch(() => {});
+  }, [screenSessionActive]);
   const [screenSharingAvailable, setScreenSharingAvailable] = useState(false);
 
   useEffect(() => {
@@ -453,6 +458,7 @@ function AppContent({
       onOpenPalette={() => setPaletteOpen(true)}
       pendingFiles={identity ? pendingFiles : 0}
       screenSharingAvailable={screenSharingAvailable}
+      screenSessionActive={screenSessionActive}
     >
         {page === 'Settings' ? (
           <SettingsPanel ownerId={identity?.id} fingerprint={identity?.fingerprint} reducedMotion={reducedMotion} onReducedMotionChange={changeReducedMotion} density={density} onDensityChange={changeDensity} theme={theme} onThemeChange={changeTheme} textSize={textSize} onTextSizeChange={changeTextSize} name={identity?.name} protocolVersion={identity?.protocolVersion} daemonVersion={identity?.daemonVersion} onRename={async (name) => {
@@ -462,9 +468,7 @@ function AppContent({
             setResponse({ device: result.data });
             return true;
           }} />
-        ) : page === 'Network' ? <NetworkPanel visible={windowVisible} deviceName={identity?.name} routes={peerRoutes} onRoute={rememberRoute} /> : page === 'Sync' ? <SyncPanel visible={windowVisible} ownerId={identity?.id} routes={peerRoutes} onRoute={rememberRoute} /> : page === 'Live Resources' ? <MountsPanel visible={windowVisible} ownerId={identity?.id} routes={peerRoutes} onRoute={rememberRoute} /> : page === 'Services' ? <Services key={identity?.id} ownerId={identity?.id} visible={windowVisible} routes={peerRoutes} onPair={findDeviceToPair} onRoute={rememberRoute} /> : page === 'Sharing' ? null : page === 'Screen Sharing' ? (
-          screenSharingAvailable && windowVisible && <ScreenPreview key={identity?.id} routes={peerRoutes} names={identity ? readPairedNames(identity.id) : {}} />
-        ) : (
+        ) : page === 'Network' ? <NetworkPanel visible={windowVisible} deviceName={identity?.name} routes={peerRoutes} onRoute={rememberRoute} /> : page === 'Sync' ? <SyncPanel visible={windowVisible} ownerId={identity?.id} routes={peerRoutes} onRoute={rememberRoute} /> : page === 'Live Resources' ? <MountsPanel visible={windowVisible} ownerId={identity?.id} routes={peerRoutes} onRoute={rememberRoute} /> : page === 'Services' ? <Services key={identity?.id} ownerId={identity?.id} visible={windowVisible} routes={peerRoutes} onPair={findDeviceToPair} onRoute={rememberRoute} /> : page === 'Sharing' || page === 'Screen Sharing' ? null : (
           <DevicesPage incomingPairingEnabled={listener?.pairing === true} response={response} retrying={retrying} visible={windowVisible} scanRevision={scanRevision}
             nearbyCount={nearbyCount} counts={counts} trustRevision={trustRevision} pairingTarget={pairingTarget} routes={peerRoutes}
             onDiscover={discover} onShare={() => navigate('Sharing')} onServices={() => navigate('Services')} onNetwork={() => navigate('Network')} onRetry={() => void retry()}
@@ -474,6 +478,13 @@ function AppContent({
             onTrustChange={() => setTrustRevision((value) => value + 1)} />
         )}
         {openedSharing && <div hidden={page !== 'Sharing'}><Sharing ownerId={identity?.id} onPendingFilesChange={setPendingFiles} visible={windowVisible && page === 'Sharing'} routes={peerRoutes} onPair={findDeviceToPair} onRoute={rememberRoute} onClearP2PRoute={clearP2PRoute} /></div>}
+        {screenSharingAvailable && (
+          <div className="screen-sharing-page" data-background={page !== 'Screen Sharing'}
+            inert={page !== 'Screen Sharing'}>
+            <ScreenPreview key={identity?.id} routes={peerRoutes} windowVisible={windowVisible}
+              names={identity ? readPairedNames(identity.id) : {}} onSessionActive={setScreenSessionActive} />
+          </div>
+        )}
         <CommandPalette
           open={paletteOpen}
           onClose={() => setPaletteOpen(false)}

@@ -2,16 +2,24 @@ const { existsSync } = require('node:fs');
 const path = require('node:path');
 const { Menu, Tray, nativeImage } = require('electron');
 
-const statusLabels = {
-  checking: 'Checking daemon…',
-  starting: 'Daemon starting…',
-  slow: 'Waiting for daemon startup',
-  online: 'Daemon online',
-  listening: 'LAN active',
-  unavailable: 'Daemon unavailable',
-};
+function networkDot(red, green, blue) {
+  const size = 14;
+  const pixels = Buffer.alloc(size * size * 4);
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const offset = (y * size + x) * 4;
+      const distance = Math.hypot(x + 0.5 - size / 2, y + 0.5 - size / 2);
+      const alpha = Math.max(0, Math.min(1, size / 2 - distance));
+      pixels[offset] = Math.round(blue * alpha);
+      pixels[offset + 1] = Math.round(green * alpha);
+      pixels[offset + 2] = Math.round(red * alpha);
+      pixels[offset + 3] = Math.round(255 * alpha);
+    }
+  }
+  return nativeImage.createFromBitmap(pixels, { width: size, height: size, scaleFactor: 2 });
+}
 
-function createMenuBar({ open, navigate, retry, quit }) {
+function createMenuBar({ open, navigate, retry, quit, stopScreenSharing }) {
   const trayPath = path.join(__dirname, '../../assets/trayTemplate.png');
   let icon = existsSync(trayPath) ? nativeImage.createFromPath(trayPath) : nativeImage.createEmpty();
   if (icon.isEmpty()) {
@@ -21,30 +29,23 @@ function createMenuBar({ open, navigate, retry, quit }) {
   }
   icon.setTemplateImage(true);
   const tray = new Tray(icon);
+  const activeDot = networkDot(53, 209, 131);
+  const inactiveDot = networkDot(133, 145, 139);
   let shown;
-  let details = {};
+  let screenSharing = false;
+  let localNetwork = false;
   const rebuild = () => {
-    const status = shown ?? 'checking';
-    const label = statusLabels[status] ?? 'Lanvory ready';
-    tray.setToolTip(`Lanvory — ${label}`);
-    const infoItems = [];
-    if (details.endpoint) infoItems.push({ label: `Local IP: ${details.endpoint}`, enabled: false });
-    if (typeof details.trusted === 'number') infoItems.push({ label: `Trusted devices: ${details.trusted}`, enabled: false });
-    if (typeof details.transfers === 'number' && details.transfers > 0) {
-      infoItems.push({ label: `Active transfers: ${details.transfers}`, enabled: false });
-    }
-    const navAvailable = status === 'online' || status === 'listening';
+    const navAvailable = shown === 'online';
+    tray.setToolTip('Lanvory');
     tray.setContextMenu(Menu.buildFromTemplate([
       { label: 'Open Lanvory', click: open },
-      { type: 'separator' },
-      { label, enabled: false },
-      ...infoItems,
-      { label: 'Retry daemon connection', enabled: status === 'unavailable', click: retry },
+      ...(shown === 'unavailable' ? [{ label: 'Reconnect Lanvory', click: retry }] : []),
+      ...(screenSharing ? [{ label: 'Stop Screen Sharing', click: stopScreenSharing }] : []),
       ...(navigate ? [
         { type: 'separator' },
         { label: 'Send Files…', enabled: navAvailable, click: () => navigate('Sharing') },
         { label: 'Manage Services', enabled: navAvailable, click: () => navigate('Services') },
-        { label: 'Network', click: () => navigate('Network') },
+        { label: 'Local Network', icon: navAvailable && localNetwork ? activeDot : inactiveDot, click: () => navigate('Network') },
         { label: 'Settings', click: () => navigate('Settings') },
       ] : []),
       { type: 'separator' },
@@ -56,15 +57,18 @@ function createMenuBar({ open, navigate, retry, quit }) {
     shown = status;
     rebuild();
   };
-  const setDetails = (next = {}) => {
-    if (next.endpoint === details.endpoint && next.trusted === details.trusted && next.transfers === details.transfers) {
-      return;
-    }
-    details = next;
+  const setScreenSharing = (active) => {
+    if (screenSharing === active) return;
+    screenSharing = active;
+    rebuild();
+  };
+  const setLocalNetwork = (active) => {
+    if (localNetwork === active) return;
+    localNetwork = active;
     rebuild();
   };
   setStatus('checking');
-  return { setStatus, setDetails, destroy: () => tray.destroy() };
+  return { setStatus, setScreenSharing, setLocalNetwork, destroy: () => tray.destroy() };
 }
 
 function createPairingAlerts(show) {

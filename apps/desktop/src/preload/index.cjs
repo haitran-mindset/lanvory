@@ -2,8 +2,21 @@ const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
 contextBridge.exposeInMainWorld('lanvory', {
   screenSignaling: (action, command) => ipcRenderer.invoke('lanvory:screen-signaling', action, command),
+  setScreenSessionActive: (active) => ipcRenderer.invoke('lanvory:screen-session-active', active),
+  onStopScreenSharing: (callback) => {
+    const listener = () => callback();
+    ipcRenderer.on('lanvory:stop-screen-sharing', listener);
+    return () => ipcRenderer.removeListener('lanvory:stop-screen-sharing', listener);
+  },
+  openScreenViewer: (id) => ipcRenderer.invoke('lanvory:open-screen-viewer', id),
   screenPreviewAvailable: () => ipcRenderer.invoke('lanvory:screen-preview-available'),
   openScreenRecordingSettings: () => ipcRenderer.invoke('lanvory:screen-preview-settings'),
+  releaseScreenPreview: () => ipcRenderer.invoke('lanvory:screen-preview-release'),
+  onScreenWindowClosing: (callback) => {
+    const listener = () => callback();
+    ipcRenderer.on('lanvory:screen-window-closing', listener);
+    return () => ipcRenderer.removeListener('lanvory:screen-window-closing', listener);
+  },
   screenPreviewSources: () => ipcRenderer.invoke('lanvory:screen-preview-sources'),
   selectScreenPreviewSource: (id) => ipcRenderer.invoke('lanvory:screen-preview-select', id),
   serviceSnapshot: () => ipcRenderer.invoke('lanvory:service-snapshot'),

@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"io"
+	"net"
 	"net/netip"
 	"slices"
 	"time"
@@ -16,14 +17,33 @@ import (
 
 func SendScreenSignal(ctx context.Context, adapter string, endpoint netip.AddrPort, expected Fingerprint,
 	key ed25519.PrivateKey, request screenshare.Request, inventory func() ([]networking.Interface, error)) (screenshare.Reply, error) {
+	return sendScreenSignal(ctx, 2*time.Second, expected, key, request, func(ctx context.Context, config *tls.Config) (net.Conn, error) {
+		return dialScoped(ctx, adapter, endpoint, inventory, config)
+	})
+}
+
+// SendScreenSignalLoopback uses a registered Wi-Fi P2P bridge endpoint.
+func SendScreenSignalLoopback(ctx context.Context, endpoint netip.AddrPort, expected Fingerprint,
+	key ed25519.PrivateKey, request screenshare.Request, hasEndpoint func(string) bool) (screenshare.Reply, error) {
+	timeout := 2 * time.Second
+	if request.Action == "offer" {
+		timeout = 6 * time.Second
+	}
+	return sendScreenSignal(ctx, timeout, expected, key, request, func(ctx context.Context, config *tls.Config) (net.Conn, error) {
+		return dialLoopback(ctx, endpoint, config, hasEndpoint)
+	})
+}
+
+func sendScreenSignal(ctx context.Context, timeout time.Duration, expected Fingerprint, key ed25519.PrivateKey, request screenshare.Request,
+	dial func(context.Context, *tls.Config) (net.Conn, error)) (screenshare.Reply, error) {
 	var reply screenshare.Reply
-	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	config, err := clientIdentity(expected, key, screenshare.Protocol)
 	if err != nil {
 		return reply, err
 	}
-	conn, err := dialScoped(ctx, adapter, endpoint, inventory, config)
+	conn, err := dial(ctx, config)
 	if err != nil {
 		return reply, err
 	}
@@ -47,13 +67,15 @@ func SendScreenSignal(ctx context.Context, adapter string, endpoint netip.AddrPo
 		if reply.Answer != "" && len(reply.Answer) <= screenshare.MaxDescription {
 			return reply, nil
 		}
+	case "unavailable":
+		return screenshare.Reply{}, screenshare.ErrUnavailable
 	}
 	return screenshare.Reply{}, screenshare.ErrUnavailable
 }
 
 // EnableScreenSignaling opts an already scoped TCP listener into screen invitations.
 func (l *Listener) EnableScreenSignaling(manager *screenshare.Manager) {
-	if l == nil || l.index == 0 || l.trusted == nil || manager == nil {
+	if l == nil || l.trusted == nil || manager == nil {
 		return
 	}
 	l.screenSignaling = manager

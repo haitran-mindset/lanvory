@@ -1,7 +1,7 @@
 const { spawn } = require('node:child_process');
 
-const inputLimit = 62 * 1024;
-const outputLimit = 64 * 1024;
+const inputLimit = 896 * 1024;
+const outputLimit = 896 * 1024;
 
 function createScreenStream(executable) {
   let process;

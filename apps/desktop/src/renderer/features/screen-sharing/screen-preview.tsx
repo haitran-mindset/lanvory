@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { AppWindow, Monitor } from 'lucide-react';
+import { AppWindow, Monitor, RefreshCw, ScanLine, Square } from 'lucide-react';
 import { PanelHeading } from '../../components/panel-heading';
 import type { ScreenSource } from '../../../shared/desktop-api';
 import { ScreenSession } from './screen-session';
@@ -37,15 +37,20 @@ function SourceThumbnail({ source }: { source: ScreenSource }) {
 export function ScreenPreview({
   routes,
   names,
+  windowVisible,
+  onSessionActive,
 }: {
   routes: Record<string, PeerRoute>;
   names: Record<string, string>;
+  windowVisible: boolean;
+  onSessionActive(active: boolean): void;
 }) {
   const [sources, setSources] = useState<ScreenSource[]>([]);
   const [selection, setSelection] = useState('');
   const [active, setActive] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
+  const [sessionError, setSessionError] = useState('');
   const video = useRef<HTMLVideoElement>(null);
   const stream = useRef<MediaStream | null>(null);
   const generation = useRef(0);
@@ -55,6 +60,7 @@ export function ScreenPreview({
     stream.current?.getTracks().forEach((track) => track.stop());
     stream.current = null;
     if (video.current) video.current.srcObject = null;
+    void window.lanvory.releaseScreenPreview().catch(() => {});
   }
 
   useEffect(() => release, []);
@@ -65,15 +71,18 @@ export function ScreenPreview({
     setBusy(false);
   }
 
+  useEffect(() => window.lanvory.onScreenWindowClosing(stop), []);
+
   async function findSources() {
     setBusy(true);
     setMessage('');
+    setSessionError('');
     setSelection('');
-    setSources([]);
     const request = ++generation.current;
     try {
       const result = await window.lanvory.screenPreviewSources();
       if (request !== generation.current) return;
+      if (result.status !== 'ready') setSources([]);
       if (result.status === 'ready') {
         setSources(result.sources);
       } else if (result.status === 'restricted') {
@@ -97,8 +106,10 @@ export function ScreenPreview({
         );
       }
     } catch {
-      if (request === generation.current)
+      if (request === generation.current) {
+        setSources([]);
         setMessage('Could not read screen sources. Try again.');
+      }
     } finally {
       if (request === generation.current) setBusy(false);
     }
@@ -113,7 +124,10 @@ export function ScreenPreview({
         throw new Error('Source unavailable');
       if (request !== generation.current) return;
       const capture = await navigator.mediaDevices.getDisplayMedia({
-        video: { width: { ideal: 1280 }, frameRate: { ideal: 24, max: 30 } },
+        video: {
+          width: { ideal: 3840, max: 3840 },
+          frameRate: { ideal: 24, max: 30 },
+        },
         audio: false,
       });
       if (request !== generation.current || !video.current) {
@@ -133,6 +147,7 @@ export function ScreenPreview({
       );
       setActive(true);
     } catch {
+      void window.lanvory.releaseScreenPreview().catch(() => {});
       if (request === generation.current)
         setMessage(
           'Preview was cancelled or could not start. Check Screen Recording permissions if this persists.',
@@ -154,55 +169,80 @@ export function ScreenPreview({
         description="Share a window or display with a paired device over your local network."
       />
       <div className="trust-form">
-        <button
-          type="button"
-          className="refresh"
-          disabled={busy || active}
-          onClick={() => void findSources()}
-        >
-          {sources.length > 0 ? 'Refresh sources' : 'Find windows and displays'}
-        </button>
+        {!active && sources.length === 0 && (
+          <button
+            type="button"
+            className="primary screen-source-find"
+            disabled={busy}
+            onClick={() => void findSources()}
+          >
+            <ScanLine size={17} aria-hidden="true" />
+            {busy ? 'Finding sources…' : 'Find windows and displays'}
+          </button>
+        )}
         {sources.length > 0 && !active && (
-          <fieldset className="screen-source-picker" disabled={busy}>
-            <legend>Choose what to share</legend>
-            {(
-              [
-                { kind: 'display', title: 'Displays' },
-                { kind: 'window', title: 'Windows' },
-              ] as const
-            ).map(({ kind, title }) => {
-              const group = sources.filter((source) => source.kind === kind);
-              if (group.length === 0) return null;
-              return (
-                <div key={kind} className="screen-source-group">
-                  <h4>{title}</h4>
-                  <div className="screen-source-grid">
-                    {group.map((source) => (
-                      <label className="screen-source-tile" key={source.id}>
-                        <input
-                          type="radio"
-                          name="screenSource"
-                          value={source.id}
-                          checked={selection === source.id}
-                          onChange={() => setSelection(source.id)}
-                        />
-                        <SourceThumbnail source={source} />
-                        <span
-                          className="screen-source-name"
-                          title={source.name}
-                        >
-                          {source.name}
-                        </span>
-                      </label>
-                    ))}
+          <div className="screen-source-browser" aria-busy={busy && !selection}>
+            <div className="screen-source-toolbar">
+              <h3 id="screen-source-heading">Choose what to share</h3>
+              <button
+                type="button"
+                className="screen-source-refresh"
+                disabled={busy}
+                onClick={() => void findSources()}
+              >
+                <RefreshCw size={15} aria-hidden="true" />
+                {busy && !selection ? 'Refreshing…' : 'Refresh sources'}
+              </button>
+            </div>
+            <fieldset
+              className="screen-source-picker"
+              aria-labelledby="screen-source-heading"
+              disabled={busy}
+            >
+              {(
+                [
+                  { kind: 'display', title: 'Displays' },
+                  { kind: 'window', title: 'Windows' },
+                ] as const
+              ).map(({ kind, title }) => {
+                const group = sources.filter((source) => source.kind === kind);
+                if (group.length === 0) return null;
+                return (
+                  <div key={kind} className="screen-source-group">
+                    <h4>{title}</h4>
+                    <div className="screen-source-grid">
+                      {group.map((source) => (
+                        <label className="screen-source-tile" key={source.id}>
+                          <input
+                            type="radio"
+                            name="screenSource"
+                            value={source.id}
+                            checked={selection === source.id}
+                            onChange={() => setSelection(source.id)}
+                          />
+                          <SourceThumbnail source={source} />
+                          <span
+                            className="screen-source-name"
+                            title={source.name}
+                          >
+                            {source.name}
+                          </span>
+                        </label>
+                      ))}
+                    </div>
                   </div>
-                </div>
-              );
-            })}
-          </fieldset>
+                );
+              })}
+            </fieldset>
+          </div>
         )}
         {active ? (
-          <button type="button" className="refresh" onClick={stop}>
+          <button
+            type="button"
+            className="screen-stop-action screen-stop-preview"
+            onClick={stop}
+          >
+            <Square size={16} aria-hidden="true" />
             Stop preview
           </button>
         ) : selection ? (
@@ -227,11 +267,15 @@ export function ScreenPreview({
       />
       {message && <p role="status">{message}</p>}
       <ScreenSession
+        error={sessionError}
+        setError={setSessionError}
         video={video}
         captureActive={active}
         stopCapture={stop}
         routes={routes}
         names={names}
+        windowVisible={windowVisible}
+        onSessionActive={onSessionActive}
       />
     </section>
   );

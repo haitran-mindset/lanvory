@@ -1,7 +1,41 @@
 const assert = require('node:assert/strict');
 const { EventEmitter } = require('node:events');
 const { test } = require('node:test');
-const { installScreenPreview } = require('../src/main/screen-preview.cjs');
+const {
+  createScreenSourceFinder,
+  installScreenPreview,
+} = require('../src/main/screen-preview.cjs');
+
+test('reports missing permission on the first search so Settings can open immediately', async () => {
+  let status = 'denied';
+  let requests = 0;
+  const find = createScreenSourceFinder({
+    permission: () => status,
+    requestPermission: () => {
+      requests++;
+      return false;
+    },
+  });
+  const sources = [{ id: 'screen:1' }];
+  const list = async () => sources;
+  assert.deepEqual(await find(list), { status: 'denied' });
+  assert.deepEqual(await find(list), { status: 'denied' });
+  status = 'granted';
+  assert.deepEqual(await find(list), { status: 'ready', sources });
+  assert.equal(requests, 1);
+});
+
+test('lists sources as soon as the native request grants access', async () => {
+  const find = createScreenSourceFinder({
+    permission: () => 'not-determined',
+    requestPermission: () => true,
+  });
+  const sources = [{ id: 'screen:1' }];
+  assert.deepEqual(await find(async () => sources), {
+    status: 'ready',
+    sources,
+  });
+});
 
 function harness(confirmPreview = async () => true) {
   const indexUrl = 'file:///test/index.html';
@@ -21,10 +55,17 @@ function harness(confirmPreview = async () => true) {
     session,
     mainFrame: frame,
     isDestroyed: () => false,
+    send(channel) {
+      this.lastMessage = channel;
+    },
+    setBackgroundThrottling(enabled) {
+      this.throttled = enabled;
+    },
   });
   const window = Object.assign(new EventEmitter(), {
     webContents: contents,
     isVisible: () => true,
+    isMinimized: () => false,
     isDestroyed: () => false,
   });
   const source = {
@@ -112,4 +153,22 @@ test('hiding the window invalidates an in-flight confirmation', async () => {
   finish(true);
   assert.equal(await pending, null);
   assert.equal(api.select(source.id), false);
+});
+
+test('changing apps preserves approved capture until the Lanvory window closes', async () => {
+  const { api, capture, contents, source, window } = harness();
+  await api.list();
+  assert.equal(api.select(source.id), true);
+  assert.deepEqual(await capture(), { video: source });
+  assert.equal(contents.throttled, false);
+  window.emit('blur');
+  assert.equal(contents.throttled, false);
+  assert.equal(contents.lastMessage, undefined);
+  window.emit('hide');
+  window.emit('minimize');
+  assert.equal(contents.throttled, false);
+  assert.equal(contents.lastMessage, undefined);
+  window.emit('close');
+  assert.equal(contents.throttled, true);
+  assert.equal(contents.lastMessage, 'lanvory:screen-window-closing');
 });

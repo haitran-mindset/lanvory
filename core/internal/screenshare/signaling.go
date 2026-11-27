@@ -15,7 +15,11 @@ const (
 	MaxDescription  = 10 * 1024
 	MaxFrame        = 42 * 1024
 	JPEGFormat      = "jpeg/1"
-	MaxMessage      = 6*MaxDescription + 1024
+	HDJPEGFormat    = "jpeg/2"
+	MaxHDFrame      = 160 * 1024
+	UHDJPEGFormat   = "jpeg/3"
+	MaxUHDFrame     = 640 * 1024
+	MaxMessage      = 896 * 1024
 	inviteLifetime  = 45 * time.Second
 	sessionLifetime = 2 * time.Hour
 	frameTimeout    = 15 * time.Second
@@ -28,6 +32,8 @@ type Request struct {
 	Action    string    `json:"action"`
 	ID        string    `json:"id"`
 	Offer     string    `json:"offer,omitempty"`
+	HD        bool      `json:"hd,omitempty"`
+	UHD       bool      `json:"uhd,omitempty"`
 	CreatedAt time.Time `json:"createdAt,omitzero"`
 	Frame     []byte    `json:"frame,omitempty"`
 	Sequence  uint64    `json:"sequence,omitempty"`
@@ -42,6 +48,8 @@ type Invitation struct {
 	ID        string    `json:"id"`
 	Peer      string    `json:"peer"`
 	Offer     string    `json:"offer"`
+	HD        bool      `json:"hd,omitempty"`
+	UHD       bool      `json:"uhd,omitempty"`
 	ExpiresAt time.Time `json:"expiresAt"`
 }
 
@@ -90,7 +98,7 @@ func (m *Manager) prune(now time.Time) {
 
 // Handle takes the fingerprint from the authenticated transport, never from the request.
 func (m *Manager) Handle(peer string, req Request) (Reply, error) {
-	if peer == "" || !validID(req.ID) || len(req.Offer) > MaxDescription || len(req.Frame) > MaxFrame ||
+	if peer == "" || !validID(req.ID) || len(req.Offer) > MaxDescription || len(req.Frame) > MaxUHDFrame || ((req.HD || req.UHD) && req.Action != "offer") ||
 		(req.Action != "frame" && (len(req.Frame) != 0 || req.Sequence != 0)) {
 		return Reply{}, ErrUnavailable
 	}
@@ -108,7 +116,7 @@ func (m *Manager) Handle(peer string, req Request) (Reply, error) {
 			return Reply{}, ErrUnavailable
 		}
 		if exists {
-			if current.Offer != req.Offer || !current.CreatedAt.Equal(req.CreatedAt) {
+			if current.Offer != req.Offer || current.HD != req.HD || current.UHD != req.UHD || !current.CreatedAt.Equal(req.CreatedAt) {
 				return Reply{}, ErrUnavailable
 			}
 			return current.reply, nil
@@ -122,13 +130,13 @@ func (m *Manager) Handle(peer string, req Request) (Reply, error) {
 			}
 		}
 		current = session{
-			Invitation: Invitation{ID: req.ID, Peer: peer, Offer: req.Offer, ExpiresAt: req.CreatedAt.Add(inviteLifetime)},
+			Invitation: Invitation{ID: req.ID, Peer: peer, Offer: req.Offer, HD: req.HD, UHD: req.UHD, ExpiresAt: req.CreatedAt.Add(inviteLifetime)},
 			CreatedAt:  req.CreatedAt,
 			reply:      Reply{State: "pending"},
 		}
 	case "frame":
-		if !exists || current.reply.State != "accepted" || current.reply.Answer != JPEGFormat ||
-			req.Sequence <= current.sequence || req.Offer != "" || !validFrame(req.Frame) {
+		if !exists || current.reply.State != "accepted" ||
+			req.Sequence <= current.sequence || req.Offer != "" || !validFrame(req.Frame, current.reply.Answer) {
 			return Reply{}, ErrUnavailable
 		}
 		current.frame = req.Frame
@@ -175,6 +183,10 @@ func (m *Manager) Decide(id string, accept bool, answer string) error {
 	if !exists || current.reply.State != "pending" {
 		return ErrUnavailable
 	}
+	if (answer == HDJPEGFormat && (!current.HD || current.Offer != JPEGFormat)) ||
+		(answer == UHDJPEGFormat && (!current.UHD || current.Offer != JPEGFormat)) {
+		return ErrUnavailable
+	}
 	current.reply = Reply{State: "declined"}
 	if accept {
 		current.reply = Reply{State: "accepted", Answer: answer}
@@ -201,10 +213,22 @@ func (m *Manager) Stop(id string) error {
 	return nil
 }
 
-func validFrame(frame []byte) bool {
+func validFrame(frame []byte, format string) bool {
+	maxBytes, maxWidth, maxHeight := MaxFrame, 1600, 1200
+	switch format {
+	case JPEGFormat:
+	case HDJPEGFormat:
+		maxBytes, maxWidth, maxHeight = MaxHDFrame, 1920, 1440
+	case UHDJPEGFormat:
+		maxBytes, maxWidth, maxHeight = MaxUHDFrame, 3840, 2160
+	default:
+		return false
+	}
+	if len(frame) < 2 || len(frame) > maxBytes || frame[len(frame)-2] != 0xff || frame[len(frame)-1] != 0xd9 {
+		return false
+	}
 	config, err := jpeg.DecodeConfig(bytes.NewReader(frame))
-	return err == nil && config.Width > 0 && config.Height > 0 && config.Width <= 1600 && config.Height <= 1200 &&
-		len(frame) >= 2 && frame[len(frame)-2] == 0xff && frame[len(frame)-1] == 0xd9
+	return err == nil && config.Width > 0 && config.Height > 0 && config.Width <= maxWidth && config.Height <= maxHeight
 }
 
 func (m *Manager) View(id string, after uint64, trusted func(string) bool) View {

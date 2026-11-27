@@ -11,6 +11,10 @@ build-core:
 	@if [ "$$(uname -s)" = "Darwin" ] && command -v swiftc >/dev/null 2>&1; then \
 		swiftc -O -framework CoreBluetooth -framework Network core/native/darwin/lanvory-nearby.swift -o bin/lanvory-nearby; \
 	fi
+	@if [ "$$(uname -s)" = "Darwin" ]; then \
+		node_headers=$$(node -p "require('path').resolve(require('fs').realpathSync(process.execPath), '../../include/node')") && \
+		xcrun clang -O2 -bundle -undefined dynamic_lookup -mmacosx-version-min=10.15 -I "$$node_headers" -framework CoreGraphics core/native/darwin/screen-permission.c -o bin/screen-permission.node; \
+	fi
 
 build-desktop:
 	$(PNPM) build

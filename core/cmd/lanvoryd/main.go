@@ -114,7 +114,7 @@ func run(peerInterface string, peerBind netip.AddrPort, advertise, enableQUIC, e
 	defer tunnels.Close()
 	handler := local.WithListenerStatus(local.HandlerWithResources(device, dir, receiver, tunnels, key, pairs, lan.status, nearbyMgr.HasEndpoint), lan.status, lan.start, lan.stop)
 	handler = local.WithClipboardWithNearby(handler, clipBuf, device, dir, key, nearbyMgr.HasEndpoint)
-	handler = local.WithScreenSignaling(handler, screenSignals, device, dir, key)
+	handler = local.WithScreenSignaling(handler, screenSignals, device, dir, key, nearbyMgr.HasEndpoint)
 	handler = local.WithSyncWithNearby(handler, syncMgr, device, dir, key, nearbyMgr.HasEndpoint)
 	handler = local.WithMountsWithNearby(handler, mountReg, device, dir, key, nearbyMgr)
 	handler = local.WithNearby(handler, nearbyMgr, lan.ensureP2PPort, device, dir, key, pairs)

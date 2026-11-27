@@ -6,8 +6,11 @@ import (
 	"context"
 	"crypto/ed25519"
 	"encoding/json"
+	"errors"
 	"io"
+	"net"
 	"net/http"
+	"time"
 
 	"lanvory.local/core/internal/networking"
 	"lanvory.local/core/internal/peer"
@@ -16,6 +19,7 @@ import (
 )
 
 const screenRoute = "/v1/screen-signaling"
+const screenViewLimit = screenshare.MaxMessage
 
 type screenCommand struct {
 	Adapter     string              `json:"adapter"`
@@ -28,7 +32,7 @@ type screenCommand struct {
 	Answer      string              `json:"answer"`
 }
 
-func WithScreenSignaling(next http.Handler, manager *screenshare.Manager, device Device, dir string, key ed25519.PrivateKey) http.Handler {
+func WithScreenSignaling(next http.Handler, manager *screenshare.Manager, device Device, dir string, key ed25519.PrivateKey, hasP2PEndpoint func(string) bool) http.Handler {
 	if manager == nil {
 		return next
 	}
@@ -57,8 +61,17 @@ func WithScreenSignaling(next http.Handler, manager *screenshare.Manager, device
 		}
 		switch r.PathValue("action") {
 		case "send":
-			if command.Adapter == "p2p" || !trusted(command.Fingerprint) || len(command.Signal.Offer) > screenshare.MaxDescription {
-				http.Error(w, "Screen signaling requires a trusted LAN peer", http.StatusForbidden)
+			p2pOffer := command.Adapter == "p2p" && command.Signal.Action == "offer"
+			if !trusted(command.Fingerprint) {
+				if p2pOffer {
+					writeJSON(w, screenshare.Reply{State: "peer-not-trusted"})
+					return
+				}
+				http.Error(w, "Screen signaling requires a trusted peer", http.StatusForbidden)
+				return
+			}
+			if len(command.Signal.Offer) > screenshare.MaxDescription {
+				http.Error(w, "Invalid screen invitation", http.StatusBadRequest)
 				return
 			}
 			endpoint, pin, err := verificationInput(command.Adapter, command.Endpoint, command.Fingerprint)
@@ -66,10 +79,34 @@ func WithScreenSignaling(next http.Handler, manager *screenshare.Manager, device
 				http.Error(w, "Invalid peer target", http.StatusBadRequest)
 				return
 			}
-			reply, err := peer.SendScreenSignal(r.Context(), command.Adapter, endpoint, pin, key, command.Signal, func() ([]networking.Interface, error) {
-				return approvedInventory(dir)
-			})
+			var reply screenshare.Reply
+			if command.Adapter == "p2p" {
+				if p2pOffer {
+					_ = http.NewResponseController(w).SetWriteDeadline(time.Now().Add(7 * time.Second))
+				}
+				reply, err = peer.SendScreenSignalLoopback(r.Context(), endpoint, pin, key, command.Signal, hasP2PEndpoint)
+			} else {
+				reply, err = peer.SendScreenSignal(r.Context(), command.Adapter, endpoint, pin, key, command.Signal, func() ([]networking.Interface, error) {
+					return approvedInventory(dir)
+				})
+			}
 			if err != nil {
+				if p2pOffer {
+					state := "peer-unreachable"
+					var networkError net.Error
+					switch {
+					case errors.Is(err, peer.ErrPeerScope):
+						state = "p2p-route-expired"
+					case errors.Is(err, peer.ErrPeerIdentity):
+						state = "peer-identity-mismatch"
+					case errors.Is(err, screenshare.ErrUnavailable):
+						state = "peer-invitation-unavailable"
+					case errors.As(err, &networkError) && networkError.Timeout():
+						state = "p2p-timeout"
+					}
+					writeJSON(w, screenshare.Reply{State: state})
+					return
+				}
 				http.Error(w, "Screen signaling unavailable on this peer", http.StatusBadGateway)
 				return
 			}
@@ -105,7 +142,9 @@ func ScreenSignaling(ctx context.Context, dir, action string, body io.Reader, re
 	switch action {
 	case "pending":
 		return requestLocal(ctx, dir, http.MethodGet, screenRoute+"/pending", result)
-	case "send", "view":
+	case "send":
+		return requestLocalTimedBody(ctx, dir, http.MethodPost, screenRoute+"/"+action, body, result, 8*time.Second)
+	case "view":
 		return requestLocalBody(ctx, dir, http.MethodPost, screenRoute+"/"+action, body, result)
 	case "decide", "stop":
 		return requestLocalBody(ctx, dir, http.MethodPost, screenRoute+"/"+action, body, nil)
