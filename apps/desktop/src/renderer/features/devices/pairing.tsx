@@ -277,7 +277,15 @@ export function PairingPanel({ selection, onClearTarget, onNetwork, visible, onC
 
   return (
     <section className="nearby pairing-panel" aria-labelledby="pairing-heading">
-      <h3 id="pairing-heading" tabIndex={-1}><Link2 size={19} aria-hidden="true" /> Pair a device</h3>
+      <div className="device-discovery-heading pairing-panel-heading">
+        <span className="device-discovery-emblem">
+          <Link2 size={19} aria-hidden="true" />
+        </span>
+        <div>
+          <h3 id="pairing-heading" tabIndex={-1}>Pair a Device</h3>
+          <p>Connect a new device to your network.</p>
+        </div>
+      </div>
       {requests === null && <p role="status">Unable to read pairing requests.</p>}
       <dialog ref={dialog} className="pairing-dialog" aria-labelledby="confirm-pairing-title"
         aria-describedby="confirm-pairing-help" onCancel={(event) => {

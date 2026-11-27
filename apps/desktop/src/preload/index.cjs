@@ -83,6 +83,7 @@ contextBridge.exposeInMainWorld('lanvory', {
   createResourceDir: (id, dirPath) => ipcRenderer.invoke('lanvory:mount-mkdir', id, dirPath),
   deleteResourceEntry: (id, targetPath) => ipcRenderer.invoke('lanvory:mount-delete-entry', id, targetPath),
   renameResourceEntry: (id, oldPath, newPath) => ipcRenderer.invoke('lanvory:mount-rename', id, oldPath, newPath),
+  writeResourceFile: (id, filePath, content) => ipcRenderer.invoke('lanvory:mount-write', id, filePath, content),
   pollResourceEvents: (id, since) => ipcRenderer.invoke('lanvory:mount-events', id, since),
   closeMount: (id) => ipcRenderer.invoke('lanvory:mount-close', id),
   openMountInFinder: (target) => ipcRenderer.invoke('lanvory:mount-open-finder', target),

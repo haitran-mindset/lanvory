@@ -36,7 +36,7 @@ export interface DesktopApi {
   deleteTransferHistory(id: string): Promise<boolean>;
   clearTransferHistory(): Promise<boolean>;
   serviceSnapshot(): Promise<unknown>;
-  serviceAction(action: string, input: Record<string, string>): Promise<boolean>;
+  serviceAction(action: string, input: Record<string, string>): Promise<{ ok: boolean; error?: string }>;
   decideFile(id: string, allow: boolean): Promise<boolean>;
   selectFile(): Promise<string | string[] | null>;
   selectFolder(): Promise<string[] | null>;
@@ -76,6 +76,7 @@ export interface DesktopApi {
   createResourceDir(id: string, dirPath: string): Promise<{ ok: boolean; error?: string }>;
   deleteResourceEntry(id: string, targetPath: string): Promise<{ ok: boolean; error?: string }>;
   renameResourceEntry(id: string, oldPath: string, newPath: string): Promise<{ ok: boolean; error?: string }>;
+  writeResourceFile(id: string, filePath: string, content: string): Promise<{ ok: boolean; error?: string }>;
   pollResourceEvents(id: string, since: number): Promise<unknown>;
   closeMount(id: string): Promise<boolean>;
   openMountInFinder(target: string): Promise<boolean>;

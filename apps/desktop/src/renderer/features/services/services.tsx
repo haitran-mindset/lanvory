@@ -32,6 +32,7 @@ const snapshotSchema = z.object({
       service: z.string(),
       bind: z.string(),
       connections: z.number().nonnegative(),
+      lastError: z.string().optional(),
     }),
   ),
   grants: z.array(
@@ -68,6 +69,7 @@ export function Services({
   const [revision, setRevision] = useState(0);
   const [message, setMessage] = useState("");
   const [connectionReady, setConnectionReady] = useState(false);
+  const [forceLanAddress, setForceLanAddress] = useState(false);
 
   useEffect(() => {
     if (!visible) return;
@@ -106,8 +108,8 @@ export function Services({
           return;
         }
       }
-      const ok = await window.lanvory.serviceAction(action, fields);
-      if (ok) {
+      const result = await window.lanvory.serviceAction(action, fields);
+      if (result.ok) {
         setMessage("");
         notify({
           category: "services",
@@ -115,9 +117,9 @@ export function Services({
           title: "Service settings updated.",
         });
       } else {
-        setMessage("Action failed. Check the address, current peer trust and adapter approval.");
+        setMessage(result.error || "Action failed. Check the address, current peer trust and adapter approval.");
       }
-      if (ok) {
+      if (result.ok) {
         if (
           action === "open" &&
           fields.fingerprint &&
@@ -161,6 +163,7 @@ export function Services({
     ? recipient
     : "";
   const route = routes[selectedDevice];
+  const usingP2PRoute = !forceLanAddress && isP2PRoute(route);
   return (
     <section
       className="network-panel services-panel"
@@ -417,12 +420,15 @@ export function Services({
                 placeholder="Select the sharing device"
                 options={peerOptions}
                 value={selectedDevice}
-                onValueChange={setRecipient}
+                onValueChange={(value) => {
+                  setRecipient(value);
+                  setForceLanAddress(false);
+                }}
                 disabled={busy}
               />
               {selectedDevice && (
                 <div key={selectedDevice} className="services-device-fields">
-                  {isP2PRoute(route) && (
+                  {usingP2PRoute && (
                     <>
                       <input
                         type="hidden"
@@ -434,10 +440,18 @@ export function Services({
                         name="endpoint"
                         value={route!.endpoint}
                       />
-                      <div className="paired-device-meta-row">
+                      <div className="paired-device-meta-row" style={{ justifyContent: "space-between", alignItems: "center" }}>
                         <span className="paired-method-badge is-p2p">
                           Bluetooth + Wi-Fi P2P
                         </span>
+                        <button
+                          type="button"
+                          className="refresh"
+                          style={{ minHeight: 28, padding: "0 10px", fontSize: ".76rem" }}
+                          onClick={() => setForceLanAddress(true)}
+                        >
+                          Use LAN address instead
+                        </button>
                       </div>
                     </>
                   )}
@@ -451,7 +465,7 @@ export function Services({
                       placeholder="Name from the other device"
                     />
                   </label>
-                  {!isP2PRoute(route) && (
+                  {!usingP2PRoute && (
                     <PeerConnectionFields
                       suggestedEndpoint={lanSuggestedEndpoint(route)}
                       endpointLabel="Lanvory address of the sharing device"
@@ -478,7 +492,7 @@ export function Services({
                   <button
                     className="refresh"
                     type="submit"
-                    disabled={busy || (!isP2PRoute(route) && !connectionReady)}
+                    disabled={busy || (!usingP2PRoute && !connectionReady)}
                   >
                     Connect to service
                   </button>
@@ -509,7 +523,11 @@ export function Services({
                         className="service-target-badge service-target-link"
                         title={`Open http://${tunnel.bind} in browser`}
                         onClick={() =>
-                          void window.lanvory.openTunnelUrl(tunnel.bind)
+                          void window.lanvory.openTunnelUrl(tunnel.bind).then((opened) => {
+                            if (!opened) {
+                              setMessage(`Unable to open http://${tunnel.bind} in your browser.`);
+                            }
+                          })
                         }
                       >
                         <span
@@ -527,6 +545,11 @@ export function Services({
                         {tunnel.connections} active
                       </span>
                     </div>
+                    {tunnel.lastError && (
+                      <div className="service-access-hint" style={{ color: "#f87171", marginTop: 4 }}>
+                        <span>Last error: {tunnel.lastError}</span>
+                      </div>
+                    )}
                   </div>
                 </div>
                 <button

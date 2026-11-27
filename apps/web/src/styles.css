@@ -92,7 +92,7 @@ body {
 }
 .hero-copy { border-left: 1px solid var(--color-border); padding: .25rem 0 .35rem clamp(1rem, 2.7vw, 2.1rem); }
 .hero-copy p { font-size: clamp(.9rem, 1.45vw, 1.08rem); line-height: 1.65; color: var(--color-muted-foreground); }
-.desktop-preview-image { filter: url("#desktop-preview-sharpen"); }
+.desktop-preview-image { image-rendering: auto; }
 .feature-tag { border: 1px solid var(--color-border); border-radius: 999px; background: #101314bc; padding: .463rem .78rem; }
 
 .principles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border-block: 1px solid var(--color-border); padding-block: 1.85rem; }

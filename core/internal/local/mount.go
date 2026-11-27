@@ -61,6 +61,11 @@ type mountPathRequest struct {
 	NewPath string `json:"newPath,omitempty"`
 }
 
+type mountWriteRequest struct {
+	Path    string `json:"path"`
+	Content string `json:"content"`
+}
+
 // MountRecord describes an active OS-independent Live Resource Session.
 type MountRecord struct {
 	ID          string `json:"id"`
@@ -376,6 +381,7 @@ func registerMounts(mux *http.ServeMux, _ Device, dir string, reg *mount.Registr
 			}
 			mountPoint = filepath.Join(home, "LanvoryMounts", label)
 		}
+		_ = unmountDarwin(mountPoint)
 		if err := os.MkdirAll(mountPoint, 0o755); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -483,6 +489,7 @@ func registerMounts(mux *http.ServeMux, _ Device, dir string, reg *mount.Registr
 			http.Error(w, err.Error(), http.StatusForbidden)
 			return
 		}
+		item.session.Cache.InvalidatePath(item.session.URL, targetPath)
 		w.WriteHeader(http.StatusNoContent)
 	})
 
@@ -502,6 +509,28 @@ func registerMounts(mux *http.ServeMux, _ Device, dir string, reg *mount.Registr
 			http.Error(w, err.Error(), http.StatusForbidden)
 			return
 		}
+		item.session.Cache.InvalidatePath(item.session.URL, req.Path)
+		item.session.Cache.InvalidatePath(item.session.URL, req.NewPath)
+		w.WriteHeader(http.StatusNoContent)
+	})
+
+	mux.HandleFunc("POST "+mountRoute+"/{id}/write", func(w http.ResponseWriter, r *http.Request) {
+		id := r.PathValue("id")
+		item, ok := mgr.get(id)
+		if !ok {
+			http.Error(w, "Resource session not found", http.StatusNotFound)
+			return
+		}
+		var req mountWriteRequest
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4*1024*1024)).Decode(&req); err != nil || req.Path == "" {
+			http.Error(w, "Invalid file write request", http.StatusBadRequest)
+			return
+		}
+		if err := mount.WriteFile(r.Context(), davClient, item.session.URL, req.Path, []byte(req.Content)); err != nil {
+			http.Error(w, err.Error(), http.StatusForbidden)
+			return
+		}
+		item.session.Cache.InvalidatePath(item.session.URL, req.Path)
 		w.WriteHeader(http.StatusNoContent)
 	})
 
@@ -559,9 +588,10 @@ func sanitizeMountDirName(raw string) string {
 }
 
 func mountWebDAVDarwin(rawURL, mountPoint string) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	_ = unmountDarwin(mountPoint)
+	ctx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, "/sbin/mount_webdav", "-i", rawURL, mountPoint)
+	cmd := exec.CommandContext(ctx, "/sbin/mount_webdav", "-S", rawURL, mountPoint)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		msg := strings.TrimSpace(string(out))
@@ -576,8 +606,10 @@ func mountWebDAVDarwin(rawURL, mountPoint string) error {
 func unmountDarwin(mountPoint string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, "/sbin/umount", mountPoint)
-	return cmd.Run()
+	if err := exec.CommandContext(ctx, "/sbin/umount", mountPoint).Run(); err == nil {
+		return nil
+	}
+	return exec.CommandContext(ctx, "/sbin/umount", "-f", mountPoint).Run()
 }
 
 // ListMountExports returns all local folders exported as Live Resources.

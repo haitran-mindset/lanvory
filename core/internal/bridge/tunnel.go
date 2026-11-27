@@ -24,13 +24,15 @@ type Tunnel struct {
 	Service     string         `json:"service"`
 	Bind        netip.AddrPort `json:"bind"`
 	Connections int32          `json:"connections"`
+	LastError   string         `json:"lastError,omitempty"`
 }
 
 type tunnelSession struct {
-	info   Tunnel
-	active atomic.Int32
-	cancel context.CancelFunc
-	done   chan struct{}
+	info      Tunnel
+	active    atomic.Int32
+	lastError atomic.Value
+	cancel    context.CancelFunc
+	done      chan struct{}
 }
 
 type Tunnels struct {
@@ -131,18 +133,22 @@ func serveTunnel(ctx context.Context, cancel context.CancelFunc, listener net.Li
 		connections.Go(func() {
 			defer func() { local.Close(); session.active.Add(-1); <-slots }()
 			if ctx.Err() != nil || !allowed() {
+				session.lastError.Store("Tunnel is no longer permitted by local trust or network scope.")
 				return
 			}
 			request, finish := context.WithTimeout(ctx, sessionLimit)
 			defer finish()
 			remote, err := connect(request)
 			if err != nil {
+				session.lastError.Store(err.Error())
 				return
 			}
 			defer abort(remote)
 			if !allowed() {
+				session.lastError.Store("Tunnel is no longer permitted by local trust or network scope.")
 				return
 			}
+			session.lastError.Store("")
 			Forward(request, local, remote)
 		})
 	}
@@ -155,6 +161,9 @@ func (t *Tunnels) List() []Tunnel {
 	for _, entry := range t.entries {
 		info := entry.info
 		info.Connections = entry.active.Load()
+		if errText, ok := entry.lastError.Load().(string); ok {
+			info.LastError = errText
+		}
 		tunnels = append(tunnels, info)
 	}
 	sort.Slice(tunnels, func(i, j int) bool { return tunnels[i].ID < tunnels[j].ID })

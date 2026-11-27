@@ -1,6 +1,8 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { AlertCircle, ArrowRight, Bluetooth, CheckCircle2, ChevronRight, HelpCircle, Info, Laptop, Monitor, Radio, Radar, RefreshCw, ShieldCheck, Wifi } from 'lucide-react';
+import { AlertCircle, Bluetooth, CheckCircle2, ChevronRight, HelpCircle, Info, Laptop, Link2, Monitor, Radio, Radar, RefreshCw, ShieldCheck, Wifi } from 'lucide-react';
 import { z } from 'zod';
+import discoveryLanArt from '../../assets/discovery-lan.jpg';
+import discoveryBleArt from '../../assets/discovery-ble.jpg';
 import type { PeerRoute } from '../sharing/sharing';
 
 const scanSchema = z.object({
@@ -270,80 +272,123 @@ export function NearbyServices({ ready, scanRevision, trustRevision, searchQuery
       <div className="nearby-heading">
         <div className="device-discovery-heading">
           <span className="device-discovery-emblem">
-            {scanMode === 'lan' ? <Radar size={21} aria-hidden="true" /> : <Bluetooth size={21} aria-hidden="true" />}
+            <Radar size={21} aria-hidden="true" />
           </span>
           <div>
-            <h3 id="nearby-title" tabIndex={-1}>{scanMode === 'lan' ? heading : 'Bluetooth + P2P'}</h3>
-            <p>{scanMode === 'lan' ? 'Find devices on your local network.' : 'Find nearby devices and connect directly.'}</p>
+            <div className="panel-heading-title-row">
+              <h3 id="nearby-title" tabIndex={-1}>Device Discovery</h3>
+              {scanMode === 'lan' && allDevices.length > 0 && (
+                <span className="tag">{allDevices.length}</span>
+              )}
+              {scanMode === 'ble' && blePeers.length > 0 && (
+                <span className="tag">{blePeers.length}</span>
+              )}
+            </div>
+            <p>Choose a discovery method to find and connect to nearby devices.</p>
           </div>
         </div>
+      </div>
+
+      <div className="discovery-method-stack" role="radiogroup" aria-label="Discovery method">
+        <button
+          type="button"
+          role="radio"
+          aria-checked={scanMode === 'lan'}
+          className={`discovery-method-card ${scanMode === 'lan' ? 'is-selected' : ''}`}
+          onClick={() => setScanMode('lan')}
+        >
+          <div className="discovery-method-visual" aria-hidden="true">
+            <img src={discoveryLanArt} alt="" className="discovery-art-img" />
+            <span className="discovery-method-scrim" />
+          </div>
+          <span className="discovery-method-radio" aria-hidden="true" />
+          <div className="discovery-method-head">
+            <span className="discovery-method-icon">
+              <Wifi size={18} aria-hidden="true" />
+            </span>
+            <div className="discovery-method-copy">
+              <strong>Local Network</strong>
+              <small>Ethernet or Wi‑Fi subnet.</small>
+            </div>
+          </div>
+        </button>
+
+        <button
+          type="button"
+          role="radio"
+          aria-checked={scanMode === 'ble'}
+          className={`discovery-method-card ${scanMode === 'ble' ? 'is-selected' : ''}`}
+          onClick={() => setScanMode('ble')}
+        >
+          <div className="discovery-method-visual" aria-hidden="true">
+            <img src={discoveryBleArt} alt="" className="discovery-art-img" />
+            <span className="discovery-method-scrim" />
+          </div>
+          <span className="discovery-method-radio" aria-hidden="true" />
+          <div className="discovery-method-head">
+            <span className="discovery-method-icon">
+              <Bluetooth size={18} aria-hidden="true" />
+            </span>
+            <div className="discovery-method-copy">
+              <strong>
+                Bluetooth + P2P
+                {bleStatus && (
+                  <span
+                    className={`ble-ready-dot ${btReady ? 'is-ready' : ''}`}
+                    title={`Bluetooth: ${btStateLabel(bleStatus.bluetoothState)}`}
+                    aria-hidden="true"
+                  />
+                )}
+              </strong>
+              <small>Direct link without shared Wi‑Fi.</small>
+            </div>
+          </div>
+        </button>
+      </div>
+
+      {scanMode === 'ble' && bleStatus?.available && (
+        <div className="ble-action-bar device-discovery-visibility">
+          <div className="device-discovery-visibility-copy">
+            <Radio size={17} aria-hidden="true" />
+            <div>
+              <strong>Device visibility</strong>
+              <small>Control whether this device can be discovered by nearby devices.</small>
+            </div>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={bleStatus?.advertising === true}
+            className={`ble-switch-btn ${bleStatus?.advertising ? 'is-on' : ''}`}
+            disabled={bleBusy || !bleStatus?.available}
+            onClick={() => void toggleAdvertise()}
+          >
+            <span className="ble-switch-track" aria-hidden="true">
+              <span className="ble-switch-thumb" />
+            </span>
+            <span>Discoverable</span>
+          </button>
+        </div>
+      )}
+
+      <div className="discovery-footer-actions">
         {scanMode === 'lan' ? (
           !needsNetwork && !scan?.unavailable && (
-            <button type="button" className="refresh" disabled={!ready || scanning || resolving} onClick={() => void discover()}>
-              <RefreshCw size={15} aria-hidden="true" /> {scanning ? 'Searching…' : scan === undefined ? 'Scan LAN' : 'Scan again'}
+            <button type="button" className="primary discovery-scan-full-btn" disabled={!ready || scanning || resolving} onClick={() => void discover()}>
+              <RefreshCw size={15} aria-hidden="true" />
+              <span>{scanning ? 'Scanning…' : 'Scan for Devices'}</span>
             </button>
           )
         ) : (
-          <button type="button" className="refresh device-discovery-scan" disabled={!ready || bleBusy || !bleStatus?.available} onClick={() => void runBleScan()}>
-            <RefreshCw size={15} aria-hidden="true" /> {bleAction === 'scan' ? 'Scanning…' : 'Scan Bluetooth'}
+          <button type="button" className="primary discovery-scan-full-btn" disabled={!ready || bleBusy || !bleStatus?.available} onClick={() => void runBleScan()}>
+            <RefreshCw size={15} aria-hidden="true" />
+            <span>{bleAction === 'scan' ? 'Scanning…' : 'Scan for Devices'}</span>
           </button>
         )}
       </div>
 
-      <div className="ble-scan-options" role="group" aria-label="Scan method">
-        <button
-          type="button"
-          aria-pressed={scanMode === 'lan'}
-          className={`ble-scan-option ${scanMode === 'lan' ? 'is-active' : ''}`}
-          onClick={() => setScanMode('lan')}
-        >
-          <Wifi size={15} aria-hidden="true" />
-          <span>Local Network</span>
-        </button>
-
-        <button
-          type="button"
-          aria-pressed={scanMode === 'ble'}
-          className={`ble-scan-option ${scanMode === 'ble' ? 'is-active' : ''}`}
-          onClick={() => setScanMode('ble')}
-        >
-          <Bluetooth size={15} aria-hidden="true" />
-          <span>Bluetooth + P2P</span>
-          {bleStatus && (
-            <span
-              className={`ble-ready-dot ${btReady ? 'is-ready' : ''}`}
-              title={`Bluetooth: ${btStateLabel(bleStatus.bluetoothState)}`}
-              aria-hidden="true"
-            />
-          )}
-        </button>
-      </div>
-
       {scanMode === 'ble' ? (
         <div className="device-discovery-body">
-          <div className="ble-action-bar device-discovery-visibility">
-            <div className="device-discovery-visibility-copy">
-              <Radio size={17} aria-hidden="true" />
-              <div>
-                <strong>Device visibility</strong>
-                <small>{bleStatus?.advertising ? 'Visible to nearby devices' : 'Hidden from nearby scans'}</small>
-              </div>
-            </div>
-            <button
-              type="button"
-              role="switch"
-              aria-checked={bleStatus?.advertising === true}
-              className={`ble-switch-btn ${bleStatus?.advertising ? 'is-on' : ''}`}
-              disabled={bleBusy || !bleStatus?.available}
-              onClick={() => void toggleAdvertise()}
-            >
-              <span className="ble-switch-track" aria-hidden="true">
-                <span className="ble-switch-thumb" />
-              </span>
-              <span>Discoverable</span>
-            </button>
-          </div>
-
           {bleStatus && !bleStatus.available && (
             <p className="directory-empty">{bleStatus.error || 'Bluetooth discovery is unavailable on this platform.'}</p>
           )}
@@ -417,36 +462,6 @@ export function NearbyServices({ ready, scanRevision, trustRevision, searchQuery
               </p>
             </div>
 
-            <div className="discovery-steps-grid">
-              <div className="discovery-step-card">
-                <div className="discovery-step-icon">
-                  <Wifi size={17} aria-hidden="true" />
-                </div>
-                <div className="discovery-step-content">
-                  <strong>Same Wi‑Fi or LAN</strong>
-                  <span>Both devices must be on the same local network subnet.</span>
-                </div>
-              </div>
-              <div className="discovery-step-card">
-                <div className="discovery-step-icon">
-                  <Laptop size={17} aria-hidden="true" />
-                </div>
-                <div className="discovery-step-content">
-                  <strong>Keep Lanvory open</strong>
-                  <span>Ensure Lanvory is active on your other device to be found.</span>
-                </div>
-              </div>
-              <div className="discovery-step-card">
-                <div className="discovery-step-icon">
-                  <ShieldCheck size={17} aria-hidden="true" />
-                </div>
-                <div className="discovery-step-content">
-                  <strong>Direct & Private</strong>
-                  <span>100% peer-to-peer. Zero cloud servers or accounts needed.</span>
-                </div>
-              </div>
-            </div>
-
             <details className="discovery-troubleshoot-details">
               <summary>
                 <HelpCircle size={14} aria-hidden="true" />
@@ -469,9 +484,17 @@ export function NearbyServices({ ready, scanRevision, trustRevision, searchQuery
         {scan?.truncated && <p>The scan reached its result limit.</p>}
       </div>
       {showManualPair && (
-        <button type="button" className="refresh directory-manual" onClick={onManualPair}>
-          <span>Pair by address</span>
-          <ArrowRight size={14} aria-hidden="true" />
+        <button type="button" className="directory-manual" onClick={onManualPair}>
+          <span className="directory-manual-leading">
+            <span className="directory-manual-icon" aria-hidden="true">
+              <Link2 size={15} />
+            </span>
+            <span className="directory-manual-copy">
+              <strong>Pair by address</strong>
+              <small>Connect manually using IP or hostname</small>
+            </span>
+          </span>
+          <ChevronRight size={16} className="directory-manual-arrow" aria-hidden="true" />
         </button>
       )}
       {needsNetwork && (

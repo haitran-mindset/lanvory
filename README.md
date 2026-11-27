@@ -18,7 +18,7 @@
 </p>
 
 <p align="center">
-  <img src="apps/web/public/images/desktop-preview-1644.webp" alt="Lanvory Desktop Preview" width="820" />
+  <img src="apps/web/public/images/desktop-preview.png" alt="Lanvory Desktop Preview" width="820" />
 </p>
 
 ---

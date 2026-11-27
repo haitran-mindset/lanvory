@@ -102,6 +102,22 @@ func (c *StreamCache) put(blk cachedBlock) {
 	c.order = append(c.order, blk.key)
 }
 
+// InvalidatePath removes all cached byte ranges for a given remote file path.
+func (c *StreamCache) InvalidatePath(baseURL, filePath string) {
+	if c == nil {
+		return
+	}
+	prefix := fmt.Sprintf("%s|%s|", baseURL, filePath)
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for k, blk := range c.blocks {
+		if strings.HasPrefix(k, prefix) {
+			c.curBytes -= len(blk.data)
+			delete(c.blocks, k)
+		}
+	}
+}
+
 // ListDirectory queries a WebDAV endpoint with PROPFIND Depth: 1 and returns entries.
 func ListDirectory(ctx context.Context, client *http.Client, baseURL, subPath string) ([]Entry, error) {
 	if client == nil {

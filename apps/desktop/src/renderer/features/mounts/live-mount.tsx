@@ -8,6 +8,7 @@ import {
   ExternalLink,
   Eye,
   File as FileIcon,
+  FilePlus,
   FileText,
   Film,
   Folder,
@@ -23,6 +24,7 @@ import {
   Pencil,
   Plus,
   RefreshCw,
+  Save,
   Search,
   Share2,
   Trash2,
@@ -238,13 +240,22 @@ export function LiveMountSection({
 
   const [creatingDir, setCreatingDir] = useState(false);
   const [newDirName, setNewDirName] = useState('');
+  const [creatingFile, setCreatingFile] = useState(false);
+  const [newFileName, setNewFileName] = useState('');
+  const [editingFile, setEditingFile] = useState(false);
+  const [editorContent, setEditorContent] = useState('');
+  const [editorError, setEditorError] = useState('');
+  const [savingFile, setSavingFile] = useState(false);
   const [renamingPath, setRenamingPath] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const [confirmDeletePath, setConfirmDeletePath] = useState<string | null>(null);
   const [openRowMenuPath, setOpenRowMenuPath] = useState<string | null>(null);
   const [showHeaderMenu, setShowHeaderMenu] = useState(false);
+  const [entryFilter, setEntryFilter] = useState('');
 
   const activeSession = mountsList.find((m) => m.id === activeSessionId) ?? mountsList[0] ?? null;
+  const activeResource = discovered.find((r) => r.id === activeSession?.remoteId) ?? null;
+  const isReadOnlyResource = activeResource?.readOnly === true;
 
   useEffect(() => {
     if (!mountPeer && peers.length > 0) {
@@ -268,6 +279,28 @@ export function LiveMountSection({
     void loadDirectory(activeSession.id, '/');
     void refreshEvents(activeSession.id, 0);
   }, [activeSession?.id]);
+
+  useEffect(() => {
+    if (!openRowMenuPath && !showHeaderMenu) return;
+    function handlePointerDown(event: PointerEvent) {
+      const target = event.target;
+      if (target instanceof Element && target.closest('.lr-menu-anchor')) return;
+      setOpenRowMenuPath(null);
+      setShowHeaderMenu(false);
+    }
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        setOpenRowMenuPath(null);
+        setShowHeaderMenu(false);
+      }
+    }
+    document.addEventListener('pointerdown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [openRowMenuPath, showHeaderMenu]);
 
   async function pickExportDirectory() {
     const chosen = await window.lanvory.pickSyncDirectory().catch(() => null);
@@ -440,7 +473,7 @@ export function LiveMountSection({
     await openResourceSession(adapter, endpoint, remoteId);
   }
 
-  async function loadDirectory(sessionId: string, subPath: string) {
+  async function loadDirectory(sessionId: string, subPath: string, preservePreview = false): Promise<WebDAVEntry[] | null> {
     setExplorerError('');
     setConfirmDeletePath(null);
     setRenamingPath(null);
@@ -450,18 +483,26 @@ export function LiveMountSection({
       const sorted = [...parsed.data].sort((a, b) => Number(b.isDir) - Number(a.isDir) || a.name.localeCompare(b.name));
       setEntries(sorted);
       setCurrentPath(subPath);
-      setPreviewEntry(null);
-      setPreviewChunk(null);
+      if (!preservePreview) {
+        setPreviewEntry(null);
+        setPreviewChunk(null);
+        setEditingFile(false);
+        setEditorError('');
+      }
+      return sorted;
     } else {
       const errText = raw && typeof raw === 'object' && 'error' in raw && typeof raw.error === 'string'
         ? raw.error
         : 'Unable to open this directory.';
       setExplorerError(errText);
+      return null;
     }
   }
 
   async function previewFile(session: MountRecord, entry: WebDAVEntry, offset = 0) {
     setPreviewEntry(entry);
+    setEditingFile(false);
+    setEditorError('');
     if (isVideo(entry.name) || isAudio(entry.name) || isImage(entry.name)) {
       setPreviewChunk(null);
       return;
@@ -472,6 +513,83 @@ export function LiveMountSection({
       setPreviewChunk(parsed.data);
     } else {
       setPreviewChunk(null);
+    }
+  }
+
+  async function startEditingFile(session: MountRecord, entry: WebDAVEntry, chunk: StreamChunk) {
+    setEditorError('');
+    if (chunk.totalSize > 2 * 1024 * 1024) {
+      setEditorError('Files larger than 2 MB cannot be edited inline. Use Open in Finder instead.');
+      return;
+    }
+    let fullText = chunk.text ?? '';
+    if (chunk.offset > 0 || chunk.offset + chunk.length < chunk.totalSize) {
+      const raw = await window.lanvory
+        .streamResourceChunk(session.id, entry.path, 0, Math.max(chunk.totalSize, 65536), entry.etag)
+        .catch(() => null);
+      const parsed = streamChunkSchema.safeParse(raw);
+      if (!parsed.success || !parsed.data.isText) {
+        setEditorError('Unable to load the full file content for editing.');
+        return;
+      }
+      fullText = parsed.data.text ?? '';
+      setPreviewChunk(parsed.data);
+    }
+    setEditorContent(fullText);
+    setEditingFile(true);
+  }
+
+  async function saveEditedFile() {
+    if (!activeSession || !previewEntry) return;
+    setSavingFile(true);
+    setEditorError('');
+    try {
+      const res = await window.lanvory.writeResourceFile(activeSession.id, previewEntry.path, editorContent);
+      if (!res.ok) {
+        setEditorError(res.error || 'Unable to save file changes. Check if this folder allows editing.');
+        return;
+      }
+      setEditingFile(false);
+      const freshEntries = await loadDirectory(activeSession.id, currentPath, true);
+      const freshEntry = freshEntries?.find((item) => item.path === previewEntry.path);
+      const updatedEntry: WebDAVEntry = freshEntry ?? {
+        ...previewEntry,
+        size: new Blob([editorContent]).size,
+        etag: undefined,
+      };
+      await previewFile(activeSession, updatedEntry, 0);
+    } finally {
+      setSavingFile(false);
+    }
+  }
+
+  async function openSessionInFinder(session: MountRecord) {
+    setExplorerError('');
+    if (session.mounted && session.mountPoint) {
+      const opened = await window.lanvory.openMountInFinder(session.mountPoint).catch(() => false);
+      if (opened) return;
+    }
+    setBusy(true);
+    try {
+      const res = await window.lanvory.attachNativeMount(session.id).catch(() => null);
+      await onRefresh();
+      if (res && typeof res === 'object' && 'error' in res && typeof res.error === 'string') {
+        setExplorerError(res.error);
+        return;
+      }
+      const parsed = mountRecordSchema.safeParse(res);
+      if (parsed.success && parsed.data.mounted && parsed.data.mountPoint) {
+        const opened = await window.lanvory.openMountInFinder(parsed.data.mountPoint).catch(() => false);
+        if (!opened) {
+          setExplorerError(`Mounted at ${parsed.data.mountPoint}, but macOS Finder could not open the folder.`);
+        }
+      } else if (parsed.success && parsed.data.mountError) {
+        setExplorerError(`Finder integration failed: ${parsed.data.mountError}`);
+      } else {
+        setExplorerError('Unable to mount this folder in Finder.');
+      }
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -499,6 +617,9 @@ export function LiveMountSection({
   const parentPath = currentPath === '/'
     ? '/'
     : '/' + currentPath.split('/').filter(Boolean).slice(0, -1).join('/');
+  const filteredEntries = entryFilter.trim()
+    ? entries.filter((entry) => entry.name.toLowerCase().includes(entryFilter.trim().toLowerCase()))
+    : entries;
 
   if (mode === 'shared') {
     return (
@@ -829,23 +950,7 @@ export function LiveMountSection({
                       role="menuitem"
                       onClick={() => {
                         setShowHeaderMenu(false);
-                        if (activeSession.mounted && activeSession.mountPoint) {
-                          void window.lanvory.openMountInFinder(activeSession.mountPoint);
-                          return;
-                        }
-                        setBusy(true);
-                        void window.lanvory
-                          .attachNativeMount(activeSession.id)
-                          .then(async (res) => {
-                            await onRefresh();
-                            const parsed = mountRecordSchema.safeParse(res);
-                            if (parsed.success && parsed.data.mounted && parsed.data.mountPoint) {
-                              void window.lanvory.openMountInFinder(parsed.data.mountPoint);
-                            } else if (parsed.success && parsed.data.mountError) {
-                              setExplorerError('Finder integration is not available on this Mac — continue using the built-in browser.');
-                            }
-                          })
-                          .finally(() => setBusy(false));
+                        void openSessionInFinder(activeSession);
                       }}
                     >
                       <ExternalLink size={14} aria-hidden="true" />
@@ -1052,45 +1157,103 @@ export function LiveMountSection({
                 </div>
 
                 <div className="lr-toolbar-actions">
+                  {activeResource && (
+                    <span className={isReadOnlyResource ? 'state-pill' : 'state-pill is-active'}>
+                      {isReadOnlyResource ? 'View only' : 'Editable'}
+                    </span>
+                  )}
                   <button
                     type="button"
-                    className="lr-icon-btn"
-                    title="New folder"
+                    className="lr-action-btn"
+                    title={isReadOnlyResource ? 'This shared folder is View only' : 'Create a new file'}
+                    disabled={isReadOnlyResource}
+                    onClick={() => {
+                      setCreatingFile((v) => !v);
+                      setCreatingDir(false);
+                      setNewFileName('');
+                    }}
+                  >
+                    <FilePlus size={14} aria-hidden="true" />
+                    <span>New file</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="lr-action-btn"
+                    title={isReadOnlyResource ? 'This shared folder is View only' : 'Create a new folder'}
+                    disabled={isReadOnlyResource}
                     onClick={() => {
                       setCreatingDir((v) => !v);
+                      setCreatingFile(false);
                       setNewDirName('');
                     }}
                   >
-                    <FolderPlus size={15} aria-hidden="true" />
+                    <FolderPlus size={14} aria-hidden="true" />
+                    <span>New folder</span>
                   </button>
                   <button
                     type="button"
-                    className="lr-icon-btn"
+                    className="lr-action-btn"
                     title={activeSession.mounted ? 'Show in Finder' : 'Open in Finder'}
-                    onClick={() => {
-                      if (activeSession.mounted && activeSession.mountPoint) {
-                        void window.lanvory.openMountInFinder(activeSession.mountPoint);
-                        return;
-                      }
-                      setBusy(true);
-                      void window.lanvory
-                        .attachNativeMount(activeSession.id)
-                        .then(async (res) => {
-                          await onRefresh();
-                          const parsed = mountRecordSchema.safeParse(res);
-                          if (parsed.success && parsed.data.mounted && parsed.data.mountPoint) {
-                            void window.lanvory.openMountInFinder(parsed.data.mountPoint);
-                          } else if (parsed.success && parsed.data.mountError) {
-                            setExplorerError('Finder integration is not available on this Mac — continue using the built-in browser.');
-                          }
-                        })
-                        .finally(() => setBusy(false));
-                    }}
+                    onClick={() => void openSessionInFinder(activeSession)}
                   >
-                    <ExternalLink size={15} aria-hidden="true" />
+                    <ExternalLink size={14} aria-hidden="true" />
+                    <span>{activeSession.mounted ? 'Finder' : 'Open in Finder'}</span>
                   </button>
                 </div>
               </div>
+
+              {entries.length > 0 && (
+                <div className="lr-filter-row">
+                  <div className="lr-search-input">
+                    <Search size={14} aria-hidden="true" />
+                    <input
+                      type="search"
+                      value={entryFilter}
+                      onChange={(e) => setEntryFilter(e.target.value)}
+                      placeholder="Filter files and folders…"
+                      aria-label="Filter files and folders"
+                    />
+                  </div>
+                  <span className="lr-entry-count">
+                    {filteredEntries.length} {filteredEntries.length === 1 ? 'item' : 'items'}
+                  </span>
+                </div>
+              )}
+
+              {creatingFile && (
+                <form
+                  className="lr-inline-form"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    const clean = newFileName.trim();
+                    if (!clean) return;
+                    const nextPath = currentPath === '/' ? `/${clean}` : `${currentPath}/${clean}`;
+                    void window.lanvory.writeResourceFile(activeSession.id, nextPath, '').then(async (res) => {
+                      if (!res.ok) {
+                        setExplorerError(res.error || 'Unable to create file.');
+                        return;
+                      }
+                      setCreatingFile(false);
+                      setNewFileName('');
+                      await loadDirectory(activeSession.id, currentPath);
+                      const createdEntry: WebDAVEntry = { name: clean, path: nextPath, isDir: false, size: 0 };
+                      await previewFile(activeSession, createdEntry, 0);
+                      setEditorContent('');
+                      setEditingFile(true);
+                    });
+                  }}
+                >
+                  <FilePlus size={15} aria-hidden="true" />
+                  <input
+                    autoFocus
+                    value={newFileName}
+                    onChange={(e) => setNewFileName(e.target.value)}
+                    placeholder="New file name (e.g. notes.txt)…"
+                  />
+                  <button type="button" className="refresh" onClick={() => setCreatingFile(false)}>Cancel</button>
+                  <button type="submit" className="primary">Create</button>
+                </form>
+              )}
 
               {creatingDir && (
                 <form
@@ -1126,18 +1289,17 @@ export function LiveMountSection({
                 </div>
               )}
 
-              {entries.length === 0 ? (
+              {filteredEntries.length === 0 ? (
                 <div className="lr-empty-state">
                   <Folder size={26} aria-hidden="true" />
-                  <span>This folder is empty.</span>
+                  <span>{entries.length === 0 ? 'This folder is empty.' : 'No matching files or folders.'}</span>
                 </div>
               ) : (
                 <ul className="lr-list">
-                  {entries.map((entry) => {
+                  {filteredEntries.map((entry) => {
                     const isSelected = previewEntry?.path === entry.path;
                     const isRenaming = renamingPath === entry.path;
                     const isConfirmDelete = confirmDeletePath === entry.path;
-                    const menuOpen = openRowMenuPath === entry.path;
                     return (
                       <li key={entry.path} className={`lr-row ${isSelected ? 'is-selected' : ''}`}>
                         {isRenaming ? (
@@ -1196,7 +1358,7 @@ export function LiveMountSection({
                                 <div className="lr-row-confirm">
                                   <button
                                     type="button"
-                                    className="refresh"
+                                    className="lr-row-delete-confirm"
                                     onClick={() => {
                                       void window.lanvory.deleteResourceEntry(activeSession.id, entry.path).then((res) => {
                                         if (!res.ok && res.error) setExplorerError(res.error);
@@ -1207,48 +1369,48 @@ export function LiveMountSection({
                                   >
                                     Delete
                                   </button>
-                                  <button type="button" className="lr-icon-btn" onClick={() => setConfirmDeletePath(null)}>
+                                  <button type="button" className="lr-icon-btn" title="Cancel" onClick={() => setConfirmDeletePath(null)}>
                                     <X size={14} />
                                   </button>
                                 </div>
                               ) : (
-                                <div className="lr-menu-anchor">
-                                  <button
-                                    type="button"
-                                    className="lr-icon-btn"
-                                    title="Actions"
-                                    onClick={() => setOpenRowMenuPath((prev) => (prev === entry.path ? null : entry.path))}
-                                  >
-                                    <MoreHorizontal size={16} aria-hidden="true" />
-                                  </button>
-                                  {menuOpen && (
-                                    <div className="lr-popover" role="menu">
+                                <div className="lr-row-actions">
+                                  {!entry.isDir && (
+                                    <button
+                                      type="button"
+                                      className="lr-icon-btn"
+                                      title="Preview file"
+                                      onClick={() => void previewFile(activeSession, entry, 0)}
+                                    >
+                                      <Eye size={14} aria-hidden="true" />
+                                    </button>
+                                  )}
+                                  {!isReadOnlyResource && (
+                                    <>
                                       <button
                                         type="button"
-                                        role="menuitem"
+                                        className="lr-icon-btn"
+                                        title="Rename"
                                         onClick={() => {
                                           setRenamingPath(entry.path);
                                           setRenameValue(entry.name);
                                           setConfirmDeletePath(null);
-                                          setOpenRowMenuPath(null);
                                         }}
                                       >
-                                        <Pencil size={13} aria-hidden="true" />
-                                        <span>Rename</span>
+                                        <Pencil size={14} aria-hidden="true" />
                                       </button>
                                       <button
                                         type="button"
-                                        role="menuitem"
+                                        className="lr-icon-btn is-danger"
+                                        title="Delete"
                                         onClick={() => {
                                           setConfirmDeletePath(entry.path);
                                           setRenamingPath(null);
-                                          setOpenRowMenuPath(null);
                                         }}
                                       >
-                                        <Trash2 size={13} aria-hidden="true" />
-                                        <span>Delete</span>
+                                        <Trash2 size={14} aria-hidden="true" />
                                       </button>
-                                    </div>
+                                    </>
                                   )}
                                 </div>
                               )}
@@ -1267,11 +1429,34 @@ export function LiveMountSection({
                     <h4 title={previewEntry.name}>{previewEntry.name}</h4>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <span className="pill-badge">{formatBytes(previewEntry.size)}</span>
-                      <button type="button" className="lr-icon-btn" title="Close preview" onClick={() => setPreviewEntry(null)}>
+                      {previewChunk?.isText && !editingFile && (
+                        <button
+                          type="button"
+                          className="refresh"
+                          style={{ minHeight: 28, padding: '0 10px', fontSize: '.76rem' }}
+                          disabled={isReadOnlyResource}
+                          title={isReadOnlyResource ? 'This shared folder is View only' : 'Edit file'}
+                          onClick={() => void startEditingFile(activeSession, previewEntry, previewChunk)}
+                        >
+                          <Pencil size={12} aria-hidden="true" />
+                          <span>Edit</span>
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        className="lr-icon-btn"
+                        title="Close preview"
+                        onClick={() => {
+                          setPreviewEntry(null);
+                          setEditingFile(false);
+                          setEditorError('');
+                        }}
+                      >
                         <X size={15} aria-hidden="true" />
                       </button>
                     </div>
                   </div>
+                  {editorError && <MountBanner feedback={{ tone: 'error', text: editorError }} />}
                   {isVideo(previewEntry.name) && (
                     <video
                       controls
@@ -1296,26 +1481,69 @@ export function LiveMountSection({
                     />
                   )}
                   {!isVideo(previewEntry.name) && !isAudio(previewEntry.name) && !isImage(previewEntry.name) && previewChunk && (
-                    <>
-                      <div className="lr-resource-meta">
-                        Streaming on demand · {formatBytes(previewChunk.offset + previewChunk.length)} of {formatBytes(previewChunk.totalSize)} loaded
-                      </div>
-                      {previewChunk.isText ? (
-                        <pre className="lr-preview-code">{previewChunk.text}</pre>
-                      ) : (
-                        <p className="panel-hint">Binary file preview is not available ({formatBytes(previewChunk.length)} loaded).</p>
-                      )}
-                      {previewChunk.offset + previewChunk.length < previewChunk.totalSize && (
-                        <button
-                          type="button"
-                          className="refresh"
-                          style={{ justifySelf: 'start' }}
-                          onClick={() => void previewFile(activeSession, previewEntry, previewChunk.offset + previewChunk.length)}
-                        >
-                          <span>Load next 64 KB</span>
-                        </button>
-                      )}
-                    </>
+                    editingFile ? (
+                      <>
+                        <textarea
+                          className="lr-editor-textarea"
+                          value={editorContent}
+                          onChange={(e) => setEditorContent(e.target.value)}
+                          onKeyDown={(e) => {
+                            if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') {
+                              e.preventDefault();
+                              if (!savingFile) void saveEditedFile();
+                            }
+                          }}
+                          aria-label={`Edit ${previewEntry.name}`}
+                          spellCheck={false}
+                        />
+                        <div className="lr-editor-actions">
+                          <span className="lr-editor-hint">Press Cmd/Ctrl + S to save</span>
+                          <div className="lr-editor-buttons">
+                            <button
+                              type="button"
+                              className="refresh"
+                              disabled={savingFile}
+                              onClick={() => {
+                                setEditingFile(false);
+                                setEditorError('');
+                              }}
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              type="button"
+                              className="primary"
+                              disabled={savingFile}
+                              onClick={() => void saveEditedFile()}
+                            >
+                              <Save size={14} aria-hidden="true" />
+                              <span>{savingFile ? 'Saving…' : 'Save changes'}</span>
+                            </button>
+                          </div>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="lr-resource-meta">
+                          Streaming on demand · {formatBytes(previewChunk.offset + previewChunk.length)} of {formatBytes(previewChunk.totalSize)} loaded
+                        </div>
+                        {previewChunk.isText ? (
+                          <pre className="lr-preview-code">{previewChunk.text}</pre>
+                        ) : (
+                          <p className="panel-hint">Binary file preview is not available ({formatBytes(previewChunk.length)} loaded).</p>
+                        )}
+                        {previewChunk.offset + previewChunk.length < previewChunk.totalSize && (
+                          <button
+                            type="button"
+                            className="refresh"
+                            style={{ justifySelf: 'start' }}
+                            onClick={() => void previewFile(activeSession, previewEntry, previewChunk.offset + previewChunk.length)}
+                          >
+                            <span>Load next 64 KB</span>
+                          </button>
+                        )}
+                      </>
+                    )
                   )}
                 </div>
               )}

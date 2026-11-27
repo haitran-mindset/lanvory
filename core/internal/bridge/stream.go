@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"net"
+	"net/netip"
 	"time"
 )
 
@@ -43,6 +44,13 @@ func Serve(ctx context.Context, remote net.Conn, fingerprint string, lookup Look
 
 	dialer := net.Dialer{Timeout: 2 * time.Second}
 	target, err := dialer.DialContext(ctx, "tcp", service.Target.String())
+	if err != nil && service.Target.Addr() == netip.MustParseAddr("127.0.0.1") {
+		alt := netip.AddrPortFrom(netip.MustParseAddr("::1"), service.Target.Port())
+		if altConn, altErr := dialer.DialContext(ctx, "tcp", alt.String()); altErr == nil {
+			target = altConn
+			err = nil
+		}
+	}
 	if err != nil {
 		return err
 	}

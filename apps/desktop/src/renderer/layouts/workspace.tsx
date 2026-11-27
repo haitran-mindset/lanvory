@@ -151,10 +151,12 @@ export function Workspace({
               <strong>lanvory</strong><span>/</span><span>local network, truly yours.</span>
             </div>
           </header>
-          <div className="page-heading">
-            <h2>{page === "Devices" ? "Nearby Devices" : page}</h2>
-            {action}
-          </div>
+          {(page !== "Devices" || action) && (
+            <div className="page-heading">
+              <h2>{page === "Devices" ? "Nearby Devices" : page}</h2>
+              {action}
+            </div>
+          )}
         </div>
         <div
           ref={scrollRegion}

@@ -1139,6 +1139,19 @@ if (!app.requestSingleInstanceLock()) {
         .then(() => ({ ok: true }), (err) => ({ ok: false, error: err?.message || 'Unable to rename entry.' }));
     });
 
+    ipcMain.handle('lanvory:mount-write', async (event, id, filePath, content) => {
+      assertTrustedFrame(event);
+      if (typeof id !== 'string' || !/^[a-zA-Z0-9_-]{1,64}$/.test(id)
+          || typeof filePath !== 'string' || !filePath.trim()
+          || typeof content !== 'string') {
+        return { ok: false, error: 'Invalid file write payload.' };
+      }
+      return requestDaemon('POST', `/v1/mounts/${encodeURIComponent(id)}/write`, {
+        path: filePath.trim(),
+        content,
+      }).then(() => ({ ok: true }), (err) => ({ ok: false, error: err?.message || 'Unable to write file.' }));
+    });
+
     ipcMain.handle('lanvory:mount-events', async (event, id, since) => {
       assertTrustedFrame(event);
       if (typeof id !== 'string' || !/^[a-zA-Z0-9_-]{1,64}$/.test(id)) {
@@ -1197,7 +1210,7 @@ if (!app.requestSingleInstanceLock()) {
     });
     ipcMain.handle('lanvory:service-action', async (event, action, input) => {
       assertTrustedFrame(event);
-      if (!input || typeof input !== 'object') return false;
+      if (!input || typeof input !== 'object') return { ok: false, error: 'Invalid service action payload.' };
       const { id, target, bind, adapter, endpoint, fingerprint, duration } = input;
       const matches = (value, pattern) => typeof value === 'string' && pattern.test(value);
       const serviceID = matches(id, /^[a-z0-9][a-z0-9_-]{0,63}$/);
@@ -1210,16 +1223,24 @@ if (!app.requestSingleInstanceLock()) {
         args = ['services', 'remove', id];
       } else if ((action === 'grant' || action === 'revoke') && serviceID && pin) {
         args = permissionArgs(action, fingerprint, 'service-connect', id, duration);
-        if (!args) return false;
+        if (!args) return { ok: false, error: 'Invalid permission duration.' };
       } else if (action === 'open' && serviceID && pin && (bind === '' || loopback(bind)) &&
         matches(adapter, /^[a-zA-Z0-9_.-]{1,32}$/) && matches(endpoint, /^(?:[0-9]{1,3}\.){3}[0-9]{1,3}:[0-9]{1,5}$/)) {
         args = ['tunnels', 'open', adapter, endpoint, fingerprint, id, bind || '127.0.0.1:0'];
       } else if (action === 'stop' && matches(id, /^[a-f0-9]{32}$/)) {
         args = ['tunnels', 'stop', id];
       } else {
-        return false;
+        return { ok: false, error: 'Invalid service parameters. Check the service name, local address, or peer selection.' };
       }
-      return exec(path.join(bundle, 'lanvory'), args, { timeout: 4000, maxBuffer: 4096 }).then(() => true, () => false);
+      return exec(path.join(bundle, 'lanvory'), args, { timeout: 12000, maxBuffer: 4096 }).then(
+        () => ({ ok: true }),
+        (err) => {
+          const detail = typeof err?.stderr === 'string' && err.stderr.trim()
+            ? err.stderr.trim().replace(/^lanvory:\s*/, '')
+            : err?.message || 'Service action failed.';
+          return { ok: false, error: detail };
+        },
+      );
     });
     ready = true;
     if (process.platform === 'darwin') {
