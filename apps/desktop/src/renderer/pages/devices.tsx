@@ -160,7 +160,7 @@ export function DevicesPage({ response, retrying, visible, incomingPairingEnable
       </div>
 
       {identity && (
-        <div className="devices-bottom-grid">
+        <div className="device-register">
           <PairingPanel onNetwork={onNetwork} selection={pairingTarget} onClearTarget={onClearTarget} visible={visible} onPaired={onPaired} onChange={onTrustChange} />
           <TrustedPeers key={identity.id} ownerId={identity.id} externalRevision={trustRevision} visible={visible} routes={routes} />
         </div>

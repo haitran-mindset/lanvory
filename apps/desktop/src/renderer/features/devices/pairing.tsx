@@ -1,5 +1,5 @@
 import { type ClipboardEvent, type FormEvent, useEffect, useRef, useState } from 'react';
-import { ArrowRight, Clock3, Fingerprint, Link2, Monitor, ShieldCheck, X } from 'lucide-react';
+import { ArrowRight, ChevronDown, Clock3, Fingerprint, Link2, Monitor, ShieldCheck, X } from 'lucide-react';
 import { z } from 'zod';
 import { connectionError, endpointAddress, PeerConnectionFields } from '../../components/peer-connection-fields';
 import { Checkbox } from '../../components/ui/checkbox';
@@ -277,15 +277,7 @@ export function PairingPanel({ selection, onClearTarget, onNetwork, visible, onC
 
   return (
     <section className="nearby pairing-panel" aria-labelledby="pairing-heading">
-      <div className="device-discovery-heading pairing-panel-heading">
-        <span className="device-discovery-emblem">
-          <Link2 size={19} aria-hidden="true" />
-        </span>
-        <div>
-          <h3 id="pairing-heading" tabIndex={-1}>Pair a Device</h3>
-          <p>Connect a new device to your network.</p>
-        </div>
-      </div>
+      <h3 id="pairing-heading" tabIndex={-1}><Link2 size={18} aria-hidden="true" /> Pair a device</h3>
       {requests === null && <p role="status">Unable to read pairing requests.</p>}
       <dialog ref={dialog} className="pairing-dialog" aria-labelledby="confirm-pairing-title"
         aria-describedby="confirm-pairing-help" onCancel={(event) => {
@@ -321,7 +313,7 @@ export function PairingPanel({ selection, onClearTarget, onNetwork, visible, onC
         </article>
       ) : (
         <details className="pairing-card pairing-manual" key={revision} open={revision > 0 || undefined}>
-          <summary>Pair by address</summary>
+          <summary>Pair by address <ChevronDown size={15} aria-hidden="true" /></summary>
           {startForm}
         </details>
       )}

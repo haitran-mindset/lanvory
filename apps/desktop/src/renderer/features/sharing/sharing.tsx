@@ -15,7 +15,6 @@ import {
   ArrowUpRight,
   Bluetooth,
   Check,
-  CheckCircle,
   Clock3,
   File,
   FolderOpen,
@@ -32,6 +31,7 @@ import { PanelHeading } from "../../components/panel-heading";
 import { useNotifications } from "../../components/notifications";
 import { InboxAccess } from "./inbox-access";
 import { ClipboardCard } from "./clipboard-card";
+import "./sharing.css";
 
 const offerSchema = z.object({
   id: z.string(),
@@ -282,6 +282,16 @@ export type PeerRoute = {
   label?: string;
 };
 
+const sharingTabs = [
+  { id: "send", label: "Send", icon: ArrowUpRight },
+  { id: "incoming", label: "Incoming", icon: Inbox },
+  { id: "permissions", label: "Permissions", icon: ShieldCheck },
+  { id: "clipboard", label: "Clipboard", icon: File },
+  { id: "history", label: "History", icon: Clock3 },
+] as const;
+
+type SharingTab = (typeof sharingTabs)[number]["id"];
+
 export function Sharing({
   ownerId,
   visible,
@@ -300,6 +310,15 @@ export function Sharing({
   onClearP2PRoute?(fingerprint: string): void;
 }) {
   const { notify } = useNotifications();
+  const [activeTab, setActiveTab] = useState<SharingTab>("send");
+  const tabButtons = useRef<Partial<Record<SharingTab, HTMLButtonElement | null>>>({});
+
+  function openTab(tab: SharingTab) {
+    setActiveTab(tab);
+    tabButtons.current[tab]?.focus({ preventScroll: true });
+    tabButtons.current[tab]?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }
+
   const [recipients, setRecipients] = useState<z.infer<
     typeof recipientSchema
   > | null>();
@@ -495,9 +514,7 @@ export function Sharing({
     setSendMessage(
       `Select “${item.name}” to resend${item.fingerprint ? ` to ${pairedDeviceName(item.fingerprint, names)}` : ""}.`,
     );
-    document
-      .querySelector(".sharing-grid .operation-highlight")
-      ?.scrollIntoView({ behavior: "smooth" });
+    openTab("send");
   }
 
   async function removeFile() {
@@ -679,16 +696,48 @@ export function Sharing({
       <h2 id="sharing-heading" className="sr-only">
         Sharing
       </h2>
+      <div className="sharing-tabs" role="tablist" aria-label="Sharing sections">
+        {sharingTabs.map(({ id, label, icon: Icon }, index) => {
+          const count = id === "incoming" ? activity?.offers.length
+            : id === "history" ? activeTransfers.length : 0;
+          return (
+            <button
+              key={id}
+              ref={(element) => { tabButtons.current[id] = element; }}
+              id={`sharing-tab-${id}`}
+              type="button"
+              role="tab"
+              aria-selected={activeTab === id}
+              aria-controls={`sharing-panel-${id}`}
+              tabIndex={activeTab === id ? 0 : -1}
+              onClick={() => openTab(id)}
+              onKeyDown={(event) => {
+                const last = sharingTabs.length - 1;
+                const next = event.key === "ArrowRight" ? (index + 1) % sharingTabs.length
+                  : event.key === "ArrowLeft" ? (index + last) % sharingTabs.length
+                  : event.key === "Home" ? 0 : event.key === "End" ? last : undefined;
+                if (next === undefined) return;
+                event.preventDefault();
+                openTab(sharingTabs[next].id);
+              }}
+            >
+              <Icon size={16} aria-hidden="true" />
+              {label}
+              {!!count && <span className="sharing-tab-count" aria-label={`${count} ${id === "incoming" ? "pending requests" : "active transfers"}`}>{count}</span>}
+            </button>
+          );
+        })}
+      </div>
       {activity === undefined && <p>Reading transfer activity…</p>}
       {activity === null && (
         <p role="status">Unable to load file activity. Reconnecting…</p>
       )}
-      <div className="operation-grid sharing-grid">
-        <section className="operation-card operation-highlight">
+      <div className="sharing-tab-panel" id="sharing-panel-send" role="tabpanel" aria-labelledby="sharing-tab-send" hidden={activeTab !== "send"} tabIndex={0}>
+        <section id="sharing-send" className="operation-card sharing-compose" tabIndex={-1} aria-labelledby="sharing-send-heading">
           <PanelHeading
             icon={ArrowUpRight}
+            id="sharing-send-heading"
             title="Send a file"
-            description="Send a file to a paired device on your network."
           />
           <form className="trust-form" onSubmit={(event) => void send(event)}>
             {recipients?.length === 0 ? (
@@ -718,9 +767,9 @@ export function Sharing({
                 <ShieldCheck size={17} aria-hidden="true" />
                 <span>
                   On <strong>{pairedDeviceName(recipient, names)}</strong>, open{" "}
-                  <strong>Sharing → Allow file requests</strong> and allow this
-                  device. They then approve your file in{" "}
-                  <strong>Incoming requests</strong>.
+                  <strong>Sharing → Permissions</strong> and allow file requests
+                  from this device. The recipient can then approve your request
+                  in the <strong>Incoming</strong> tab.
                 </span>
               </p>
             )}
@@ -877,79 +926,48 @@ export function Sharing({
             {sendMessage}
           </p>
         </section>
+      </div>
+      <div className="sharing-tab-panel" id="sharing-panel-incoming" role="tabpanel" aria-labelledby="sharing-tab-incoming" hidden={activeTab !== "incoming"} tabIndex={0}>
         <section
-          className={`operation-card ${activity?.offers.length ? "operation-highlight" : ""}`}
+          id="sharing-incoming"
+          className="operation-card sharing-incoming"
+          tabIndex={-1}
+          aria-labelledby="sharing-incoming-heading"
         >
-          <PanelHeading
-            icon={Inbox}
-            title="Incoming requests"
-            badge={
-              activity?.offers.length ? (
-                <span className="badge-count badge-attention">
-                  {activity.offers.length} new
-                </span>
-              ) : null
-            }
-            description="Approve a request to start receiving that file."
-            action={
-              <button
-                type="button"
-                className="refresh sharing-open-inbox"
-                disabled={openingInbox}
-                onClick={() => void openInbox()}
-              >
-                <FolderOpen size={15} aria-hidden="true" />
-                <span>Open inbox</span>
-                {completedIncomingCount > 0 && (
-                  <span
-                    className="inbox-count-tag"
-                    title={`${completedIncomingCount} received ${completedIncomingCount === 1 ? "file" : "files"} in inbox`}
-                  >
-                    {completedIncomingCount}
-                  </span>
-                )}
+          <div className="incoming-desk-heading">
+            <div>
+              <h3 id="sharing-incoming-heading">Incoming requests</h3>
+              <p>Review and approve files sent by your paired devices.</p>
+            </div>
+            <div className="incoming-desk-actions">
+              <button type="button" className="incoming-permissions-link" onClick={() => openTab("permissions")}>
+                <ShieldCheck size={15} aria-hidden="true" /> Permissions
               </button>
-            }
-          />
-          <button
-            type="button"
-            className="refresh file-request-settings"
-            onClick={() => {
-              document.getElementById("file-request-access")?.focus();
-            }}
-          >
-            <ShieldCheck size={15} aria-hidden="true" /> Manage who can send
-            requests
-          </button>
-          {inboxMessage && <p role="status">{inboxMessage}</p>}
-          <p className="sharing-feedback" role="status">
-            {offerMessage}
-          </p>
-          {activity?.offers.length === 0 && (
-            <div className="inbox-empty-state">
-              <Inbox
-                size={28}
-                className="inbox-empty-icon"
-                aria-hidden="true"
-              />
-              <p className="inbox-empty-title">No pending requests</p>
-              <p className="inbox-empty-desc">
-                Requests from devices you allow will appear here.
-              </p>
+              <button type="button" className="refresh sharing-open-inbox" disabled={openingInbox}
+                onClick={() => void openInbox()}>
+                <FolderOpen size={15} aria-hidden="true" /> Open inbox
+              </button>
+            </div>
+          </div>
+          {activity && (
+            <div className="incoming-queue-line">
+              <span className="incoming-queue-status" data-pending={activity.offers.length > 0}>
+                <strong>{activity.offers.length}</strong> pending
+              </span>
               {completedIncomingCount > 0 && (
-                <div className="inbox-received-summary">
-                  <CheckCircle
-                    size={14}
-                    className="inbox-received-icon"
-                    aria-hidden="true"
-                  />
-                  <span>
-                    <strong>{completedIncomingCount}</strong>{" "}
-                    {completedIncomingCount === 1 ? "file" : "files"} received
-                    in your Inbox
-                  </span>
-                </div>
+                <span><strong>{completedIncomingCount}</strong> received</span>
               )}
+            </div>
+          )}
+          {inboxMessage && <p role="status">{inboxMessage}</p>}
+          <p className="sharing-feedback" role="status">{offerMessage}</p>
+          {activity?.offers.length === 0 && (
+            <div className="incoming-queue-empty">
+              <div className="incoming-tray-mark" aria-hidden="true"><Inbox size={30} strokeWidth={1.5} /></div>
+              <div>
+                <h4>No pending requests</h4>
+                <p>When an allowed device requests to send a file, it will appear here.</p>
+              </div>
             </div>
           )}
           {!!activity?.offers.length && (
@@ -1030,169 +1048,172 @@ export function Sharing({
           )}
         </section>
       </div>
-      {visible && <InboxAccess ownerId={ownerId} />}
-      {visible && (
-        <ClipboardCard
-          ownerId={ownerId}
-          visible={visible}
-          recipients={recipients}
-          routes={routes}
-        />
-      )}
-      {activeTransfers.length > 0 && (
+      <div className="sharing-tab-panel" id="sharing-panel-permissions" role="tabpanel" aria-labelledby="sharing-tab-permissions" hidden={activeTab !== "permissions"} tabIndex={0}>
+        {visible && <InboxAccess ownerId={ownerId} />}
+      </div>
+      <div className="sharing-tab-panel" id="sharing-panel-clipboard" role="tabpanel" aria-labelledby="sharing-tab-clipboard" hidden={activeTab !== "clipboard"} tabIndex={0}>
+        {visible && (
+          <ClipboardCard ownerId={ownerId} visible={visible && activeTab === "clipboard"} recipients={recipients} routes={routes} />
+        )}
+      </div>
+      <div className="sharing-tab-panel" id="sharing-panel-history" role="tabpanel" aria-labelledby="sharing-tab-history" hidden={activeTab !== "history"} tabIndex={0}>
+        {activeTransfers.length > 0 && (
+          <section
+            className="operation-card sharing-ledger sharing-active"
+            aria-labelledby="active-transfers-heading"
+          >
+            <PanelHeading
+              icon={Radio}
+              id="active-transfers-heading"
+              title="Active transfers"
+              badge={
+                <span className="badge-count badge-active">
+                  {activeTransfers.length} active
+                </span>
+              }
+            />
+            <ul className="sharing-transfer-list">
+              {activeTransfers.map((item) => (
+                <TransferRow
+                  item={item}
+                  key={item.id}
+                  peerName={transferPeerName(item)}
+                />
+              ))}
+            </ul>
+          </section>
+        )}
         <section
-          className="operation-card"
-          aria-labelledby="active-transfers-heading"
+          id="sharing-history"
+          className="operation-card sharing-ledger"
+          tabIndex={-1}
+          aria-labelledby="transfer-history-heading"
         >
           <PanelHeading
-            icon={Radio}
-            id="active-transfers-heading"
-            title="Active transfers"
+            icon={Clock3}
+            id="transfer-history-heading"
+            title="Transfer history"
             badge={
-              <span className="badge-count badge-active">
-                {activeTransfers.length} active
-              </span>
+              history.length > 0 ? (
+                <span className="tag">{history.length}</span>
+              ) : null
             }
-          />
-          <ul className="sharing-transfer-list">
-            {activeTransfers.map((item) => (
-              <TransferRow
-                item={item}
-                key={item.id}
-                peerName={transferPeerName(item)}
-              />
-            ))}
-          </ul>
-        </section>
-      )}
-      <section
-        className="operation-card"
-        aria-labelledby="transfer-history-heading"
-      >
-        <PanelHeading
-          icon={Clock3}
-          id="transfer-history-heading"
-          title="Transfer history"
-          badge={
-            history.length > 0 ? (
-              <span className="tag">{history.length}</span>
-            ) : null
-          }
-          action={
-            history.length > 0 ? (
-              confirmingClearAll ? (
-                <div className="sharing-history-actions">
-                  <button
-                    type="button"
-                    className="primary sharing-open-inbox"
-                    disabled={removingHistory}
-                    onClick={() => void clearAllHistory()}
-                  >
-                    <Trash2 size={14} aria-hidden="true" />
-                    <span>Confirm clear all</span>
-                  </button>
+            action={
+              history.length > 0 ? (
+                confirmingClearAll ? (
+                  <div className="sharing-history-actions">
+                    <button
+                      type="button"
+                      className="primary sharing-open-inbox"
+                      disabled={removingHistory}
+                      onClick={() => void clearAllHistory()}
+                    >
+                      <Trash2 size={14} aria-hidden="true" />
+                      <span>Confirm clear all</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="refresh sharing-open-inbox"
+                      disabled={removingHistory}
+                      onClick={() => setConfirmingClearAll(false)}
+                    >
+                      <span>Cancel</span>
+                    </button>
+                  </div>
+                ) : (
                   <button
                     type="button"
                     className="refresh sharing-open-inbox"
                     disabled={removingHistory}
-                    onClick={() => setConfirmingClearAll(false)}
+                    onClick={() => {
+                      setPendingHistoryRemoval(undefined);
+                      setConfirmingClearAll(true);
+                    }}
                   >
-                    <span>Cancel</span>
+                    <Trash2 size={14} aria-hidden="true" />
+                    <span>Clear all</span>
                   </button>
-                </div>
-              ) : (
-                <button
-                  type="button"
-                  className="refresh sharing-open-inbox"
-                  disabled={removingHistory}
-                  onClick={() => {
-                    setPendingHistoryRemoval(undefined);
-                    setConfirmingClearAll(true);
-                  }}
-                >
-                  <Trash2 size={14} aria-hidden="true" />
-                  <span>Clear all</span>
-                </button>
-              )
-            ) : null
-          }
-        />
-        <p className="sharing-feedback" role="status">
-          {historyMessage}
-        </p>
-        {activity?.historyUnavailable && (
-          <p role="status">Persistent history could not be read or saved.</p>
-        )}
-        {activity && history.length === 0 && (
-          <p className="panel-empty">No past transfers yet.</p>
-        )}
-        {history.length > 0 && (
-          <div className="sharing-history-controls">
-            <div className="trust-form sharing-history-search">
-              <label>
-                Search by filename
-                <input
-                  type="search"
-                  value={historySearch}
-                  onChange={(event) => {
-                    setHistorySearch(event.currentTarget.value);
-                    if (!removingHistory) setPendingHistoryRemoval(undefined);
+                )
+              ) : null
+            }
+          />
+          <p className="sharing-feedback" role="status">
+            {historyMessage}
+          </p>
+          {activity?.historyUnavailable && (
+            <p role="status">Persistent history could not be read or saved.</p>
+          )}
+          {activity && history.length === 0 && (
+            <p className="panel-empty">No past transfers yet.</p>
+          )}
+          {history.length > 0 && (
+            <div className="sharing-history-controls">
+              <div className="trust-form sharing-history-search">
+                <label>
+                  Search by filename
+                  <input
+                    type="search"
+                    value={historySearch}
+                    onChange={(event) => {
+                      setHistorySearch(event.currentTarget.value);
+                      if (!removingHistory) setPendingHistoryRemoval(undefined);
+                    }}
+                  />
+                </label>
+              </div>
+              <div className="sharing-history-filter">
+                <SelectField
+                  label="Direction"
+                  name="directionFilter"
+                  value={directionFilter}
+                  options={historyDirectionOptions}
+                  onValueChange={(val) => {
+                    if (val === "all" || val === "incoming" || val === "outgoing")
+                      setDirectionFilter(val);
                   }}
                 />
-              </label>
+              </div>
+              <div className="sharing-history-filter">
+                <SelectField
+                  label="Status"
+                  name="statusFilter"
+                  value={statusFilter}
+                  options={historyStatusOptions}
+                  onValueChange={(val) => {
+                    if (val === "all" || val === "completed" || val === "failed")
+                      setStatusFilter(val);
+                  }}
+                />
+              </div>
             </div>
-            <div className="sharing-history-filter">
-              <SelectField
-                label="Direction"
-                name="directionFilter"
-                value={directionFilter}
-                options={historyDirectionOptions}
-                onValueChange={(val) => {
-                  if (val === "all" || val === "incoming" || val === "outgoing")
-                    setDirectionFilter(val);
-                }}
-              />
-            </div>
-            <div className="sharing-history-filter">
-              <SelectField
-                label="Status"
-                name="statusFilter"
-                value={statusFilter}
-                options={historyStatusOptions}
-                onValueChange={(val) => {
-                  if (val === "all" || val === "completed" || val === "failed")
-                    setStatusFilter(val);
-                }}
-              />
-            </div>
-          </div>
-        )}
-        {history.length > 0 && matchingHistory.length === 0 && (
-          <p className="panel-empty" role="status">
-            No files match your search.
-          </p>
-        )}
-        {matchingHistory.length > 0 && (
-          <ul className="sharing-transfer-list">
-            {matchingHistory.map((item) => (
-              <TransferRow
-                item={item}
-                key={item.id}
-                peerName={transferPeerName(item)}
-                busy={removingHistory}
-                onRetry={() => retryTransfer(item)}
-                onRemove={() => setPendingHistoryRemoval(item.id)}
-                onConfirm={
-                  pendingHistoryRemoval === item.id
-                    ? () => void removeHistory(item)
-                    : undefined
-                }
-                onCancel={() => setPendingHistoryRemoval(undefined)}
-              />
-            ))}
-          </ul>
-        )}
-      </section>
+          )}
+          {history.length > 0 && matchingHistory.length === 0 && (
+            <p className="panel-empty" role="status">
+              No files match your search.
+            </p>
+          )}
+          {matchingHistory.length > 0 && (
+            <ul className="sharing-transfer-list">
+              {matchingHistory.map((item) => (
+                <TransferRow
+                  item={item}
+                  key={item.id}
+                  peerName={transferPeerName(item)}
+                  busy={removingHistory}
+                  onRetry={() => retryTransfer(item)}
+                  onRemove={() => setPendingHistoryRemoval(item.id)}
+                  onConfirm={
+                    pendingHistoryRemoval === item.id
+                      ? () => void removeHistory(item)
+                      : undefined
+                  }
+                  onCancel={() => setPendingHistoryRemoval(undefined)}
+                />
+              ))}
+            </ul>
+          )}
+        </section>
+      </div>
     </section>
   );
 }

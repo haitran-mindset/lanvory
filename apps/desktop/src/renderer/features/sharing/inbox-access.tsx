@@ -64,17 +64,22 @@ export function InboxAccess({ ownerId }: { ownerId?: string }) {
   const grants = new Map(access?.grants.map((grant) => [grant.fingerprint, grant]));
 
   return (
-    <section id="file-request-access" className="operation-card" tabIndex={-1} aria-labelledby="inbox-access-heading">
-      <PanelHeading icon={ShieldCheck} id="inbox-access-heading" title="Allow file requests" description="Choose which paired devices can ask to send files to this device. You approve each file in Incoming requests." />
+    <section id="file-request-access" className="operation-card inbox-permissions" tabIndex={-1} aria-labelledby="inbox-access-heading">
+      <PanelHeading icon={ShieldCheck} id="inbox-access-heading" title="File request permissions" description="Choose who can request to send files. Approve individual requests in Incoming." />
       {access === undefined && <p>Loading paired devices and permissions…</p>}
       {access === null && <p role="status">Unable to load file request permissions.</p>}
       {access?.peers.length === 0 && <p className="panel-empty">Pair a device before allowing file requests.</p>}
       {!!access?.peers.length && (
-        <label className="inbox-device-search">
-          <Search size={16} aria-hidden="true" />
-          <input type="search" placeholder="Find a paired device" aria-label="Find a paired device" value={query}
-            onChange={(event) => { setQuery(event.currentTarget.value); setEditing(undefined); }} />
-        </label>
+        <div className="inbox-permissions-toolbar">
+          <span className="inbox-permissions-count">
+            {access.peers.length} paired {access.peers.length === 1 ? 'device' : 'devices'}
+          </span>
+          <label className="inbox-device-search">
+            <Search size={16} aria-hidden="true" />
+            <input type="search" placeholder="Search devices" aria-label="Search paired devices" value={query}
+              onChange={(event) => { setQuery(event.currentTarget.value); setEditing(undefined); }} />
+          </label>
+        </div>
       )}
       {!!access?.peers.length && !devices.length && <p className="panel-empty" role="status">No devices match your search.</p>}
       {!!devices.length && <ul className="inbox-device-list">
@@ -89,38 +94,36 @@ export function InboxAccess({ ownerId }: { ownerId?: string }) {
                 <div className="inbox-device-identity">
                   <Monitor size={18} aria-hidden="true" className="inbox-device-icon" />
                   <div className="inbox-device-info">
-                    <div className="inbox-device-title-row">
-                      <strong className="inbox-device-name">{deviceName}</strong>
-                    </div>
+                    <strong className="inbox-device-name">{deviceName}</strong>
                     <p className="inbox-device-status">
                       {grant?.inactive ? (
-                        <span className="service-grant-badge">Permission expired</span>
+                        <span data-state="expired">Expired</span>
                       ) : grant?.expiresAt ? (
-                        <span className="inbox-status-allowed">Requests allowed until {new Date(grant.expiresAt).toLocaleString()}</span>
+                        <span data-state="allowed">Allowed until <time dateTime={grant.expiresAt}>{new Date(grant.expiresAt).toLocaleString()}</time></span>
                       ) : grant ? (
-                        <span className="inbox-status-allowed">Requests allowed</span>
+                        <span data-state="allowed">Allowed</span>
                       ) : (
-                        <span className="inbox-status-none">Requests blocked</span>
+                        <span data-state="blocked">Blocked</span>
                       )}
                     </p>
                   </div>
                 </div>
                 {expandable ? (
-                  <button type="button" className="refresh" aria-expanded={expanded} disabled={busy}
-                    aria-label={`${expanded ? 'Hide options for' : 'Set permission for'} ${deviceName}`}
+                  <button type="button" className="inbox-permission-action" aria-expanded={expanded} disabled={busy}
+                    aria-label={`${expanded ? 'Hide options for' : 'Allow requests from'} ${deviceName}`}
                     onClick={() => setEditing(expanded ? undefined : fingerprint)}>
-                    {expanded ? 'Hide options' : 'Set permission'}
+                    {expanded ? 'Hide options' : 'Allow…'}
                     {expanded ? <ChevronUp size={15} aria-hidden="true" /> : <ChevronDown size={15} aria-hidden="true" />}
                   </button>
                 ) : (
                   <button
                     type="button"
-                    className="refresh service-action-icon-btn inbox-revoke-btn"
+                    className="inbox-permission-action"
                     title="Block requests"
                     aria-label={`Block requests from ${deviceName}`}
                     disabled={busy}
                     onClick={() => void update(fingerprint, false)}
-                  ><Ban size={15} aria-hidden="true" /><span className="sr-only">Block requests</span></button>
+                  ><Ban size={15} aria-hidden="true" /><span>Block</span></button>
                 )}
               </div>
 
@@ -131,7 +134,7 @@ export function InboxAccess({ ownerId }: { ownerId?: string }) {
                   if (duration.success) void update(fingerprint, true, duration.data);
                 }}>
                   <SelectField label="Allow requests for" name="duration" defaultValue={readDefaultDuration()} options={accessDurations} disabled={busy} />
-                  <button type="submit" className="refresh" disabled={busy}>Allow requests</button>
+                  <button type="submit" className="primary" disabled={busy}>Allow requests</button>
                 </form>
               )}
             </li>

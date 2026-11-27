@@ -1,6 +1,16 @@
+@font-face {
+  font-family: "Space Grotesk";
+  src: url("../assets/space-grotesk-variable.ttf") format("truetype");
+  font-weight: 300 700;
+  font-style: normal;
+  font-display: swap;
+}
+
 :root {
   color-scheme: dark;
-  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-ui: "Space Grotesk", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-family: var(--font-ui);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   background: var(--canvas);
@@ -32,6 +42,8 @@
 * { box-sizing: border-box; }
 body { margin: 0; }
 button { font: inherit; color: inherit; }
+input, select, textarea { font-family: inherit; }
+code, kbd, pre { font-family: var(--font-mono); }
 button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 
 /* Custom slim scrollbars matching the graphite & emerald theme */
@@ -68,7 +80,7 @@ input:not([type="checkbox"], [type="radio"], [type="file"]):focus {
 .shell { min-height: 100vh; display: grid; grid-template-columns: 230px minmax(0, 1fr); }
 aside { display: flex; flex-direction: column; gap: 34px; padding: 65px 17px 23px; background: radial-gradient(ellipse at 80% 100%, var(--sidebar-glow), transparent 40%), var(--sidebar); border-right: 1px solid var(--line); }
 .brand { display: grid; justify-items: center; gap: 11px; }
-.brand strong { font: 750 1.8125rem system-ui, sans-serif; }
+.brand strong { font-size: 1.8125rem; font-weight: 700; letter-spacing: -.045em; }
 .brand small { color: var(--muted); font-size: 0.6875rem; }
 .mark { display: block; width: 49px; height: 54px; background: linear-gradient(135deg, #a5fa69, #27cd82 70%); clip-path: polygon(12% 12%, 41% 0, 66% 13%, 66% 60%, 88% 72%, 88% 91%, 58% 100%, 12% 75%, 12% 12%, 40% 23%, 40% 66%, 58% 76%, 58% 28%, 40% 18%, 40% 23%); }
 nav { display: grid; gap: 6px; }
@@ -116,8 +128,33 @@ h1 em { display: inline-block; padding: 0 18px 7px 9px; background: linear-gradi
 .network-panel { max-width: 860px; margin-top: 65px; }
 .network-panel .section-title { align-items: center; justify-content: space-between; flex-wrap: wrap; }
 .network-panel p { color: var(--muted); font-size: 0.8125rem; line-height: 1.65; }
-.refresh { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; padding: 8px 11px; background: var(--selected); border: 1px solid var(--action-line); border-radius: 8px; }
-.refresh:disabled { cursor: wait; }
+.refresh {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--foreground);
+  font-weight: 600;
+  line-height: 1.25;
+  cursor: pointer;
+}
+.refresh:where(:not(:disabled)) {
+  border-block-start-color: var(--action-line);
+  background: color-mix(in srgb, var(--panel) 55%, var(--selected));
+}
+.refresh:where(:hover:not(:disabled)) {
+  border-color: var(--action-line);
+  background: var(--selected);
+}
+.refresh:where(:not(:disabled)) > svg { color: var(--accent); }
+.refresh:where(:active:not(:disabled)) {
+  background: var(--inset);
+}
+.refresh:where(:disabled) { color: var(--disabled); cursor: default; }
 .interface-list { list-style: none; padding: 0; display: grid; gap: 8px; }
 .interface-list li { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 13px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
 .interface-list li > svg, .interface-list li > span { color: var(--accent); }
@@ -474,11 +511,31 @@ button.metric:active {
   .shell { grid-template-columns: 125px minmax(0, 1fr); }
   .shell > aside { padding-inline: 9px; }
   .shell nav button { gap: 7px; padding-inline: 9px; }
+  .sidebar-navigation button svg { width: 16px; height: 16px; }
+  .sidebar-navigation .nav-pending-files { padding-inline: 3px; }
   .workspace-header { padding-top: 40px; }
 }
 .dashboard-details { margin-top: 20px; }
 [data-page="Devices"] .page-heading { margin-left: calc(47% + 16px); }
 .shell nav > div { display: grid; gap: inherit; }
+.sidebar-navigation .sidebar-nav-label {
+  padding: 0 9px 2px;
+  color: var(--muted);
+  font-size: .75rem;
+  font-weight: 650;
+}
+.sidebar-navigation .sidebar-nav-group + .sidebar-nav-group {
+  margin-top: 7px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+:root[data-density="compact"] .sidebar-navigation .sidebar-nav-group + .sidebar-nav-group {
+  margin-top: 5px;
+  padding-top: 8px;
+}
+.sidebar-navigation button:not([aria-current]):hover { background: var(--inset); }
+.sidebar-navigation button[aria-current] svg { color: var(--accent); }
+.sidebar-navigation button svg { flex: none; }
 @media (max-width: 1080px) { [data-page="Devices"] .page-heading { margin-left: 0; } }
 
 /* Pairing and Paired devices each span full width cleanly. */
@@ -3832,7 +3889,7 @@ button.pairing-number:not(:disabled):hover, .pairing-number[aria-pressed="true"]
   border-radius: 10px;
   background: var(--panel);
   border: 1px solid var(--line);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: .78rem;
   line-height: 1.55;
   white-space: pre-wrap;
@@ -3849,7 +3906,7 @@ button.pairing-number:not(:disabled):hover, .pairing-number[aria-pressed="true"]
   border: 1px solid var(--action-line);
   background: var(--panel);
   color: var(--foreground);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: .8rem;
   line-height: 1.55;
   outline: none;
@@ -4563,27 +4620,135 @@ button.pairing-number:not(:disabled):hover, .pairing-number[aria-pressed="true"]
   line-height: 1.45;
   color: var(--muted);
 }
-.devices-bottom-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.25fr);
-  gap: 18px;
-  align-items: start;
-}
-.devices-bottom-grid .pairing-panel,
-.devices-bottom-grid .trusted-panel {
-  padding: 20px;
-  border: 1px solid var(--line);
-  border-radius: 19px;
+.device-register {
+  min-width: 0;
+  border-block: 1px solid var(--line);
   background: var(--inset);
+}
+.device-register .pairing-panel,
+.device-register .trusted-panel {
+  margin: 0;
+  padding: 14px clamp(12px, 2vw, 24px);
+}
+.device-register .pairing-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, auto);
+  align-items: center;
+  gap: 8px 12px;
+  border-inline-start: 3px solid var(--accent);
+  background: var(--selected);
+}
+.device-register .pairing-panel > h3 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+.device-register .pairing-panel > :is(article, p),
+.device-register .pairing-manual[open] { grid-column: 1 / -1; }
+.device-register .pairing-manual {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+}
+.device-register .pairing-manual > summary {
   display: flex;
-  flex-direction: column;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 6px;
+  justify-self: end;
+  min-height: 36px;
+  padding: 5px 10px;
+  border: 1px solid var(--action-line);
+  border-radius: 6px;
+  background: var(--inset);
+  font-weight: 600;
+  list-style: none;
 }
-.pairing-panel-heading {
-  margin-bottom: 12px;
+.device-register .pairing-manual > summary:hover { background: var(--panel); }
+.device-register .pairing-manual > summary:focus-visible { outline: 2px solid var(--accent); }
+.device-register .pairing-manual > summary::-webkit-details-marker { display: none; }
+.device-register .pairing-manual[open] > summary svg { transform: rotate(180deg); }
+.device-register .pairing-form { max-width: 44rem; }
+.device-register .trusted-panel { border: 0; }
+.paired-register-heading,
+.paired-register-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
+.paired-register-heading {
+  flex-wrap: wrap;
+  justify-content: space-between;
+  padding-bottom: 10px;
+}
+.paired-register-title h3 {
+  margin: 0;
+  font-size: 1.12rem;
+  letter-spacing: -.025em;
+}
+.paired-register-count {
+  padding-left: 10px;
+  border-left: 1px solid var(--line);
+  color: var(--muted);
+  font-size: .8rem;
+  font-variant-numeric: tabular-nums;
+}
+.device-register .paired-search-field {
+  border-width: 0 0 1px;
+  border-radius: 0;
+  background: transparent;
+}
+.device-register .paired-device-list { gap: 8px; margin: 0; }
+.device-register .paired-device-list .trusted-row {
+  padding: 12px;
+  border: 0;
+  border-inline-start: 2px solid var(--action-line);
+  border-radius: 0 6px 6px 0;
+  background: var(--panel);
+}
+.device-register .paired-device-icon-wrap {
+  width: 38px;
+  height: 38px;
+  border: 0;
+  border-radius: 5px;
+  background: var(--selected);
+  align-self: flex-start;
+}
+.device-register .paired-device-identity { gap: 10px; flex-basis: min(100%, 15rem); }
+.device-register .paired-device-main { gap: 10px; flex-wrap: wrap; }
+.device-register .paired-device-info { gap: 7px; }
+.device-register .paired-device-name { font-size: 1rem; }
+.device-register .paired-device-actions { margin-inline-start: auto; }
+.device-register .paired-device-actions button:not(:hover) svg { color: var(--muted); }
+.device-register .paired-method-badge {
+  padding: 2px 6px;
+  border: 0;
+  border-radius: 4px;
+  background: var(--inset);
+}
+.device-register :is(.device-fingerprint-copy, .paired-address-copy) {
+  gap: 6px;
+  max-width: 100%;
+  min-width: 0;
+  padding: 3px 6px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--inset);
+  font-size: .72rem;
+  cursor: pointer;
+}
+.device-register :is(.device-fingerprint-copy, .paired-address-copy):hover {
+  background: var(--selected);
+  border-color: var(--action-line);
+  color: var(--foreground);
+}
+.device-register :is(.device-fingerprint-copy, .paired-address-copy) code {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.device-register :is(.device-fingerprint-copy, .paired-address-copy) svg { flex: none; }
 @media (max-width: 1080px) {
   .devices-workspace-grid { grid-template-columns: 1fr; }
-  .devices-bottom-grid { grid-template-columns: 1fr; }
 }
 @media (max-width: 760px) {
   .devices-left-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -4802,9 +4967,8 @@ aside .status {
   display: block;
   font-size: .8rem;
   font-weight: 600;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
 }
 
 .status-channels {
@@ -4818,7 +4982,7 @@ aside .status {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: 6px;
   font-size: .72rem;
   color: var(--muted);
 }
@@ -4871,4 +5035,48 @@ aside .status .status-badge {
   color: var(--muted);
   background: var(--inset);
   border: 1px solid var(--line);
+}
+
+/* LAN discovery rows */
+.nearby-devices.lan-discovery-list {
+  gap: 0;
+  margin-block: 12px 0;
+}
+.nearby-devices.lan-discovery-list li {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 10px;
+  padding: 10px 4px;
+  border: 0;
+  border-top: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+}
+.lan-discovery-icon { color: var(--muted); }
+.lan-discovery-device {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+.lan-discovery-device code {
+  justify-self: start;
+  max-width: 100%;
+  padding: 2px 6px;
+  border: 1px solid var(--action-line);
+  border-radius: 4px;
+  background: var(--selected);
+  color: var(--accent);
+  font-size: .75rem;
+  letter-spacing: .025em;
+  overflow-wrap: anywhere;
+}
+.lan-discovery-paired {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--accent);
+  font-size: .75rem;
+  font-weight: 600;
+}
+@media (max-width: 730px) {
+  .lan-discovery-list .pair-device-action { grid-column: 2 / -1; }
 }

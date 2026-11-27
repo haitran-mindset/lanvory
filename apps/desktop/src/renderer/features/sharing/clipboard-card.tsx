@@ -1,9 +1,7 @@
 import { useEffect, useState } from "react";
 import { Clipboard, Copy, Send, ShieldCheck, Trash2 } from "lucide-react";
 import { z } from "zod";
-import { PanelHeading } from "../../components/panel-heading";
 import { useNotifications } from "../../components/notifications";
-import { Checkbox } from "../../components/ui/checkbox";
 import { SelectField } from "../../components/ui/select";
 import {
   isP2PRoute,
@@ -117,25 +115,25 @@ export function ClipboardCard({
   const isPeerAllowed = peer ? allowedPeers?.includes(peer) === true : false;
 
   return (
-    <section className="operation-card" aria-labelledby="clipboard-heading">
-      <PanelHeading
-        icon={Clipboard}
-        id="clipboard-heading"
-        title="Shared clipboard"
-        description="Disabled by default. Share text snippets explicitly with a trusted peer (max 64 KiB, no auto-paste)."
-      />
-      <label className="settings-toggle clipboard-toggle">
-        <span>
-          Enable shared clipboard
-          <small>Opt-in per session with SHA-256 loop prevention.</small>
-        </span>
-        <Checkbox
-          aria-label="Enable shared clipboard"
-          checked={state?.enabled === true}
-          disabled={busy || state === undefined}
-          onCheckedChange={(checked) => void toggleEnabled(checked === true)}
-        />
-      </label>
+    <section id="sharing-clipboard" className="operation-card clipboard-workspace" tabIndex={-1} aria-labelledby="clipboard-heading">
+      <div className="clipboard-workspace-heading">
+        <div className="clipboard-workspace-title">
+          <Clipboard size={21} aria-hidden="true" />
+          <div>
+            <h3 id="clipboard-heading">Shared clipboard</h3>
+            <p>Send text to a paired device. Received snippets stay in Lanvory until you copy them.</p>
+          </div>
+        </div>
+        <button type="button" role="switch" aria-checked={state?.enabled === true}
+          aria-label="Enable shared clipboard for this session" className="clipboard-session-switch"
+          disabled={busy || state === undefined} onClick={() => void toggleEnabled(state?.enabled !== true)}>
+          <span>{state?.enabled ? "Session enabled" : "Session disabled"}</span>
+          <span className="clipboard-switch-track" aria-hidden="true" />
+        </button>
+      </div>
+      {state !== undefined && !state?.enabled && (
+        <p className="clipboard-session-note">Enable clipboard sharing for this session to send or receive snippets.</p>
+      )}
 
       {state?.enabled && (
         <div className="clipboard-body">
@@ -143,7 +141,7 @@ export function ClipboardCard({
             <>
               <div className="clipboard-section">
                 <SelectField
-                  label="Trusted peer"
+                  label="Paired device"
                   name="clipboardPeer"
                   required
                   placeholder="Select a paired device"
@@ -244,7 +242,7 @@ export function ClipboardCard({
                   className="trust-form clipboard-send-form"
                   onSubmit={(e) => void sendSnippet(e)}
                 >
-                  <div className="clipboard-section-label">Send a snippet</div>
+                  <h4 className="clipboard-composer-title">Send a snippet</h4>
                   {isP2PRoute(route) ? (
                     <div className="paired-device-meta-row">
                       <span className="paired-method-badge is-p2p">
@@ -267,22 +265,23 @@ export function ClipboardCard({
                   )}
                   <label>
                     Text snippet
-                    <input
-                      type="text"
+                    <textarea
+                      rows={3}
                       value={text}
                       maxLength={2048}
-                      placeholder="Leave blank to send your current OS clipboard"
+                      placeholder="Type or paste text…"
                       disabled={busy}
                       onChange={(e) => setText(e.currentTarget.value)}
                     />
                   </label>
                   <div className="clipboard-send-actions">
+                    <small>{text.trim() ? "Sends the text above" : "Uses your system clipboard · up to 64 KiB"}</small>
                     <button
                       type="submit"
                       className="primary clipboard-send-btn"
                       disabled={busy || !peer || (!isP2PRoute(route) && !ready)}
                     >
-                      <Send size={14} aria-hidden="true" /> Send clipboard
+                      <Send size={14} aria-hidden="true" /> {text.trim() ? "Send snippet" : "Send clipboard"}
                     </button>
                   </div>
                 </form>

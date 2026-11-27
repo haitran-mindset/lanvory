@@ -1,3 +1,4 @@
+import { WorkspaceTabs, WorkspaceTabPanel } from '../../components/workspace-tabs';
 import { type FormEvent, useEffect, useRef, useState } from 'react';
 import { SelectField } from '../../components/ui/select';
 import { Checkbox } from '../../components/ui/checkbox';
@@ -70,6 +71,7 @@ export function NetworkPanel({ visible, deviceName, routes, onRoute }: {
   const [listener, setListener] = useState<z.infer<typeof listenerSchema> | null>();
   const [trustedPeers, setTrustedPeers] = useState<Array<{ fingerprint: string; verifiedAt: string }> | null>();
   const [listenerBusy, setListenerBusy] = useState(false);
+  const [tab, setTab] = useState<'connection' | 'adapters' | 'diagnostics'>('connection');
   const [listenerMessage, setListenerMessage] = useState('');
   const [copyingAddress, setCopyingAddress] = useState(false);
   const [connectionSettings, setConnectionSettings] = useState(readConnectionSettings);
@@ -144,7 +146,7 @@ export function NetworkPanel({ visible, deviceName, routes, onRoute }: {
     if (action === 'stop' && currentListener?.state === 'stopped') {
       const revoked = await window.lanvory.setInterfaceApproval(currentListener.adapter, false).catch(() => false);
       setInterfaces(await readInterfaces());
-      if (!revoked) setListenerMessage('LAN is off, but the network permission could not be removed. Try Revoke in Advanced options.');
+      if (!revoked) setListenerMessage('LAN is off, but the network permission could not be removed. Open Adapters to revoke access.');
     } else if (action === 'start' && result.success && result.data.state === 'listening' && settings) {
       setConnectionSettings(settings);
       try {
@@ -156,7 +158,7 @@ export function NetworkPanel({ visible, deviceName, routes, onRoute }: {
       const revoked = await window.lanvory.setInterfaceApproval(approvalAdded, false).catch(() => false);
       setInterfaces(await readInterfaces());
       setListenerMessage(revoked ? 'Could not turn on LAN. The temporary network permission was removed.'
-        : 'Could not turn on LAN or remove the temporary network permission. Try Revoke in Advanced options.');
+        : 'Could not turn on LAN or remove the temporary network permission. Open Adapters to revoke access.');
     } else if (approvalAdded && !currentListener) {
       setListenerMessage('Could not confirm whether LAN is on. Check the network status before removing its permission.');
     } else {
@@ -282,225 +284,237 @@ export function NetworkPanel({ visible, deviceName, routes, onRoute }: {
   }
 
   return (
-    <section className="network-panel" aria-labelledby="network-heading">
+    <section className="network-panel tabbed-workspace" aria-labelledby="network-heading">
       <h2 id="network-heading" className="sr-only">Network</h2>
-      <section className="operation-card operation-highlight" aria-labelledby="listener-heading">
-        <PanelHeading icon={Wifi} id="listener-heading" title="Local network"
-          description="Turn on LAN access to find, pair with, and receive files from nearby devices." />
-        {listener === undefined && <p>Reading listener status…</p>}
-        {listener === null && <p>Listener status unavailable.</p>}
-        {listener?.state === 'local-only' && <p className="state-pill">Local-only mode</p>}
-        {listener?.state === 'stopped' && <p className="state-pill">LAN off</p>}
-        {listener?.state === 'listening' && (
-          <div className="network-active">
-            <div className="network-status-row">
-              <span className="state-pill is-active">LAN on</span>
-              <span className="state-pill network-adapter-pill">Adapter <code>{listener.adapter}</code></span>
+      <WorkspaceTabs name="network" label="Network sections" active={tab} onChange={setTab} tabs={[
+        { id: 'connection', label: 'Connection', icon: Wifi },
+        { id: 'adapters', label: 'Adapters', icon: ShieldCheck },
+        { id: 'diagnostics', label: 'Diagnostics', icon: Activity },
+      ]} />
+      <WorkspaceTabPanel name="network" id="connection" active={tab}>
+        <section className="operation-card operation-highlight" aria-labelledby="listener-heading">
+          <PanelHeading icon={Wifi} id="listener-heading" title="Local network"
+            description="Turn on LAN access to find, pair with, and receive files from nearby devices." />
+          {listener === undefined && <p>Reading listener status…</p>}
+          {listener === null && <p>Listener status unavailable.</p>}
+          {listener?.state === 'local-only' && <p className="state-pill">Local-only mode</p>}
+          {listener?.state === 'stopped' && <p className="state-pill">LAN off</p>}
+          {listener?.state === 'listening' && (
+            <div className="network-active">
+              <div className="network-status-row">
+                <span className="state-pill is-active">LAN on</span>
+                <span className="state-pill network-adapter-pill">Adapter <code>{listener.adapter}</code></span>
+              </div>
+              <div className="network-address">
+                <p>Device address <code>{listener.endpoint}</code></p>
+                <button type="button" className="refresh" aria-label="Copy LAN address" title="Copy LAN address"
+                  disabled={copyingAddress || listenerBusy} onClick={() => void copyAddress(listener.endpoint)}>
+                  <Copy size={15} aria-hidden="true" />
+                </button>
+              </div>
+              <p>Incoming pairing {listener.pairing ? 'enabled' : 'disabled'}</p>
             </div>
-            <div className="network-address">
-              <p>Device address <code>{listener.endpoint}</code></p>
-              <button type="button" className="refresh" aria-label="Copy LAN address" title="Copy LAN address"
-                disabled={copyingAddress || listenerBusy} onClick={() => void copyAddress(listener.endpoint)}>
-                <Copy size={15} aria-hidden="true" />
-              </button>
-            </div>
-            <p>Incoming pairing {listener.pairing ? 'enabled' : 'disabled'}</p>
-          </div>
-        )}
-        {listener?.state === 'listening' && (
-          <button className="refresh" type="button" disabled={listenerBusy || updating !== undefined}
-            onClick={() => void changeListener('stop')}>Turn off LAN</button>
-        )}
-        {listener && listener.state !== 'listening' && (
-          bindOptions.length ? (
-            <form className="trust-form" onSubmit={(event) => {
-              event.preventDefault();
-              const data = new FormData(event.currentTarget);
-              const [adapter, address] = String(data.get('bind') ?? '').split('|');
-              const settings = connectionSettingsSchema.safeParse({ port: Number(data.get('port')), pairing: data.has('pairing') });
-              if (adapter && address && settings.success) void changeListener('start', adapter, address, settings.data);
-            }}>
-              <SelectField label="Network" name="bind" required placeholder="Select a network"
-                defaultValue={defaultBind} disabled={listenerBusy} options={bindOptions} />
-              <details className="trust-details"><summary>Connection settings</summary>
-                <label>Port<input name="port" type="number" required min={0} max={65535} defaultValue={connectionSettings.port} disabled={listenerBusy} /></label>
-                <label className="checkbox"><Checkbox name="pairing" defaultChecked={connectionSettings.pairing} disabled={listenerBusy} /> Accept incoming pairing requests</label>
-              </details>
-              <button type="submit" className="primary" disabled={listenerBusy || updating !== undefined}>Turn on LAN</button>
-              <p>Nearby devices can connect through the network you select.</p>
-            </form>
-          ) : <p>Connect to an eligible IPv4 network to enable LAN.</p>
-        )}
-        {listenerBusy && <p role="status">Updating the LAN listener…</p>}
-        {listenerMessage && <p role="status">{listenerMessage}</p>}
-      </section>
-      <NetworkExplorer
-        deviceName={deviceName}
-        listenerState={listener?.state ?? 'checking'}
-        listenerEndpoint={listener?.state === 'listening' ? listener.endpoint : undefined}
-        interfaces={interfaces}
-        trustedPeers={trustedPeers}
-        onPingPeer={(fingerprint) => {
-          const scopeDetails = document.querySelector<HTMLDetailsElement>('[aria-labelledby=scope-heading]');
-          if (scopeDetails) scopeDetails.open = true;
-          const fpInput = document.querySelector<HTMLInputElement>('input[name="pingFingerprint"]');
-          const endpointInput = document.querySelector<HTMLInputElement>('input[name="pingEndpoint"]');
-          if (fpInput) fpInput.value = fingerprint;
-          if (endpointInput) endpointInput.value = '';
-          void detectPeerEndpoint(fingerprint, endpointInput);
-          requestAnimationFrame(() => {
-            const target = endpointInput ?? fpInput;
-            const container = target?.closest<HTMLElement>('.page-scroll');
-            if (target && container) {
-              const containerRect = container.getBoundingClientRect();
-              const targetRect = target.getBoundingClientRect();
-              const top = container.scrollTop + (targetRect.top - containerRect.top) - (containerRect.height / 2) + (targetRect.height / 2);
-              container.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
-            }
-            target?.focus({ preventScroll: true });
-          });
-        }}
-      />
-      <details className="operation-card operation-disclosure network-advanced">
-        <summary>
-          <SlidersHorizontal size={17} aria-hidden="true" />
-          Advanced options
-          <ChevronDown className="network-advanced-chevron" size={17} aria-hidden="true" />
-        </summary>
-        <section aria-labelledby="adapters-heading">
-          <PanelHeading icon={Network} id="adapters-heading" title="Network adapters"
-            action={<button type="button" className="refresh" disabled={interfaces === undefined || updating !== undefined || checking || listenerBusy} onClick={() => {
-              setCheckResult('');
-              setInterfaces(undefined);
-              setRefresh((value) => value + 1);
-            }}><RefreshCw size={15} aria-hidden="true" /> Refresh</button>} />
-          {message && <p role="status">{message}</p>}
-          {interfaces === undefined && <p role="status">Reading interfaces…</p>}
-          {interfaces === null && <p role="status">The daemon could not read local interfaces.</p>}
-          {interfaces?.length === 0 && <p role="status">No network interfaces were reported.</p>}
-          {interfaces && interfaces.length > 0 && (
-            <ul className="interface-list adapter-list" tabIndex={0} aria-labelledby="adapters-heading">
-              {orderedAdapters?.map((nic) => {
-                const canApprove = nic.eligible && !nic.approved;
-                const approved = nic.approved && nic.eligible;
-                const status = nic.approved
-                  ? approved ? 'Approved' : 'Approved · Inactive'
-                  : canApprove ? 'Ready to approve' : nic.loopback ? 'Loopback' : nic.up ? 'Unavailable' : 'Offline';
-                return (
-                  <li key={nic.index} className="adapter-row" data-approvable={canApprove || undefined}>
-                    <div className="adapter-identity">
-                      <span className="panel-icon"><Network size={19} aria-hidden="true" /></span>
-                      <div className="adapter-info">
-                        <div className="adapter-name">
-                          <strong>{nic.name}</strong>
-                          <span className={approved ? 'state-pill is-active' : 'state-pill'}>{status}</span>
-                        </div>
-                        <p><code>{nic.addresses.find((address) => address.includes('.')) ?? 'No IPv4 address'}</code></p>
-                      </div>
-                    </div>
-                    {(nic.approved || nic.eligible) && (
-                      <button type="button" className={canApprove ? 'primary adapter-action' : 'refresh adapter-action'}
-                        disabled={updating !== undefined || checking || listenerBusy}
-                        aria-label={`${nic.approved ? 'Revoke' : 'Approve'} ${nic.name}`}
-                        onClick={() => void update(nic.name, !nic.approved)}>
-                        {canApprove && <ShieldCheck size={15} aria-hidden="true" />}
-                        {updating === nic.name ? 'Saving…' : nic.approved ? 'Revoke' : 'Approve'}
-                      </button>
-                    )}
-                  </li>
-                );
-              })}
-            </ul>
           )}
+          {listener?.state === 'listening' && (
+            <button className="refresh" type="button" disabled={listenerBusy || updating !== undefined}
+              onClick={() => void changeListener('stop')}>Turn off LAN</button>
+          )}
+          {listener && listener.state !== 'listening' && (
+            bindOptions.length ? (
+              <form className="trust-form" onSubmit={(event) => {
+                event.preventDefault();
+                const data = new FormData(event.currentTarget);
+                const [adapter, address] = String(data.get('bind') ?? '').split('|');
+                const settings = connectionSettingsSchema.safeParse({ port: Number(data.get('port')), pairing: data.has('pairing') });
+                if (adapter && address && settings.success) void changeListener('start', adapter, address, settings.data);
+              }}>
+                <SelectField label="Network" name="bind" required placeholder="Select a network"
+                  defaultValue={defaultBind} disabled={listenerBusy} options={bindOptions} />
+                <details className="trust-details"><summary>Connection settings</summary>
+                  <label>Port<input name="port" type="number" required min={0} max={65535} defaultValue={connectionSettings.port} disabled={listenerBusy} /></label>
+                  <label className="checkbox"><Checkbox name="pairing" defaultChecked={connectionSettings.pairing} disabled={listenerBusy} /> Accept incoming pairing requests</label>
+                </details>
+                <button type="submit" className="primary" disabled={listenerBusy || updating !== undefined}>Turn on LAN</button>
+                <p>Nearby devices can connect through the network you select.</p>
+              </form>
+            ) : <p>Connect to an eligible IPv4 network to enable LAN.</p>
+          )}
+          {listenerBusy && <p role="status">Updating the LAN listener…</p>}
+          {listenerMessage && <p role="status">{listenerMessage}</p>}
         </section>
-      </details>
-      <details className="operation-card operation-disclosure" aria-labelledby="scope-heading">
-        <summary id="scope-heading"><SlidersHorizontal size={17} aria-hidden="true" /> Connection diagnostics</summary>
-        <p>Copy local status and adapter counts for troubleshooting.</p>
-        <button type="button" className="refresh" disabled={copyingReport} onClick={() => void copyReport()}>
-          {copyingReport ? 'Copying…' : 'Copy diagnostic report'}
-        </button>
-        <p role="status">{reportMessage}</p>
-        {!!interfaces?.length && <>
-          <p>Check the daemon’s address policy without connecting to the destination.</p>
-          <form className="trust-form" onSubmit={(event) => void check(event)}>
-            <SelectField label="Adapter" name="adapter" required placeholder="Select an adapter"
-              defaultValue={approvedAdapters?.length === 1 ? approvedAdapters[0].name : undefined}
-              disabled={checking} options={interfaces.map((nic) => ({ value: nic.name, label: nic.name }))} />
-            <label>Destination IPv4 address<input name="address" required maxLength={15} placeholder="192.168.1.42" disabled={checking} /></label>
-            <button type="submit" className="refresh" disabled={checking || updating !== undefined}>{checking ? 'Checking…' : 'Check address'}</button>
-          </form>
-          <p className="scope-result" role="status">{checkResult}</p>
-          <div className="network-ping-section">
-            <h4>Authenticated peer ping</h4>
-            <p>Measure round-trip latency and verify a peer’s Ed25519 identity without exchanging data.</p>
-            <form className="trust-form network-ping-form" onSubmit={(event) => void pingPeer(event)}>
-              <SelectField label="Adapter" name="pingAdapter" required placeholder="Select an approved adapter"
+        <NetworkExplorer
+          deviceName={deviceName}
+          listenerState={listener?.state ?? 'checking'}
+          listenerEndpoint={listener?.state === 'listening' ? listener.endpoint : undefined}
+          interfaces={interfaces}
+          trustedPeers={trustedPeers}
+          onPingPeer={(fingerprint) => {
+            setTab('diagnostics');
+            const scopeDetails = document.querySelector<HTMLDetailsElement>('[aria-labelledby=scope-heading]');
+            if (scopeDetails) scopeDetails.open = true;
+            const fpInput = document.querySelector<HTMLInputElement>('input[name="pingFingerprint"]');
+            const endpointInput = document.querySelector<HTMLInputElement>('input[name="pingEndpoint"]');
+            if (fpInput) fpInput.value = fingerprint;
+            if (endpointInput) endpointInput.value = '';
+            void detectPeerEndpoint(fingerprint, endpointInput);
+            requestAnimationFrame(() => {
+              const target = endpointInput ?? fpInput;
+              const container = target?.closest<HTMLElement>('.page-scroll');
+              if (target && container) {
+                const containerRect = container.getBoundingClientRect();
+                const targetRect = target.getBoundingClientRect();
+                const top = container.scrollTop + (targetRect.top - containerRect.top) - (containerRect.height / 2) + (targetRect.height / 2);
+                container.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
+              }
+              target?.focus({ preventScroll: true });
+            });
+          }}
+        />
+      </WorkspaceTabPanel>
+      <WorkspaceTabPanel name="network" id="adapters" active={tab}>
+        <details className="operation-card operation-disclosure network-advanced" open>
+          <summary>
+            <SlidersHorizontal size={17} aria-hidden="true" />
+            Adapter permissions
+            <ChevronDown className="network-advanced-chevron" size={17} aria-hidden="true" />
+          </summary>
+          <section aria-labelledby="adapters-heading">
+            <PanelHeading icon={Network} id="adapters-heading" title="Network adapters"
+              action={<button type="button" className="refresh" disabled={interfaces === undefined || updating !== undefined || checking || listenerBusy} onClick={() => {
+                setCheckResult('');
+                setInterfaces(undefined);
+                setRefresh((value) => value + 1);
+              }}><RefreshCw size={15} aria-hidden="true" /> Refresh</button>} />
+            {message && <p role="status">{message}</p>}
+            {interfaces === undefined && <p role="status">Reading interfaces…</p>}
+            {interfaces === null && <p role="status">The daemon could not read local interfaces.</p>}
+            {interfaces?.length === 0 && <p role="status">No network interfaces were reported.</p>}
+            {interfaces && interfaces.length > 0 && (
+              <ul className="interface-list adapter-list" tabIndex={0} aria-labelledby="adapters-heading">
+                {orderedAdapters?.map((nic) => {
+                  const canApprove = nic.eligible && !nic.approved;
+                  const approved = nic.approved && nic.eligible;
+                  const status = nic.approved
+                    ? approved ? 'Approved' : 'Approved · Inactive'
+                    : canApprove ? 'Ready to approve' : nic.loopback ? 'Loopback' : nic.up ? 'Unavailable' : 'Offline';
+                  return (
+                    <li key={nic.index} className="adapter-row" data-approvable={canApprove || undefined}>
+                      <div className="adapter-identity">
+                        <span className="panel-icon"><Network size={19} aria-hidden="true" /></span>
+                        <div className="adapter-info">
+                          <div className="adapter-name">
+                            <strong>{nic.name}</strong>
+                            <span className={approved ? 'state-pill is-active' : 'state-pill'}>{status}</span>
+                          </div>
+                          <p><code>{nic.addresses.find((address) => address.includes('.')) ?? 'No IPv4 address'}</code></p>
+                        </div>
+                      </div>
+                      {(nic.approved || nic.eligible) && (
+                        <button type="button" className={canApprove ? 'primary adapter-action' : 'refresh adapter-action'}
+                          disabled={updating !== undefined || checking || listenerBusy}
+                          aria-label={`${nic.approved ? 'Revoke' : 'Approve'} ${nic.name}`}
+                          onClick={() => void update(nic.name, !nic.approved)}>
+                          {canApprove && <ShieldCheck size={15} aria-hidden="true" />}
+                          {updating === nic.name ? 'Saving…' : nic.approved ? 'Revoke' : 'Approve'}
+                        </button>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </section>
+        </details>
+      </WorkspaceTabPanel>
+      <WorkspaceTabPanel name="network" id="diagnostics" active={tab}>
+        <details className="operation-card operation-disclosure" aria-labelledby="scope-heading" open>
+          <summary id="scope-heading"><SlidersHorizontal size={17} aria-hidden="true" /> Connection diagnostics</summary>
+          <p>Copy local status and adapter counts for troubleshooting.</p>
+          <button type="button" className="refresh" disabled={copyingReport} onClick={() => void copyReport()}>
+            {copyingReport ? 'Copying…' : 'Copy diagnostic report'}
+          </button>
+          <p role="status">{reportMessage}</p>
+          {!!interfaces?.length && <>
+            <p>Check the daemon’s address policy without connecting to the destination.</p>
+            <form className="trust-form" onSubmit={(event) => void check(event)}>
+              <SelectField label="Adapter" name="adapter" required placeholder="Select an adapter"
                 defaultValue={approvedAdapters?.length === 1 ? approvedAdapters[0].name : undefined}
-                disabled={pinging || !approvedAdapters?.length}
-                options={(approvedAdapters ?? []).map((nic) => ({ value: nic.name, label: nic.name }))} />
-              <label>Peer endpoint<input name="pingEndpoint" required maxLength={21} placeholder="192.168.1.42:43110" disabled={pinging} /></label>
-              <label>Peer device ID<input name="pingFingerprint" required maxLength={64} placeholder="64-character hex fingerprint" disabled={pinging}
-                onChange={(event) => {
-                  const fp = event.currentTarget.value.trim().toLowerCase();
-                  if (/^[a-f0-9]{64}$/.test(fp)) {
-                    const endpointInput = event.currentTarget.form?.elements.namedItem('pingEndpoint') as HTMLInputElement | null;
-                    if (endpointInput && !endpointInput.value.trim()) {
-                      void detectPeerEndpoint(fp, endpointInput);
-                    }
-                  }
-                }} /></label>
-              <button type="submit" className="refresh" disabled={pinging || updating !== undefined || !approvedAdapters?.length}>
-                {pinging ? 'Pinging…' : 'Ping peer'}
-              </button>
+                disabled={checking} options={interfaces.map((nic) => ({ value: nic.name, label: nic.name }))} />
+              <label>Destination IPv4 address<input name="address" required maxLength={15} placeholder="192.168.1.42" disabled={checking} /></label>
+              <button type="submit" className="refresh" disabled={checking || updating !== undefined}>{checking ? 'Checking…' : 'Check address'}</button>
             </form>
-            {pingStatus.state === 'success' && (
-              <div className="ping-result-card is-success" role="status">
-                <div className="ping-result-icon">
-                  <ShieldCheck size={18} aria-hidden="true" />
-                </div>
-                <div className="ping-result-body">
-                  <div className="ping-result-header">
-                    <strong>Peer authenticated &amp; reachable</strong>
-                    <span className="ping-latency-pill">
-                      <Activity size={12} aria-hidden="true" />
-                      {pingStatus.latencyMs ?? 0} ms RTT
-                    </span>
+            <p className="scope-result" role="status">{checkResult}</p>
+            <div className="network-ping-section">
+              <h4>Authenticated peer ping</h4>
+              <p>Measure round-trip latency and verify a peer’s Ed25519 identity without exchanging data.</p>
+              <form className="trust-form network-ping-form" onSubmit={(event) => void pingPeer(event)}>
+                <SelectField label="Adapter" name="pingAdapter" required placeholder="Select an approved adapter"
+                  defaultValue={approvedAdapters?.length === 1 ? approvedAdapters[0].name : undefined}
+                  disabled={pinging || !approvedAdapters?.length}
+                  options={(approvedAdapters ?? []).map((nic) => ({ value: nic.name, label: nic.name }))} />
+                <label>Peer endpoint<input name="pingEndpoint" required maxLength={21} placeholder="192.168.1.42:43110" disabled={pinging} /></label>
+                <label>Peer device ID<input name="pingFingerprint" required maxLength={64} placeholder="64-character hex fingerprint" disabled={pinging}
+                  onChange={(event) => {
+                    const fp = event.currentTarget.value.trim().toLowerCase();
+                    if (/^[a-f0-9]{64}$/.test(fp)) {
+                      const endpointInput = event.currentTarget.form?.elements.namedItem('pingEndpoint') as HTMLInputElement | null;
+                      if (endpointInput && !endpointInput.value.trim()) {
+                        void detectPeerEndpoint(fp, endpointInput);
+                      }
+                    }
+                  }} /></label>
+                <button type="submit" className="refresh" disabled={pinging || updating !== undefined || !approvedAdapters?.length}>
+                  {pinging ? 'Pinging…' : 'Ping peer'}
+                </button>
+              </form>
+              {pingStatus.state === 'success' && (
+                <div className="ping-result-card is-success" role="status">
+                  <div className="ping-result-icon">
+                    <ShieldCheck size={18} aria-hidden="true" />
                   </div>
-                  <div className="ping-result-meta">
-                    <span>Endpoint <code>{pingStatus.endpoint}</code></span>
-                    <span>Adapter <code>{pingStatus.adapter}</code></span>
-                    <span>ID <code>{pingStatus.fingerprint.slice(0, 8)}…{pingStatus.fingerprint.slice(-6)}</code></span>
+                  <div className="ping-result-body">
+                    <div className="ping-result-header">
+                      <strong>Peer authenticated &amp; reachable</strong>
+                      <span className="ping-latency-pill">
+                        <Activity size={12} aria-hidden="true" />
+                        {pingStatus.latencyMs ?? 0} ms RTT
+                      </span>
+                    </div>
+                    <div className="ping-result-meta">
+                      <span>Endpoint <code>{pingStatus.endpoint}</code></span>
+                      <span>Adapter <code>{pingStatus.adapter}</code></span>
+                      <span>ID <code>{pingStatus.fingerprint.slice(0, 8)}…{pingStatus.fingerprint.slice(-6)}</code></span>
+                    </div>
                   </div>
                 </div>
-              </div>
-            )}
-            {pingStatus.state === 'error' && (
-              <div className="ping-result-card is-error" role="status">
-                <div className="ping-result-icon">
-                  <AlertCircle size={18} aria-hidden="true" />
+              )}
+              {pingStatus.state === 'error' && (
+                <div className="ping-result-card is-error" role="status">
+                  <div className="ping-result-icon">
+                    <AlertCircle size={18} aria-hidden="true" />
+                  </div>
+                  <div className="ping-result-body">
+                    <strong>Ping failed</strong>
+                    <p>{pingStatus.message}</p>
+                  </div>
                 </div>
-                <div className="ping-result-body">
-                  <strong>Ping failed</strong>
-                  <p>{pingStatus.message}</p>
+              )}
+              {(pingStatus.state === 'loading' || pingStatus.state === 'info') && (
+                <div className="ping-result-card is-info" role="status">
+                  <div className="ping-result-icon">
+                    {pingStatus.state === 'loading'
+                      ? <Loader2 size={17} className="spinning" aria-hidden="true" />
+                      : <Info size={17} aria-hidden="true" />}
+                  </div>
+                  <div className="ping-result-body">
+                    <p>{pingStatus.message}</p>
+                  </div>
                 </div>
-              </div>
-            )}
-            {(pingStatus.state === 'loading' || pingStatus.state === 'info') && (
-              <div className="ping-result-card is-info" role="status">
-                <div className="ping-result-icon">
-                  {pingStatus.state === 'loading'
-                    ? <Loader2 size={17} className="spinning" aria-hidden="true" />
-                    : <Info size={17} aria-hidden="true" />}
-                </div>
-                <div className="ping-result-body">
-                  <p>{pingStatus.message}</p>
-                </div>
-              </div>
-            )}
-          </div>
-        </>}
-      </details>
+              )}
+            </div>
+          </>}
+        </details>
+      </WorkspaceTabPanel>
     </section>
   );
 }

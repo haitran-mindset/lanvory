@@ -26,7 +26,6 @@ import {
   RefreshCw,
   Save,
   Search,
-  Share2,
   Trash2,
   X,
 } from 'lucide-react';
@@ -185,7 +184,6 @@ function friendlyEventText(ev: ResourceEvent) {
 
 export function LiveMountSection({
   mode,
-  onModeChange,
   refreshing = false,
   exportsList,
   mountsList,
@@ -197,7 +195,6 @@ export function LiveMountSection({
   onRefresh,
 }: {
   mode: 'remote' | 'shared';
-  onModeChange?(mode: 'remote' | 'shared'): void;
   refreshing?: boolean;
   exportsList: MountExport[];
   mountsList: MountRecord[];
@@ -627,17 +624,9 @@ export function LiveMountSection({
         <header className="lr-shell-header">
           <div className="lr-shell-title">
             <Layers size={18} aria-hidden="true" />
-            <h2>Live Resources</h2>
+            <h2>Local shares</h2>
           </div>
           <div className="lr-shell-actions">
-            <button
-              type="button"
-              className="lr-pill-btn"
-              onClick={() => onModeChange?.('remote')}
-            >
-              <ChevronLeft size={14} aria-hidden="true" />
-              <span>Browse remote</span>
-            </button>
             <button
               type="button"
               className="lr-icon-btn"
@@ -654,7 +643,7 @@ export function LiveMountSection({
           <PanelHeading
             icon={Plus}
             title="Share a folder"
-            description="Let paired devices browse and stream files directly from this Mac without copying the entire folder."
+            description="Let paired devices browse and stream files directly from this device without copying the entire folder."
           />
           <form className="trust-form" onSubmit={handleExport}>
             <label>
@@ -868,19 +857,10 @@ export function LiveMountSection({
       <header className="lr-shell-header">
         <div className="lr-shell-title">
           <Layers size={18} aria-hidden="true" />
-          <h2>Live Resources</h2>
+          <h2>Remote browser</h2>
         </div>
 
         <div className="lr-shell-actions">
-          <button
-            type="button"
-            className="lr-pill-btn"
-            onClick={() => onModeChange?.('shared')}
-          >
-            <Share2 size={14} aria-hidden="true" />
-            <span>Share folders</span>
-            {exportsList.length > 0 && <span className="lr-pill-count">{exportsList.length}</span>}
-          </button>
           <button
             type="button"
             className="lr-icon-btn"

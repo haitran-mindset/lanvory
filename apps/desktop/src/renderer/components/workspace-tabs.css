@@ -1,0 +1,83 @@
+.tabbed-workspace {
+  display: grid;
+  gap: 20px;
+  min-width: 0;
+}
+
+.tabbed-workspace .workspace-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  width: fit-content;
+  max-width: 100%;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--inset);
+}
+
+.workspace-tabs button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 36px;
+  padding: 6px 10px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--muted);
+  font-size: .8125rem;
+  cursor: pointer;
+}
+
+.workspace-tabs button svg { flex: none; }
+.workspace-tabs button:hover { color: var(--foreground); }
+.workspace-tabs button[aria-selected="true"] {
+  border-color: var(--action-line);
+  background: var(--selected);
+  color: var(--foreground);
+}
+
+.workspace-tabs button[aria-selected="true"] svg,
+.workspace-tab-count { color: var(--accent); }
+.workspace-tab-count { font: 600 .75rem var(--font-mono); }
+
+.workspace-tab-panel { min-width: 0; }
+.workspace-tab-panel[hidden] { display: none; }
+.workspace-tab-panel:focus-visible { outline-offset: 4px; }
+
+.tabbed-workspace .workspace-tab-panel > .operation-card {
+  border: 0;
+  border-top: 1px solid var(--line);
+  border-radius: 0;
+  background: var(--panel);
+}
+
+.tabbed-workspace .workspace-tab-panel > .operation-highlight { border-top: 2px solid var(--accent); }
+.tabbed-workspace .workspace-tab-panel > .operation-card + .operation-card { margin-top: 16px; }
+
+.tabbed-workspace .workspace-tab-panel .panel-heading > .panel-icon {
+  width: 25px;
+  height: 27px;
+  background: transparent;
+  border-radius: 0;
+}
+
+.tabbed-workspace .workspace-tab-panel .panel-heading h3 {
+  font-size: 1.05rem;
+  letter-spacing: -.02em;
+}
+
+.tabbed-workspace .workspace-tab-panel .panel-heading p { font-size: .8125rem; }
+
+.tabbed-workspace .settings-section-grid > .operation-card,
+.tabbed-workspace .settings-fullwidth-cell > .operation-card,
+.tabbed-workspace .lr-shell .operation-card {
+  border-width: 1px 0 0;
+  border-radius: 0;
+  background: var(--panel);
+}
+
+.tabbed-workspace.settings-container { display: grid; gap: 20px; }
+
+.tabbed-workspace .lr-shell { border-radius: 6px; }

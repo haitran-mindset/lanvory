@@ -53,6 +53,19 @@ type BleStatus = z.infer<typeof bleStatusSchema>;
 type BlePeer = z.infer<typeof blePeerSchema>;
 type BleFeedback = { tone: 'success' | 'info' | 'error'; text: string } | null;
 
+const lanListenerSchema = z.discriminatedUnion('state', [
+  z.object({ state: z.literal('stopped'), adapter: z.string() }),
+  z.object({ state: z.literal('listening'), adapter: z.string(), endpoint: z.string(), pairing: z.boolean() }),
+]);
+type LanListener = z.infer<typeof lanListenerSchema>;
+
+const lanInterfacesSchema = z.array(z.object({
+  name: z.string(),
+  approved: z.boolean(),
+  eligible: z.boolean(),
+  addresses: z.array(z.string()),
+}));
+
 function signalLabel(rssi: number) {
   if (rssi >= -60) return 'Strong';
   if (rssi >= -78) return 'Good';
@@ -95,6 +108,87 @@ export function NearbyServices({ ready, scanRevision, trustRevision, searchQuery
   const [matched, setMatched] = useState<Record<string, number>>({});
   const [resolving, setResolving] = useState(false);
   const [resolutionError, setResolutionError] = useState('');
+  const [lanListener, setLanListener] = useState<LanListener | null>(null);
+  const [lanBusy, setLanBusy] = useState(false);
+  const [lanError, setLanError] = useState('');
+
+  useEffect(() => {
+    if (!ready) return;
+    void window.lanvory.listenerStatus().then((raw) => {
+      const parsed = lanListenerSchema.safeParse(raw);
+      if (parsed.success) setLanListener(parsed.data);
+    }).catch(() => {});
+  }, [ready]);
+
+  async function toggleLanListener() {
+    setLanBusy(true);
+    setLanError('');
+    try {
+      if (lanListener?.state === 'listening') {
+        const res = lanListenerSchema.safeParse(await window.lanvory.setListener('stop', lanListener.adapter).catch(() => null));
+        if (res.success) {
+          setLanListener(res.data);
+        } else {
+          setLanError('Could not turn off LAN listener.');
+        }
+        return;
+      }
+
+      const rawIfaces = await window.lanvory.interfaces().catch(() => null);
+      const ifaces = lanInterfacesSchema.safeParse(rawIfaces);
+      if (!ifaces.success) {
+        setLanError('Unable to read local network adapters.');
+        return;
+      }
+      const candidates = ifaces.data
+        .filter((nic) => nic.eligible)
+        .sort((a, b) => Number(b.approved) - Number(a.approved));
+      let chosenAdapter = '';
+      let chosenAddress = '';
+      for (const nic of candidates) {
+        const ipv4 = nic.addresses.map((cidr) => cidr.split('/')[0]).find((addr) => z.ipv4().safeParse(addr).success);
+        if (ipv4) {
+          chosenAdapter = nic.name;
+          chosenAddress = ipv4;
+          if (!nic.approved) {
+            const approved = await window.lanvory.setInterfaceApproval(nic.name, true).catch(() => false);
+            if (!approved) {
+              setLanError(`Could not approve ${nic.name}.`);
+              return;
+            }
+          }
+          break;
+        }
+      }
+      if (!chosenAdapter || !chosenAddress) {
+        onNetwork();
+        return;
+      }
+
+      let port = 0;
+      let pairing = true;
+      try {
+        const saved = JSON.parse(localStorage.getItem('lanvory.connection-settings') ?? '{}');
+        if (typeof saved?.port === 'number' && saved.port >= 0 && saved.port <= 65535) port = saved.port;
+        if (typeof saved?.pairing === 'boolean') pairing = saved.pairing;
+      } catch {
+        // Use defaults
+      }
+      const res = lanListenerSchema.safeParse(
+        await window.lanvory.setListener('start', chosenAdapter, `${chosenAddress}:${port}`, pairing).catch(() => null),
+      );
+      if (res.success) {
+        setLanListener(res.data);
+        if (res.data.state !== 'listening') {
+          setLanError('Could not start LAN listener on the selected adapter.');
+        }
+      } else {
+        setLanError('Could not turn on LAN listener.');
+      }
+    } finally {
+      setLanBusy(false);
+    }
+  }
 
   useEffect(() => {
     if (!ready) return;
@@ -346,6 +440,43 @@ export function NearbyServices({ ready, scanRevision, trustRevision, searchQuery
         </button>
       </div>
 
+      {scanMode === 'lan' && (
+        <>
+          <div className="ble-action-bar device-discovery-visibility">
+            <div className="device-discovery-visibility-copy">
+              <Wifi size={17} aria-hidden="true" />
+              <div>
+                <strong>Local network visibility</strong>
+                <small>
+                  {lanListener?.state === 'listening'
+                    ? `Listening on ${lanListener.endpoint} (${lanListener.adapter})`
+                    : 'Turn on LAN so nearby devices can find and connect to this device.'}
+                </small>
+              </div>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={lanListener?.state === 'listening'}
+              className={`ble-switch-btn ${lanListener?.state === 'listening' ? 'is-on' : ''}`}
+              disabled={!ready || lanBusy}
+              onClick={() => void toggleLanListener()}
+            >
+              <span className="ble-switch-track" aria-hidden="true">
+                <span className="ble-switch-thumb" />
+              </span>
+              <span>{lanListener?.state === 'listening' ? 'LAN On' : 'Turn on LAN'}</span>
+            </button>
+          </div>
+          {lanError && (
+            <div className="sync-feedback-banner device-discovery-feedback is-error" role="status" style={{ marginTop: 8 }}>
+              <AlertCircle size={15} aria-hidden="true" />
+              <span>{lanError}</span>
+            </div>
+          )}
+        </>
+      )}
+
       {scanMode === 'ble' && bleStatus?.available && (
         <div className="ble-action-bar device-discovery-visibility">
           <div className="device-discovery-visibility-copy">
@@ -510,16 +641,24 @@ export function NearbyServices({ ready, scanRevision, trustRevision, searchQuery
         </div>
       )}
       {devices.length > 0 && (
-        <ul className="nearby-devices">
+        <ul className="nearby-devices lan-discovery-list" aria-label="Nearby LAN devices">
           {devices.map((service) => {
             const paired = matched[JSON.stringify([service.interface, service.name])] === trustRevision;
+            const discoveryCode = /^Lanvory ([a-f0-9]{16})$/.exec(service.name)?.[1];
             return (
               <li key={JSON.stringify([service.interface, service.name, service.transport])}>
-                <span className="panel-icon"><Monitor size={20} aria-hidden="true" /></span>
-                <div><strong className="service-name">{service.name}</strong><small>{paired ? 'Paired' : 'Ready to verify'}</small></div>
-                {!paired && <button type="button" className="primary pair-device-action" disabled={!ready || resolving}
+                <Monitor className="lan-discovery-icon" size={19} aria-hidden="true" />
+                <div className="lan-discovery-device">
+                  <strong className="service-name">{discoveryCode ? 'LANVORY' : service.name}</strong>
+                  {discoveryCode && <code aria-label={`Discovery code ${discoveryCode}`}>{discoveryCode}</code>}
+                </div>
+                {paired ? (
+                  <span className="lan-discovery-paired"><CheckCircle2 size={15} aria-hidden="true" /> Paired</span>
+                ) : (
+                  <button type="button" className="primary pair-device-action" disabled={!ready || resolving}
                     aria-label={`Pair with ${service.name} on ${service.interface}`}
-                    onClick={() => void selectPeer(service.interface, service.name)}>Pair device <ChevronRight size={15} aria-hidden="true" /></button>}
+                    onClick={() => void selectPeer(service.interface, service.name)}>Pair device <ChevronRight size={15} aria-hidden="true" /></button>
+                )}
               </li>
             );
           })}

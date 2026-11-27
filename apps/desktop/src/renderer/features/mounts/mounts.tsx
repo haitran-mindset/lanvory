@@ -1,3 +1,5 @@
+import { WorkspaceTabs, WorkspaceTabPanel } from '../../components/workspace-tabs';
+import { FolderOpen, Share2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { z } from 'zod';
 import { readPairedNames } from '../../services/paired-names';
@@ -66,20 +68,17 @@ export function MountsPanel({
   }, [visible]);
 
   return (
-    <section className="network-panel sync-panel" aria-label="Live Resources">
-      <LiveMountSection
-        mode={tab}
-        onModeChange={setTab}
-        refreshing={refreshing}
-        exportsList={mountExports}
-        mountsList={mountsList}
-        peers={peers}
-        grants={grants}
-        names={names}
-        routes={routes}
-        onRoute={onRoute}
-        onRefresh={refresh}
-      />
+    <section className="network-panel sync-panel tabbed-workspace" aria-label="Live Resources">
+      <WorkspaceTabs name="resources" label="Live Resources sections" active={tab} onChange={setTab} tabs={[
+        { id: 'remote', label: 'Browse remote', icon: FolderOpen },
+        { id: 'shared', label: 'Shared folders', icon: Share2, count: mountExports.length || undefined },
+      ]} />
+      <WorkspaceTabPanel name="resources" id={tab} active={tab}>
+        <LiveMountSection mode={tab} refreshing={refreshing} exportsList={mountExports}
+          mountsList={mountsList} peers={peers} grants={grants} names={names}
+          routes={routes} onRoute={onRoute} onRefresh={refresh} />
+      </WorkspaceTabPanel>
+      <WorkspaceTabPanel name="resources" id={tab === 'remote' ? 'shared' : 'remote'} active={tab}>{null}</WorkspaceTabPanel>
     </section>
   );
 }

@@ -1,3 +1,4 @@
+import { WorkspaceTabs, WorkspaceTabPanel } from '../../components/workspace-tabs';
 import { type FormEvent, useEffect, useState } from "react";
 import { SelectField, accessDurations } from "../../components/ui/select";
 import { z } from "zod";
@@ -6,6 +7,7 @@ import {
   ExternalLink,
   Laptop,
   Lock,
+  Plug,
   Server,
   ShieldCheck,
   Trash2,
@@ -67,6 +69,7 @@ export function Services({
   const [recipient, setRecipient] = useState("");
   const [busy, setBusy] = useState(false);
   const [revision, setRevision] = useState(0);
+  const [tab, setTab] = useState<'share' | 'connect'>('share');
   const [message, setMessage] = useState("");
   const [connectionReady, setConnectionReady] = useState(false);
   const [forceLanAddress, setForceLanAddress] = useState(false);
@@ -166,7 +169,7 @@ export function Services({
   const usingP2PRoute = !forceLanAddress && isP2PRoute(route);
   return (
     <section
-      className="network-panel services-panel"
+      className="network-panel services-panel tabbed-workspace"
       aria-labelledby="services-heading"
     >
       <h2 id="services-heading" className="sr-only">
@@ -176,7 +179,8 @@ export function Services({
       {snapshot === null && (
         <p role="status">Unable to load services. Reconnecting…</p>
       )}
-      <div className="operation-grid services-grid">
+      <WorkspaceTabs name="services" label="Services sections" active={tab} onChange={setTab} tabs={[{ id: 'share', label: 'Share locally', icon: Server }, { id: 'connect', label: 'Connect remotely', icon: ArrowDownLeft }]} />
+      <WorkspaceTabPanel name="services" id="share" active={tab}>
         <section className="operation-card operation-highlight">
           <PanelHeading
             icon={Server}
@@ -394,6 +398,8 @@ export function Services({
             );
           })}
         </section>
+      </WorkspaceTabPanel>
+      <WorkspaceTabPanel name="services" id="connect" active={tab}>
         <section className="operation-card">
           <PanelHeading
             icon={ArrowDownLeft}
@@ -494,6 +500,7 @@ export function Services({
                     type="submit"
                     disabled={busy || (!usingP2PRoute && !connectionReady)}
                   >
+                    <Plug size={16} aria-hidden="true" />
                     Connect to service
                   </button>
                 </div>
@@ -567,7 +574,7 @@ export function Services({
             </div>
           ))}
         </section>
-      </div>
+      </WorkspaceTabPanel>
       {message && <p role="status">{message}</p>}
     </section>
   );

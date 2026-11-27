@@ -1,3 +1,4 @@
+import { WorkspaceTabs, WorkspaceTabPanel } from '../../components/workspace-tabs';
 import { version as appVersion } from '../../../../package.json';
 import {
   Bell,
@@ -64,7 +65,7 @@ export function SettingsPanel({ name, onRename, textSize, onTextSizeChange, them
   const [copyingReport, setCopyingReport] = useState(false);
   const [reportMessage, setReportMessage] = useState('');
 
-  const [activeCategory, setActiveCategory] = useState<string>('settings-sec-preferences');
+  const [activeCategory, setActiveCategory] = useState<(typeof categories)[number]['id']>('settings-sec-preferences');
 
   const [loginItem, setLoginItem] = useState<LoginItemState | null>(null);
   const [savingLoginItem, setSavingLoginItem] = useState(false);
@@ -213,39 +214,14 @@ export function SettingsPanel({ name, onRename, textSize, onTextSizeChange, them
     setSaving(false);
   }
 
-  function scrollToSection(id: string) {
-    setActiveCategory(id);
-    const element = document.getElementById(id);
-    if (element) {
-      element.scrollIntoView({ behavior: reducedMotion ? 'auto' : 'smooth', block: 'start' });
-    }
-  }
-
   return (
-    <section className="nearby settings-container" aria-labelledby="settings-title">
-      <div className="section-title"><h2 id="settings-title">Settings</h2></div>
+    <section className="nearby settings-container tabbed-workspace" aria-labelledby="settings-title">
+      <h2 id="settings-title" className="sr-only">Settings</h2>
 
-      {/* Category Quick Jump Bar */}
-      <nav className="settings-category-nav" aria-label="Settings navigation">
-        {categories.map(({ id, label, icon: Icon }) => (
-          <button
-            key={id}
-            type="button"
-            className={`settings-category-pill ${activeCategory === id ? 'is-active' : ''}`}
-            onClick={() => scrollToSection(id)}
-          >
-            <Icon size={14} aria-hidden="true" />
-            <span>{label}</span>
-          </button>
-        ))}
-      </nav>
+      <WorkspaceTabs name="settings" label="Settings sections" tabs={categories} active={activeCategory} onChange={setActiveCategory} />
 
       {/* SECTION 1: Preferences */}
-      <div className="settings-section" id="settings-sec-preferences">
-        <div className="settings-section-header">
-          <span className="settings-section-tag">// PREFERENCES</span>
-          <h3 className="settings-section-title">Interface & Notifications</h3>
-        </div>
+      <WorkspaceTabPanel name="settings" id="settings-sec-preferences" active={activeCategory}>
         <div className="operation-grid settings-grid settings-section-grid">
           {/* Appearance Card */}
           <section className="operation-card" aria-labelledby="settings-appearance">
@@ -309,14 +285,10 @@ export function SettingsPanel({ name, onRename, textSize, onTextSizeChange, them
             </div>
           </section>
         </div>
-      </div>
+      </WorkspaceTabPanel>
 
       {/* SECTION 2: Device & Storage */}
-      <div className="settings-section" id="settings-sec-device">
-        <div className="settings-section-header">
-          <span className="settings-section-tag">// IDENTITY & STORAGE</span>
-          <h3 className="settings-section-title">My Device & Local Inbox</h3>
-        </div>
+      <WorkspaceTabPanel name="settings" id="settings-sec-device" active={activeCategory}>
         <div className="operation-grid settings-grid settings-section-grid">
           {/* My device Card */}
           <section className="operation-card" aria-labelledby="settings-device">
@@ -396,14 +368,10 @@ export function SettingsPanel({ name, onRename, textSize, onTextSizeChange, them
             {inboxMessage && <p role="status" className="settings-status">{inboxMessage}</p>}
           </section>
         </div>
-      </div>
+      </WorkspaceTabPanel>
 
       {/* SECTION 3: Security & Privacy */}
-      <div className="settings-section" id="settings-sec-security">
-        <div className="settings-section-header">
-          <span className="settings-section-tag">// SECURITY & AUDIT</span>
-          <h3 className="settings-section-title">Permissions & Privacy Controls</h3>
-        </div>
+      <WorkspaceTabPanel name="settings" id="settings-sec-security" active={activeCategory}>
         <div className="operation-grid settings-grid settings-section-grid">
           {/* Permission defaults Card */}
           <section className="operation-card" aria-labelledby="settings-perm-defaults">
@@ -447,14 +415,10 @@ export function SettingsPanel({ name, onRename, textSize, onTextSizeChange, them
             <PermissionActivity ownerId={ownerId} />
           </div>
         </div>
-      </div>
+      </WorkspaceTabPanel>
 
       {/* SECTION 4: System & Shortcuts */}
-      <div className="settings-section" id="settings-sec-system">
-        <div className="settings-section-header">
-          <span className="settings-section-tag">// SYSTEM & REFERENCE</span>
-          <h3 className="settings-section-title">Navigation & Build Details</h3>
-        </div>
+      <WorkspaceTabPanel name="settings" id="settings-sec-system" active={activeCategory}>
         <div className="operation-grid settings-grid settings-section-grid">
           {/* Keyboard shortcuts Card */}
           <section className="operation-card" aria-labelledby="settings-shortcuts">
@@ -490,7 +454,7 @@ export function SettingsPanel({ name, onRename, textSize, onTextSizeChange, them
             {noticesMessage && <p role="status" className="settings-status">{noticesMessage}</p>}
           </section>
         </div>
-      </div>
+      </WorkspaceTabPanel>
     </section>
   );
 }

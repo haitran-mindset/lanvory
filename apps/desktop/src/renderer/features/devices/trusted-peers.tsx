@@ -1,8 +1,7 @@
 import { Bluetooth, Check, Copy, Monitor, Pencil, Search, ShieldCheck, Trash2, Wifi } from 'lucide-react';
-import { type FormEvent, useEffect, useState } from 'react';
+import { type FormEvent, useEffect, useRef, useState } from 'react';
 import { z } from 'zod';
 import { useNotifications } from '../../components/notifications';
-import { PanelHeading } from '../../components/panel-heading';
 import { pairedDeviceName, readPairedNames, writePairedNames } from '../../services/paired-names';
 import type { PeerRoute } from '../sharing/sharing';
 
@@ -27,20 +26,24 @@ export function TrustedPeers({ ownerId, externalRevision = 0, visible = true, ro
   const [pendingRevoke, setPendingRevoke] = useState<string>();
   const [message, setMessage] = useState('');
   const [editingName, setEditingName] = useState<string>();
-  const [copiedId, setCopiedId] = useState<string>();
+  const [copied, setCopied] = useState<{ fingerprint: string; field: 'id' | 'address' }>();
+  const copyTimer = useRef<ReturnType<typeof window.setTimeout> | undefined>(undefined);
+  useEffect(() => () => window.clearTimeout(copyTimer.current), []);
   const [searchQuery, setSearchQuery] = useState('');
   const [names, setNames] = useState(() => readPairedNames(ownerId));
 
-  async function copyFingerprint(fingerprint: string) {
+  async function copyPeerValue(fingerprint: string, field: 'id' | 'address', value: string) {
     try {
-      const ok = await window.lanvory.copyReceivedClipboard(fingerprint).catch(() => false);
+      const ok = await window.lanvory.copyReceivedClipboard(value).catch(() => false);
       if (!ok) {
-        await navigator.clipboard.writeText(fingerprint);
+        await navigator.clipboard.writeText(value);
       }
-      setCopiedId(fingerprint);
-      window.setTimeout(() => setCopiedId((prev) => (prev === fingerprint ? undefined : prev)), 1800);
+      window.clearTimeout(copyTimer.current);
+      setMessage('');
+      setCopied({ fingerprint, field });
+      copyTimer.current = window.setTimeout(() => setCopied(undefined), 1800);
     } catch {
-      setMessage('Unable to copy the device ID.');
+      setMessage(field === 'id' ? 'Unable to copy the device ID.' : 'Unable to copy the address.');
     }
   }
 
@@ -114,14 +117,14 @@ export function TrustedPeers({ ownerId, externalRevision = 0, visible = true, ro
 
   return (
     <section className="nearby trusted-panel" aria-labelledby="trusted-heading" aria-busy={busy}>
-      <PanelHeading
-        icon={ShieldCheck}
-        id="trusted-heading"
-        title="Paired devices"
-        badge={!!peers?.length && <span className="tag">{peers.length}</span>}
-        action={!!peers?.length && (
+      <div className="paired-register-heading">
+        <div className="paired-register-title">
+          <h3 id="trusted-heading">Paired devices</h3>
+          {peers && <span className="paired-register-count" aria-label={`${peers.length} paired devices`}>{peers.length}</span>}
+        </div>
+        {peers && peers.length > 0 && (
           <label className="paired-search-field">
-            <Search size={14} aria-hidden="true" />
+            <Search size={15} aria-hidden="true" />
             <input
               type="search"
               value={searchQuery}
@@ -131,7 +134,7 @@ export function TrustedPeers({ ownerId, externalRevision = 0, visible = true, ro
             />
           </label>
         )}
-      />
+      </div>
       {peers === undefined && <p>Loading paired devices…</p>}
       {peers === null && <p>Unable to load paired devices. <button type="button" className="refresh" onClick={() => setRevision(revision + 1)}>Retry</button></p>}
       {peers?.length === 0 && <p>No paired devices yet.</p>}
@@ -140,6 +143,7 @@ export function TrustedPeers({ ownerId, externalRevision = 0, visible = true, ro
         <ul className="interface-list paired-device-list">
           {filteredPeers.map((item) => {
             const route = routes?.[item.fingerprint];
+            const endpoint = route?.endpoint;
             const isP2P = route?.adapter === 'p2p';
             const hasLan = Boolean(route?.adapter && !isP2P);
             return (
@@ -152,25 +156,31 @@ export function TrustedPeers({ ownerId, externalRevision = 0, visible = true, ro
                   <div className="paired-device-info">
                     <div className="paired-device-title-row">
                       <strong className="paired-device-name">{pairedDeviceName(item.fingerprint, names)}</strong>
-                      <button
-                        type="button"
-                        className="device-fingerprint-badge device-fingerprint-copy"
-                        title={`Copy full Device ID: ${item.fingerprint}`}
-                        onClick={() => void copyFingerprint(item.fingerprint)}
-                      >
-                        <code>{item.fingerprint.slice(0, 8)}…{item.fingerprint.slice(-6)}</code>
-                        {copiedId === item.fingerprint ? <Check size={11} aria-hidden="true" /> : <Copy size={11} aria-hidden="true" />}
-                      </button>
-                    </div>
-                    <div className="paired-device-meta-row">
                       <span className={`paired-method-badge ${isP2P ? 'is-p2p' : hasLan ? 'is-lan' : ''}`}>
                         {isP2P ? <Bluetooth size={11} aria-hidden="true" /> : hasLan ? <Wifi size={11} aria-hidden="true" /> : <ShieldCheck size={11} aria-hidden="true" />}
                         <span>{isP2P ? 'Bluetooth + Wi-Fi P2P' : hasLan ? `Local Network (${route!.adapter})` : 'Verified device'}</span>
                       </span>
-                      {route?.endpoint && (
-                        <span className="paired-meta-chip">
-                          <code>{route.endpoint}</code>
-                        </span>
+                    </div>
+                    <div className="paired-device-meta-row">
+                      <button
+                        type="button"
+                        className="device-fingerprint-badge device-fingerprint-copy"
+                        title={`Copy full Device ID: ${item.fingerprint}`}
+                        onClick={() => void copyPeerValue(item.fingerprint, 'id', item.fingerprint)}
+                      >
+                        <span>Device ID</span>
+                        <code>{item.fingerprint.slice(0, 8)}…{item.fingerprint.slice(-6)}</code>
+                        {copied?.fingerprint === item.fingerprint && copied.field === 'id' ? <Check size={11} aria-hidden="true" /> : <Copy size={11} aria-hidden="true" />}
+                      </button>
+                      {endpoint && (
+                        <button type="button" className="paired-meta-chip paired-address-copy"
+                          aria-label={copied?.fingerprint === item.fingerprint && copied.field === 'address' ? 'Address copied' : `Copy address ${endpoint}`}
+                          title="Copy address" onClick={() => void copyPeerValue(item.fingerprint, 'address', endpoint)}>
+                          <span>Address</span>
+                          <code>{endpoint}</code>
+                          {copied?.fingerprint === item.fingerprint && copied.field === 'address'
+                            ? <Check size={13} aria-hidden="true" /> : <Copy size={13} aria-hidden="true" />}
+                        </button>
                       )}
                       <small className="paired-date-text">
                         Paired <time dateTime={item.verifiedAt}>{new Date(item.verifiedAt).toLocaleDateString(undefined, { dateStyle: 'medium' })}</time>

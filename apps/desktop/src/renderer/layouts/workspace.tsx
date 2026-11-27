@@ -15,16 +15,26 @@ import { NotificationBell } from "../components/notifications";
 import { version as appVersion } from "../../../package.json";
 
 const navigation = [
-  ["Devices", Monitor],
-  ["Sharing", Layers],
-  ["Sync", RefreshCw],
-  ["Live Resources", HardDrive],
-  ["Services", Boxes],
-  ["Network", Network],
-  ["Settings", Settings],
+  {
+    label: "Workspace",
+    pages: [
+      ["Devices", Monitor],
+      ["Sharing", Layers],
+      ["Sync", RefreshCw],
+      ["Live Resources", HardDrive],
+      ["Services", Boxes],
+    ],
+  },
+  {
+    label: "System",
+    pages: [
+      ["Network", Network],
+      ["Settings", Settings],
+    ],
+  },
 ] as const;
 
-export type Page = (typeof navigation)[number][0];
+export type Page = (typeof navigation)[number]["pages"][number][0];
 
 export function Workspace({
   page,
@@ -67,27 +77,31 @@ export function Workspace({
           </div>
           <small>Local Network Platform</small>
         </div>
-        <nav aria-label="Workspace">
-          {navigation.map(([label, Icon]) => (
-            <div key={label}>
-              <button
-                aria-current={label === page ? "page" : undefined}
-                type="button"
-                onClick={() => onNavigate(label)}
-                aria-label={
-                  label === "Sharing" && pendingFiles > 0
-                    ? `Sharing, ${pendingFiles} incoming ${pendingFiles === 1 ? "file" : "files"} waiting`
-                    : undefined
-                }
-              >
-                <Icon size={21} aria-hidden="true" />
-                {label}
-                {label === "Sharing" && pendingFiles > 0 && (
-                  <span className="nav-pending-files" aria-hidden="true">
-                    {pendingFiles}
-                  </span>
-                )}
-              </button>
+        <nav className="sidebar-navigation" aria-label="Main navigation">
+          {navigation.map(({ label: group, pages }) => (
+            <div key={group} className="sidebar-nav-group" role="group" aria-label={group}>
+              <span className="sidebar-nav-label" aria-hidden="true">{group}</span>
+              {pages.map(([label, Icon]) => (
+                <button
+                  key={label}
+                  aria-current={label === page ? "page" : undefined}
+                  type="button"
+                  onClick={() => onNavigate(label)}
+                  aria-label={
+                    label === "Sharing" && pendingFiles > 0
+                      ? `Sharing, ${pendingFiles} incoming ${pendingFiles === 1 ? "file" : "files"} waiting`
+                      : undefined
+                  }
+                >
+                  <Icon size={21} aria-hidden="true" />
+                  {label}
+                  {label === "Sharing" && pendingFiles > 0 && (
+                    <span className="nav-pending-files" aria-hidden="true">
+                      {pendingFiles}
+                    </span>
+                  )}
+                </button>
+              ))}
             </div>
           ))}
         </nav>

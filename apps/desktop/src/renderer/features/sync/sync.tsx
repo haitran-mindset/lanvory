@@ -1,3 +1,4 @@
+import { WorkspaceTabs, WorkspaceTabPanel } from '../../components/workspace-tabs';
 import { type FormEvent, useEffect, useState } from 'react';
 import { AlertCircle, CheckCircle2, Folder, FolderSync, Info, Pause, Play, Plus, RefreshCw, Trash2 } from 'lucide-react';
 import { z } from 'zod';
@@ -95,6 +96,7 @@ export function SyncPanel({ visible, ownerId, routes, onRoute }: {
   const [pickedPath, setPickedPath] = useState('');
   const [mode, setMode] = useState<'send-only' | 'receive-only' | 'bidirectional'>('bidirectional');
   const [busy, setBusy] = useState(false);
+  const [tab, setTab] = useState<'folders' | 'add'>('folders');
   const [addMessage, setAddMessage] = useState<SyncFeedback>(null);
   const [listMessage, setListMessage] = useState<SyncFeedback>(null);
   const names = ownerId ? readPairedNames(ownerId) : {};
@@ -254,52 +256,10 @@ export function SyncPanel({ visible, ownerId, routes, onRoute }: {
   }
 
   return (
-    <section className="network-panel sync-panel" aria-labelledby="sync-heading">
+    <section className="network-panel sync-panel tabbed-workspace" aria-labelledby="sync-heading">
       <h2 id="sync-heading" className="sr-only">Sync</h2>
-      <div className="operation-grid">
-        <section className="operation-card operation-highlight">
-          <PanelHeading
-            icon={FolderSync}
-            title="Add sync folder"
-            description="Only user-selected folders are indexed with SHA-256 content hashes and version tracking. Symlinks and hidden metadata are excluded."
-          />
-          <form className="trust-form" onSubmit={(e) => void addFolder(e)}>
-            <label>
-              Folder ID
-              <input name="id" required maxLength={64} placeholder="project-docs" disabled={busy} />
-            </label>
-            <label>
-              Local directory
-              <div className="sync-path-row">
-                <input
-                  type="text"
-                  readOnly
-                  value={pickedPath}
-                  placeholder="No directory selected"
-                  aria-label="Selected directory path"
-                />
-                <button type="button" className="refresh" disabled={busy} onClick={() => void pickDirectory()}>
-                  Choose folder
-                </button>
-              </div>
-            </label>
-            <SelectField
-              label="Sync mode"
-              name="mode"
-              value={mode}
-              disabled={busy}
-              options={modeOptions}
-              onValueChange={(v) => {
-                if (v === 'send-only' || v === 'receive-only' || v === 'bidirectional') setMode(v);
-              }}
-            />
-            <button type="submit" className="primary" disabled={busy || !pickedPath}>
-              <Plus size={16} aria-hidden="true" /> Add folder
-            </button>
-          </form>
-          <SyncBanner feedback={addMessage} />
-        </section>
-
+      <WorkspaceTabs name="sync" label="Sync sections" active={tab} onChange={setTab} tabs={[{ id: 'folders', label: 'Registered folders', icon: Folder }, { id: 'add', label: 'Add folder', icon: Plus }]} />
+      <WorkspaceTabPanel name="sync" id="folders" active={tab}>
         <section className="operation-card">
           <PanelHeading
             icon={RefreshCw}
@@ -497,7 +457,51 @@ export function SyncPanel({ visible, ownerId, routes, onRoute }: {
             </ul>
           )}
         </section>
-      </div>
+      </WorkspaceTabPanel>
+      <WorkspaceTabPanel name="sync" id="add" active={tab}>
+        <section className="operation-card operation-highlight">
+          <PanelHeading
+            icon={FolderSync}
+            title="Add sync folder"
+            description="Only user-selected folders are indexed with SHA-256 content hashes and version tracking. Symlinks and hidden metadata are excluded."
+          />
+          <form className="trust-form" onSubmit={(e) => void addFolder(e)}>
+            <label>
+              Folder ID
+              <input name="id" required maxLength={64} placeholder="project-docs" disabled={busy} />
+            </label>
+            <label>
+              Local directory
+              <div className="sync-path-row">
+                <input
+                  type="text"
+                  readOnly
+                  value={pickedPath}
+                  placeholder="No directory selected"
+                  aria-label="Selected directory path"
+                />
+                <button type="button" className="refresh" disabled={busy} onClick={() => void pickDirectory()}>
+                  Choose folder
+                </button>
+              </div>
+            </label>
+            <SelectField
+              label="Sync mode"
+              name="mode"
+              value={mode}
+              disabled={busy}
+              options={modeOptions}
+              onValueChange={(v) => {
+                if (v === 'send-only' || v === 'receive-only' || v === 'bidirectional') setMode(v);
+              }}
+            />
+            <button type="submit" className="primary" disabled={busy || !pickedPath}>
+              <Plus size={16} aria-hidden="true" /> Add folder
+            </button>
+          </form>
+          <SyncBanner feedback={addMessage} />
+        </section>
+      </WorkspaceTabPanel>
     </section>
   );
 }
