@@ -4717,6 +4717,19 @@ button.pairing-number:not(:disabled):hover, .pairing-number[aria-pressed="true"]
 .device-register .paired-device-identity { gap: 10px; flex-basis: min(100%, 15rem); }
 .device-register .paired-device-main { gap: 10px; flex-wrap: wrap; }
 .device-register .paired-device-info { gap: 7px; }
+.device-register .paired-bluetooth-name {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  gap: 5px;
+  min-width: 0;
+  padding: 3px 7px;
+  border-radius: 4px;
+  background: var(--selected);
+}
+.paired-bluetooth-name svg { flex: none; color: var(--accent); }
+.paired-bluetooth-name span { min-width: 0; overflow-wrap: anywhere; }
+.paired-bluetooth-name strong { color: var(--accent); font-weight: 650; }
 .device-register .paired-device-name { font-size: 1rem; }
 .device-register .paired-device-actions { margin-inline-start: auto; }
 .device-register .paired-device-actions button:not(:hover) svg { color: var(--muted); }
@@ -5080,3 +5093,12 @@ aside .status .status-badge {
 @media (max-width: 730px) {
   .lan-discovery-list .pair-device-action { grid-column: 2 / -1; }
 }
+
+.nearby-connection-label,
+.nearby-devices .nearby-connection-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+}
+.nearby-connection-label svg { flex: none; color: var(--accent); }

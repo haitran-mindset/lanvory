@@ -1,3 +1,4 @@
+import { NearbyConnectionLabel } from './nearby-connection-label';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { AlertCircle, Bluetooth, CheckCircle2, ChevronRight, HelpCircle, Info, Laptop, Link2, Monitor, Radio, Radar, RefreshCw, ShieldCheck, Wifi } from 'lucide-react';
 import { z } from 'zod';
@@ -65,12 +66,6 @@ const lanInterfacesSchema = z.array(z.object({
   eligible: z.boolean(),
   addresses: z.array(z.string()),
 }));
-
-function signalLabel(rssi: number) {
-  if (rssi >= -60) return 'Strong';
-  if (rssi >= -78) return 'Good';
-  return 'Weak';
-}
 
 function btStateLabel(state: string) {
   switch (state) {
@@ -538,11 +533,7 @@ export function NearbyServices({ ready, scanRevision, trustRevision, searchQuery
                   <span className="device-discovery-peer-icon"><Laptop size={19} aria-hidden="true" /></span>
                   <div className="device-discovery-peer-copy">
                     <strong className="service-name" title={peer.name}>{peer.name}</strong>
-                    <small>
-                      {peer.p2pReady ? 'Wi-Fi P2P ready' : 'Bluetooth'}
-                      <span aria-hidden="true"> · </span>
-                      {signalLabel(peer.rssi)} signal
-                    </small>
+                    <NearbyConnectionLabel peer={peer} />
                   </div>
                   <button
                     type="button"

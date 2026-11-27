@@ -1,3 +1,4 @@
+import { NearbyConnectionLabel } from './nearby-connection-label';
 import { useEffect, useState } from 'react';
 import { AlertCircle, Bluetooth, CheckCircle2, Info, Radar, RefreshCw, Wifi } from 'lucide-react';
 import { z } from 'zod';
@@ -32,12 +33,6 @@ const nearbyScanResultSchema = z.object({
 type NearbyStatus = z.infer<typeof nearbyStatusSchema>;
 type NearbyPeer = z.infer<typeof nearbyPeerSchema>;
 type BleFeedback = { tone: 'success' | 'info' | 'error'; text: string } | null;
-
-function signalLabel(rssi: number) {
-  if (rssi >= -60) return 'Strong signal';
-  if (rssi >= -78) return 'Good signal';
-  return 'Weak signal';
-}
 
 function btStateLabel(state: string) {
   switch (state) {
@@ -275,9 +270,7 @@ export function BleNearbyCard({
                 <li key={peer.id} className="ble-peer-card">
                   <div className="ble-peer-meta">
                     <strong>{peer.name}</strong>
-                    <span>
-                      {peer.p2pReady ? 'Wi-Fi P2P ready' : 'Bluetooth'} · {signalLabel(peer.rssi)}
-                    </span>
+                    <NearbyConnectionLabel peer={peer} />
                   </div>
                   <button
                     type="button"

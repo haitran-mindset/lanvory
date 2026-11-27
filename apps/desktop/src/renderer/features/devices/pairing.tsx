@@ -304,13 +304,16 @@ export function PairingPanel({ selection, onClearTarget, onNetwork, visible, onC
       })()}
       </dialog>
       {target ? (
-        <article className="pairing-card" key={revision}>
-          <div className="pairing-card-heading">
-            <span className="pairing-device-icon"><Monitor size={23} aria-hidden="true" /></span>
-            <div><p>Selected device</p><h4>{target.name}</h4></div>
-          </div>
-          {startForm}
-        </article>
+        <details className="pairing-card pairing-manual" key={revision} open>
+          <summary>Pair selected device <ChevronDown size={15} aria-hidden="true" /></summary>
+          <article className="pairing-card">
+            <div className="pairing-card-heading">
+              <span className="pairing-device-icon"><Monitor size={23} aria-hidden="true" /></span>
+              <div><p>Selected device</p><h4>{target.name}</h4></div>
+            </div>
+            {startForm}
+          </article>
+        </details>
       ) : (
         <details className="pairing-card pairing-manual" key={revision} open={revision > 0 || undefined}>
           <summary>Pair by address <ChevronDown size={15} aria-hidden="true" /></summary>

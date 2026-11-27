@@ -109,9 +109,17 @@ export function TrustedPeers({ ownerId, externalRevision = 0, visible = true, ro
   }
 
   const query = searchQuery.trim().toLocaleLowerCase();
+  const discoveredName = (fingerprint: string) => {
+    const route = routes?.[fingerprint];
+    return route?.adapter === 'p2p' ? route.label?.trim() : undefined;
+  };
+  const displayName = (fingerprint: string) =>
+    names[fingerprint] || discoveredName(fingerprint) || pairedDeviceName(fingerprint, names);
   const filteredPeers = peers?.filter((item) =>
     !query
-    || pairedDeviceName(item.fingerprint, names).toLocaleLowerCase().includes(query)
+    || displayName(item.fingerprint).toLocaleLowerCase().includes(query)
+    || discoveredName(item.fingerprint)?.toLocaleLowerCase().includes(query)
+    || pairedDeviceName(item.fingerprint, {}).toLocaleLowerCase().includes(query)
     || item.fingerprint.toLocaleLowerCase().includes(query),
   );
 
@@ -144,6 +152,8 @@ export function TrustedPeers({ ownerId, externalRevision = 0, visible = true, ro
           {filteredPeers.map((item) => {
             const route = routes?.[item.fingerprint];
             const endpoint = route?.endpoint;
+            const name = displayName(item.fingerprint);
+            const advertisedName = discoveredName(item.fingerprint);
             const isP2P = route?.adapter === 'p2p';
             const hasLan = Boolean(route?.adapter && !isP2P);
             return (
@@ -155,12 +165,18 @@ export function TrustedPeers({ ownerId, externalRevision = 0, visible = true, ro
                   </div>
                   <div className="paired-device-info">
                     <div className="paired-device-title-row">
-                      <strong className="paired-device-name">{pairedDeviceName(item.fingerprint, names)}</strong>
+                      <strong className="paired-device-name">{name}</strong>
                       <span className={`paired-method-badge ${isP2P ? 'is-p2p' : hasLan ? 'is-lan' : ''}`}>
                         {isP2P ? <Bluetooth size={11} aria-hidden="true" /> : hasLan ? <Wifi size={11} aria-hidden="true" /> : <ShieldCheck size={11} aria-hidden="true" />}
                         <span>{isP2P ? 'Bluetooth + Wi-Fi P2P' : hasLan ? `Local Network (${route!.adapter})` : 'Verified device'}</span>
                       </span>
                     </div>
+                    {advertisedName && advertisedName !== name && (
+                      <small className="paired-bluetooth-name">
+                        <Bluetooth size={13} aria-hidden="true" />
+                        <span>Bluetooth name: <strong>{advertisedName}</strong></span>
+                      </small>
+                    )}
                     <div className="paired-device-meta-row">
                       <button
                         type="button"
@@ -220,7 +236,7 @@ export function TrustedPeers({ ownerId, externalRevision = 0, visible = true, ro
                   <label className="paired-name-input-wrap">
                     <span className="sr-only">Device name</span>
                     <input name="deviceName" maxLength={64} required autoFocus
-                      defaultValue={pairedDeviceName(item.fingerprint, names)}
+                      defaultValue={name}
                       placeholder="e.g. Office Mac" />
                   </label>
                   <div className="paired-device-form-actions">
