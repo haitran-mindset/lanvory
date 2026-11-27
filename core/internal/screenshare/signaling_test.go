@@ -2,6 +2,7 @@ package screenshare
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"image"
 	"image/jpeg"
@@ -227,4 +228,59 @@ func TestUHDFramesRequireUHDNegotiation(t *testing.T) {
 	if got := m.View(offer.ID, 0, func(string) bool { return true }); !bytes.Equal(got.Frame, frame.Frame) {
 		t.Fatal("UHD frame was not passed to the viewer")
 	}
+}
+
+func TestWaitViewWakesForNextFrameAndStop(t *testing.T) {
+	m := New()
+	offer := Request{Action: "offer", ID: strings.Repeat("05", 16), Offer: JPEGFormat, CreatedAt: time.Now()}
+	if _, err := m.Handle("sender", offer); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Decide(offer.ID, true, JPEGFormat); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	check := func(after uint64, update func(), wantState string, wantSequence uint64) {
+		t.Helper()
+		started := make(chan struct{}, 1)
+		done := make(chan View, 1)
+		go func() {
+			done <- m.WaitView(ctx, offer.ID, after, func(string) bool {
+				select {
+				case started <- struct{}{}:
+				default:
+				}
+				return true
+			})
+		}()
+		select {
+		case <-started:
+		case <-ctx.Done():
+			t.Fatal("viewer did not begin waiting")
+		}
+		update()
+		select {
+		case got := <-done:
+			if got.State != wantState || got.Sequence != wantSequence {
+				t.Fatalf("got state %q and sequence %d", got.State, got.Sequence)
+			}
+		case <-ctx.Done():
+			t.Fatal("viewer did not wake after the update")
+		}
+	}
+	var data bytes.Buffer
+	if err := jpeg.Encode(&data, image.NewGray(image.Rect(0, 0, 16, 16)), nil); err != nil {
+		t.Fatal(err)
+	}
+	check(0, func() {
+		if _, err := m.Handle("sender", Request{Action: "frame", ID: offer.ID, Frame: data.Bytes(), Sequence: 1}); err != nil {
+			t.Fatal(err)
+		}
+	}, "accepted", 1)
+	check(1, func() {
+		if err := m.Stop(offer.ID); err != nil {
+			t.Fatal(err)
+		}
+	}, "stopped", 0)
 }

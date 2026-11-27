@@ -3,6 +3,7 @@ package screenshare
 
 import (
 	"bytes"
+	"context"
 	"encoding/hex"
 	"errors"
 	"image/jpeg"
@@ -37,11 +38,15 @@ type Request struct {
 	CreatedAt time.Time `json:"createdAt,omitzero"`
 	Frame     []byte    `json:"frame,omitempty"`
 	Sequence  uint64    `json:"sequence,omitempty"`
+	Stream    bool      `json:"stream,omitempty"`
+	Binary    bool      `json:"binary,omitempty"`
 }
 
 type Reply struct {
 	State  string `json:"state"`
 	Answer string `json:"answer,omitempty"`
+	Stream bool   `json:"stream,omitempty"`
+	Binary bool   `json:"binary,omitempty"`
 }
 
 type Invitation struct {
@@ -57,6 +62,7 @@ type View struct {
 	State    string `json:"state"`
 	Frame    []byte `json:"frame,omitempty"`
 	Sequence uint64 `json:"sequence,omitempty"`
+	Wait     bool   `json:"wait,omitempty"`
 }
 
 type session struct {
@@ -72,10 +78,16 @@ type Manager struct {
 	mu       sync.Mutex
 	sessions map[string]session
 	now      func() time.Time
+	changed  chan struct{}
 }
 
 func New() *Manager {
-	return &Manager{sessions: make(map[string]session), now: time.Now}
+	return &Manager{sessions: make(map[string]session), now: time.Now, changed: make(chan struct{})}
+}
+
+func (m *Manager) signalChange() {
+	close(m.changed)
+	m.changed = make(chan struct{})
 }
 
 func validID(id string) bool {
@@ -155,6 +167,9 @@ func (m *Manager) Handle(peer string, req Request) (Reply, error) {
 		return Reply{}, ErrUnavailable
 	}
 	m.sessions[req.ID] = current
+	if req.Action == "frame" || req.Action == "stop" {
+		m.signalChange()
+	}
 	return current.reply, nil
 }
 
@@ -210,6 +225,7 @@ func (m *Manager) Stop(id string) error {
 	current.frame = nil
 	current.ExpiresAt = now.Add(inviteLifetime + 10*time.Second)
 	m.sessions[id] = current
+	m.signalChange()
 	return nil
 }
 
@@ -234,13 +250,34 @@ func validFrame(frame []byte, format string) bool {
 func (m *Manager) View(id string, after uint64, trusted func(string) bool) View {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	return m.view(id, after, trusted)
+}
+
+func (m *Manager) WaitView(ctx context.Context, id string, after uint64, trusted func(string) bool) View {
+	for {
+		m.mu.Lock()
+		view := m.view(id, after, trusted)
+		changed := m.changed
+		m.mu.Unlock()
+		if view.State != "accepted" || len(view.Frame) != 0 {
+			return view
+		}
+		select {
+		case <-ctx.Done():
+			return m.View(id, after, trusted)
+		case <-changed:
+		}
+	}
+}
+
+func (m *Manager) view(id string, after uint64, trusted func(string) bool) View {
 	now := m.now()
 	m.prune(now)
 	current, exists := m.sessions[id]
 	if !exists || !trusted(current.Peer) {
 		return View{State: "stopped"}
 	}
-	view := View{State: current.reply.State}
+	view := View{State: current.reply.State, Wait: current.reply.State == "accepted"}
 	if current.reply.State == "accepted" && current.sequence > after && now.Sub(current.frameAt) <= 3*time.Second {
 		view.Frame, view.Sequence = current.frame, current.sequence
 	}

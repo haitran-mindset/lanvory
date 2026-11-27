@@ -30,6 +30,7 @@ type screenCommand struct {
 	Accept      bool                `json:"accept"`
 	After       uint64              `json:"after"`
 	Answer      string              `json:"answer"`
+	Wait        bool                `json:"wait,omitempty"`
 }
 
 func WithScreenSignaling(next http.Handler, manager *screenshare.Manager, device Device, dir string, key ed25519.PrivateKey, hasP2PEndpoint func(string) bool) http.Handler {
@@ -41,6 +42,8 @@ func WithScreenSignaling(next http.Handler, manager *screenshare.Manager, device
 		return err == nil && ok
 	}
 	mux := http.NewServeMux()
+	var media peer.ScreenFrameStream
+	inventory := func() ([]networking.Interface, error) { return approvedInventory(dir) }
 	mux.HandleFunc("GET "+screenRoute+"/pending", func(w http.ResponseWriter, _ *http.Request) {
 		pending := manager.Pending()
 		visible := pending[:0]
@@ -63,6 +66,7 @@ func WithScreenSignaling(next http.Handler, manager *screenshare.Manager, device
 		case "send":
 			p2pOffer := command.Adapter == "p2p" && command.Signal.Action == "offer"
 			if !trusted(command.Fingerprint) {
+				media.Stop(command.Signal.ID)
 				if p2pOffer {
 					writeJSON(w, screenshare.Reply{State: "peer-not-trusted"})
 					return
@@ -80,15 +84,18 @@ func WithScreenSignaling(next http.Handler, manager *screenshare.Manager, device
 				return
 			}
 			var reply screenshare.Reply
-			if command.Adapter == "p2p" {
+			if command.Signal.Action == "stop" {
+				media.Stop(command.Signal.ID)
+			}
+			if command.Signal.Action == "frame" && command.Signal.Stream {
+				reply, err = media.Send(r.Context(), command.Adapter, endpoint, pin, key, command.Signal, inventory, hasP2PEndpoint)
+			} else if command.Adapter == "p2p" {
 				if p2pOffer {
 					_ = http.NewResponseController(w).SetWriteDeadline(time.Now().Add(7 * time.Second))
 				}
 				reply, err = peer.SendScreenSignalLoopback(r.Context(), endpoint, pin, key, command.Signal, hasP2PEndpoint)
 			} else {
-				reply, err = peer.SendScreenSignal(r.Context(), command.Adapter, endpoint, pin, key, command.Signal, func() ([]networking.Interface, error) {
-					return approvedInventory(dir)
-				})
+				reply, err = peer.SendScreenSignal(r.Context(), command.Adapter, endpoint, pin, key, command.Signal, inventory)
 			}
 			if err != nil {
 				if p2pOffer {
@@ -112,7 +119,13 @@ func WithScreenSignaling(next http.Handler, manager *screenshare.Manager, device
 			}
 			writeJSON(w, reply)
 		case "view":
-			writeJSON(w, manager.View(command.ID, command.After, trusted))
+			if command.Wait {
+				ctx, cancel := context.WithTimeout(r.Context(), 120*time.Millisecond)
+				defer cancel()
+				writeJSON(w, manager.WaitView(ctx, command.ID, command.After, trusted))
+			} else {
+				writeJSON(w, manager.View(command.ID, command.After, trusted))
+			}
 		case "decide":
 			for _, invitation := range manager.Pending() {
 				if invitation.ID != command.ID || !trusted(invitation.Peer) {
@@ -151,4 +164,19 @@ func ScreenSignaling(ctx context.Context, dir, action string, body io.Reader, re
 	default:
 		return screenshare.ErrUnavailable
 	}
+}
+
+// OpenScreenMedia creates a same-user daemon client for one serial media worker.
+func OpenScreenMedia(dir string) (request func(context.Context, string, io.Reader, *json.RawMessage) error, closeIdle func()) {
+	client := newLocalClient(dir, 3*time.Second)
+	return func(ctx context.Context, action string, body io.Reader, result *json.RawMessage) error {
+		if action != "send" && action != "view" {
+			return screenshare.ErrUnavailable
+		}
+		if err := checkPrivateDir(dir); err != nil {
+			client.CloseIdleConnections()
+			return err
+		}
+		return requestWithLocalClient(ctx, client, http.MethodPost, screenRoute+"/"+action, body, result)
+	}, client.CloseIdleConnections
 }

@@ -27,7 +27,7 @@ func TestScreenStreamKeepsCommandBoundaries(t *testing.T) {
 		if action != "send" || request.ID != "second" {
 			t.Fatalf("unexpected command %s %+v", action, request)
 		}
-		*reply = json.RawMessage(`{"state":"accepted"}`)
+		*reply = json.RawMessage("{\n  \"state\": \"accepted\"\n}")
 		return nil
 	})
 	if err != nil || calls != 2 || output.String() != "null\n{\"state\":\"accepted\"}\n" {

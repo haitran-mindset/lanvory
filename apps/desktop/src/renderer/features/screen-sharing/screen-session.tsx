@@ -10,6 +10,10 @@ const format = 'jpeg/1';
 const hdFormat = 'jpeg/2';
 const uhdFormat = 'jpeg/3';
 const frameInterval = 83;
+const liveFrameInterval = 1000 / 30;
+const base64Bytes: Uint8ArrayConstructor & {
+  fromBase64?: (frame: string) => Uint8Array<ArrayBuffer>;
+} = Uint8Array;
 const uhdFrameBytes = 640 * 1024;
 const legacyProfiles = [
   { width: 1280, quality: 0.68 },
@@ -66,6 +70,9 @@ const view = z.object({
     .max(4 * Math.ceil(uhdFrameBytes / 3))
     .optional(),
   sequence: z.number().int().positive().optional(),
+  stream: z.boolean().optional(),
+  binary: z.boolean().optional(),
+  wait: z.boolean().optional(),
 });
 type Invitation = z.infer<typeof invitation>;
 type Session =
@@ -301,8 +308,17 @@ export function ScreenSession({
     if (!session) return;
     let disposed = false;
     let timer: ReturnType<typeof setTimeout>;
+    let captureTimer: ReturnType<typeof setTimeout>;
+    let prefetched:
+      { started: number; frame: ReturnType<typeof captureFrame> } | undefined;
+    let pendingFrame: string | undefined;
+    let decoding = false;
     let sequence = 0;
     let accepted = false;
+    let streaming = false;
+    let binaryMedia = false;
+    let waitForFrame = false;
+    let missedFrames = 0;
     let frameFormat: FrameFormat = format;
     let slowFrames = 0;
     let level = 0;
@@ -310,32 +326,101 @@ export function ScreenSession({
     let lastFrame = Date.now();
     const canvas = document.createElement('canvas');
 
+    function captureFrame() {
+      const source = video.current;
+      return source && source.readyState >= 2
+        ? encodeFrame(source, canvas, level, frameFormat).catch(() => undefined)
+        : Promise.resolve(undefined);
+    }
+
+    async function displayLatestFrame() {
+      if (decoding) return;
+      decoding = true;
+      try {
+        while (pendingFrame && !disposed && current.current === session) {
+          const frame = pendingFrame;
+          pendingFrame = undefined;
+          const bytes =
+            base64Bytes.fromBase64?.(frame) ??
+            Uint8Array.from(atob(frame), (byte) => byte.charCodeAt(0));
+          const url = URL.createObjectURL(
+            new Blob([bytes], { type: 'image/jpeg' }),
+          );
+          const nextImage = new Image();
+          nextImage.src = url;
+          try {
+            await nextImage.decode();
+            if (disposed || current.current !== session) return;
+            clearFrame();
+            frameURL.current = url;
+            setImage({
+              url,
+              width: nextImage.naturalWidth,
+              height: nextImage.naturalHeight,
+            });
+          } finally {
+            if (frameURL.current !== url) URL.revokeObjectURL(url);
+          }
+        }
+      } catch {
+        if (!disposed && current.current === session)
+          finish('Could not display the received screen.');
+      } finally {
+        decoding = false;
+      }
+    }
+
     async function tick() {
       if (!session || disposed || current.current !== session) return;
       const start = performance.now();
       if (session.direction === 'send') {
         if (!video.current) return;
         let signal: object = { id: session.id, action: 'status' };
-        if (accepted && video.current.readyState >= 2) {
-          const encoded = await encodeFrame(
-            video.current,
-            canvas,
-            level,
-            frameFormat,
-          ).catch(() => undefined);
+        let sendingFrame = false;
+        if (accepted) {
+          const next = prefetched;
+          prefetched = undefined;
+          let encoded = await next?.frame;
+          if (disposed || current.current !== session) return;
+          if (
+            !encoded ||
+            (next && start - next.started > liveFrameInterval * 2)
+          )
+            encoded = await captureFrame();
           if (disposed || current.current !== session) return;
           if (encoded) {
-            level = encoded.level;
+            level = Math.max(level, encoded.level);
+            sendingFrame = true;
             signal = {
               id: session.id,
               action: 'frame',
               frame: encoded.frame,
               sequence: ++sequence,
+              ...(streaming ? { stream: true } : {}),
+              ...(binaryMedia ? { binary: true } : {}),
             };
           }
         }
+        if (streaming && sendingFrame) {
+          captureTimer = setTimeout(
+            () => {
+              if (disposed || current.current !== session) return;
+              prefetched = {
+                started: performance.now(),
+                frame: captureFrame(),
+              };
+            },
+            Math.max(0, liveFrameInterval - (performance.now() - start)),
+          );
+        }
         const reply = view.safeParse(await tell(session.route, signal));
+        clearTimeout(captureTimer);
         if (disposed) return;
+        if (!reply.success && streaming && ++missedFrames < 3) {
+          timer = setTimeout(tick, liveFrameInterval);
+          return;
+        }
+        missedFrames = 0;
         if (
           !reply.success ||
           !['pending', 'accepted'].includes(reply.data.state)
@@ -358,6 +443,12 @@ export function ScreenSession({
             return;
           }
           frameFormat = reply.data.answer;
+          streaming = reply.data.stream === true;
+          binaryMedia = streaming && reply.data.binary === true;
+          if (streaming && frameFormat === uhdFormat)
+            level = qualityModes[frameFormat].profiles.findIndex(
+              ({ width }) => width === 1280,
+            );
           accepted = true;
           setPhase('');
           notify({
@@ -366,19 +457,20 @@ export function ScreenSession({
             title: 'Sharing your screen',
           });
         }
-        if (accepted) {
+        if (sendingFrame) {
           const elapsed = performance.now() - start;
           const mode = qualityModes[frameFormat];
-          if (elapsed > mode.slowFrame) {
+          const budget = streaming ? liveFrameInterval : frameInterval;
+          if (elapsed > (streaming ? budget * 1.15 : mode.slowFrame)) {
             fastFrames = 0;
-            if (++slowFrames >= 3) {
+            if (++slowFrames >= (streaming ? 2 : 3)) {
               level = Math.min(level + 1, mode.profiles.length - 1);
               slowFrames = 0;
             }
           } else {
             slowFrames = 0;
-            if (level > 0 && elapsed < frameInterval) {
-              if (++fastFrames >= 24) {
+            if (level > 0 && elapsed < budget * (streaming ? 0.65 : 0.85)) {
+              if (++fastFrames >= (streaming ? 90 : 24)) {
                 level--;
                 fastFrames = 0;
               }
@@ -389,7 +481,11 @@ export function ScreenSession({
         }
       } else {
         const raw = await window.lanvory
-          .screenSignaling('view', { id: session.id, after: sequence })
+          .screenSignaling('view', {
+            id: session.id,
+            after: sequence,
+            ...(waitForFrame ? { wait: true } : {}),
+          })
           .catch(() => null);
         if (disposed) return;
         const reply = view.safeParse(raw);
@@ -404,49 +500,30 @@ export function ScreenSession({
           return;
         }
         const { frame, sequence: next } = reply.data;
+        waitForFrame = reply.data.wait === true;
         if (!frame && Date.now() - lastFrame > 3000 && frameURL.current) {
           clearFrame();
           setImage(undefined);
         }
         if (frame && next && next > sequence) {
-          try {
-            const bytes = Uint8Array.from(atob(frame), (byte) =>
-              byte.charCodeAt(0),
-            );
-            const url = URL.createObjectURL(
-              new Blob([bytes], { type: 'image/jpeg' }),
-            );
-            const nextImage = new Image();
-            nextImage.src = url;
-            try {
-              await nextImage.decode();
-            } catch {
-              URL.revokeObjectURL(url);
-              if (!disposed && current.current === session)
-                finish('Could not display the received screen.');
-              return;
-            }
-            if (disposed || current.current !== session) {
-              URL.revokeObjectURL(url);
-              return;
-            }
-            clearFrame();
-            frameURL.current = url;
-            setImage({
-              url,
-              width: nextImage.naturalWidth,
-              height: nextImage.naturalHeight,
-            });
-            sequence = next;
-            lastFrame = Date.now();
-          } catch {
-            finish('Could not display the received screen.');
-            return;
-          }
+          sequence = next;
+          lastFrame = Date.now();
+          pendingFrame = frame;
+          void displayLatestFrame();
+        }
+        if (waitForFrame) {
+          void tick();
+          return;
         }
       }
       const interval =
-        accepted || session.direction === 'view' ? frameInterval : 500;
+        session.direction === 'view'
+          ? frameInterval
+          : accepted
+            ? streaming
+              ? liveFrameInterval
+              : frameInterval
+            : 500;
       timer = setTimeout(
         tick,
         Math.max(0, interval - (performance.now() - start)),
@@ -457,6 +534,8 @@ export function ScreenSession({
     return () => {
       disposed = true;
       clearTimeout(timer);
+      clearTimeout(captureTimer);
+      pendingFrame = undefined;
     };
   }, [session, video]);
 

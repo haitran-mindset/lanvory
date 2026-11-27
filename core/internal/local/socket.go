@@ -586,23 +586,35 @@ func requestLocalTimedBody(ctx context.Context, dir, method, route string, body 
 	if err := checkPrivateDir(dir); err != nil {
 		return err
 	}
-	transport := &http.Transport{DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
-		conn, err := (&net.Dialer{}).DialContext(ctx, "unix", filepath.Join(dir, "daemon.sock"))
-		if err != nil {
-			return nil, err
-		}
-		if !currentUser(conn.(*net.UnixConn)) {
-			conn.Close()
-			return nil, errors.New("daemon socket peer has a different OS user")
-		}
-		return conn, nil
-	}}
-	defer transport.CloseIdleConnections()
-	client := &http.Client{
+	client := newLocalClient(dir, timeout)
+	defer client.CloseIdleConnections()
+	return requestWithLocalClient(ctx, client, method, route, body, destination)
+}
+
+func newLocalClient(dir string, timeout time.Duration) *http.Client {
+	transport := &http.Transport{
+		MaxIdleConnsPerHost: 1,
+		IdleConnTimeout:     2 * time.Second,
+		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+			conn, err := (&net.Dialer{}).DialContext(ctx, "unix", filepath.Join(dir, "daemon.sock"))
+			if err != nil {
+				return nil, err
+			}
+			if !currentUser(conn.(*net.UnixConn)) {
+				conn.Close()
+				return nil, errors.New("daemon socket peer has a different OS user")
+			}
+			return conn, nil
+		},
+	}
+	return &http.Client{
 		Transport:     transport,
 		Timeout:       timeout,
 		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 	}
+}
+
+func requestWithLocalClient(ctx context.Context, client *http.Client, method, route string, body io.Reader, destination any) error {
 	request, err := http.NewRequestWithContext(ctx, method, "http://lanvory"+route, body)
 	if err != nil {
 		return err
@@ -739,6 +751,10 @@ func requestLocalTimedBody(ctx context.Context, dir, method, route string, body 
 	}
 	if int64(len(data)) > limit {
 		return errors.New("daemon response exceeds size limit")
+	}
+	if raw, ok := destination.(*json.RawMessage); ok && raw != nil && json.Valid(data) {
+		*raw = data
+		return nil
 	}
 	return json.Unmarshal(data, destination)
 }

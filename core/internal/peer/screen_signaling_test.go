@@ -186,8 +186,63 @@ func TestScreenSignalingOverRegisteredP2PBridge(t *testing.T) {
 	if reply := manager.View(offer.ID, 0, func(pin string) bool { return pin == senderPin.String() }); !bytes.Equal(reply.Frame, frame.Frame) {
 		t.Fatal("viewer did not receive the frame")
 	}
-	trusted.Store(false)
 	status := screenshare.Request{Action: "status", ID: offer.ID}
+	if reply, err := exchange(status); err != nil || !reply.Stream || !reply.Binary {
+		t.Fatalf("stream capability: %+v %v", reply, err)
+	}
+	var stream ScreenFrameStream
+	t.Cleanup(func() { stream.Stop(offer.ID) })
+	frame.Stream = true
+	frame.Sequence++
+	sendFrame := func() error {
+		_, err := stream.Send(ctx, "p2p", endpoint, serverPin, senderKey, frame, nil, knownEndpoint)
+		return err
+	}
+	if err := sendFrame(); err != nil {
+		t.Fatal(err)
+	}
+	stream.mu.Lock()
+	firstConnection := stream.conn
+	stream.mu.Unlock()
+	frame.Sequence++
+	if err := sendFrame(); err != nil {
+		t.Fatal(err)
+	}
+	stream.mu.Lock()
+	reused := stream.conn == firstConnection
+	stream.mu.Unlock()
+	if !reused {
+		t.Fatal("the next frame opened a new peer connection")
+	}
+	if got := manager.View(offer.ID, frame.Sequence-1, func(string) bool { return true }); got.Sequence != frame.Sequence {
+		t.Fatalf("viewer did not receive the latest frame: %+v", got)
+	}
+	frame.Binary = true
+	frame.Sequence++
+	if err := sendFrame(); err != nil {
+		t.Fatal(err)
+	}
+	stream.mu.Lock()
+	binaryConnection := stream.conn
+	stream.mu.Unlock()
+	frame.Sequence++
+	if err := sendFrame(); err != nil {
+		t.Fatal(err)
+	}
+	stream.mu.Lock()
+	reused = stream.conn != firstConnection && stream.conn == binaryConnection
+	stream.mu.Unlock()
+	if !reused {
+		t.Fatal("binary frames did not share a dedicated connection")
+	}
+	if got := manager.View(offer.ID, frame.Sequence-1, func(string) bool { return true }); got.Sequence != frame.Sequence || !bytes.Equal(got.Frame, frame.Frame) {
+		t.Fatal("viewer did not receive the latest binary frame")
+	}
+	trusted.Store(false)
+	frame.Sequence++
+	if err := sendFrame(); err == nil {
+		t.Fatal("revoked peer could send a frame using an existing connection")
+	}
 	if _, err := exchange(status); err == nil {
 		t.Fatal("revoked peer could query session status")
 	}

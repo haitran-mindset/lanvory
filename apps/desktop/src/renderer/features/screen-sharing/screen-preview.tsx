@@ -126,7 +126,7 @@ export function ScreenPreview({
       const capture = await navigator.mediaDevices.getDisplayMedia({
         video: {
           width: { ideal: 3840, max: 3840 },
-          frameRate: { ideal: 24, max: 30 },
+          frameRate: { ideal: 30, max: 30 },
         },
         audio: false,
       });

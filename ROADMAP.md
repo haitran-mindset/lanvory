@@ -17,7 +17,7 @@ Lanvory Desktop ships ad-hoc macOS builds for Apple Silicon and Intel. The MVP a
 | --- | --- |
 | Implemented in source | One sender and one viewer on macOS over LAN or a Wi-Fi P2P bridge, with source previews, per-session consent, and a stop action on either side. [Screen Sharing guide](docs/protocols/screen-sharing.md) |
 | Current focus | Validate LAN with WAN disconnected and Wi-Fi P2P without a shared router on two physical Macs. Measure time to first frame, frame rate, and latency. Test interruption, revocation, and stopping from either side. [Validation plan](docs/development/screen-sharing-plan.md#two-mac-acceptance) |
-| Next | Improve text clarity and motion. Keep the latest-frame behavior and evaluate a persistent media connection or video codec with enforceable LAN adapter scope. |
+| Next | Improve text clarity and motion. Evaluate a low-latency video codec with enforceable LAN and Wi-Fi P2P scope. |
 | Future | Evaluate optional system audio with separate consent, then extend capture and viewing to additional desktop platforms. |
 
 ## Acceptance scope
