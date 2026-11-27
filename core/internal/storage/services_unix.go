@@ -166,6 +166,44 @@ func AuthorizedService(dir, owner, fingerprint, id string, now time.Time) (bridg
 	return service, err
 }
 
+func AuthorizedServices(dir, owner, fingerprint string, now time.Time) ([]string, error) {
+	db, err := openState(dir)
+	if err != nil {
+		return nil, err
+	}
+	defer closeState(db)
+	statement, err := prepare(db, `SELECT s.id FROM shared_services s
+        JOIN peer_grants g ON g.owner_id=s.owner_id AND g.resource=s.id AND g.capability='service-connect' AND g.service_bound=1
+        JOIN trusted_peers p ON p.owner_id=g.owner_id AND p.fingerprint=g.fingerprint
+        WHERE s.owner_id=? AND g.fingerprint=?
+        AND (g.expires_at IS NULL OR g.expires_at > ?)
+        ORDER BY s.id`)
+	if err != nil {
+		return nil, err
+	}
+	defer C.sqlite3_finalize(statement)
+	for i, value := range []string{owner, fingerprint} {
+		if err := bind(statement, i+1, value); err != nil {
+			return nil, err
+		}
+	}
+	if code := C.sqlite3_bind_int64(statement, 3, C.sqlite3_int64(now.Unix())); code != C.SQLITE_OK {
+		return nil, fmt.Errorf("bind service list check time: SQLite code %d", code)
+	}
+	ids := []string{}
+	for {
+		step := C.sqlite3_step(statement)
+		if step == C.SQLITE_DONE {
+			break
+		}
+		if step != C.SQLITE_ROW {
+			return nil, fmt.Errorf("read authorized services: SQLite code %d", step)
+		}
+		ids = append(ids, C.GoString((*C.char)(unsafe.Pointer(C.sqlite3_column_text(statement, 0)))))
+	}
+	return ids, nil
+}
+
 func findService(db *C.sqlite3, owner, id string) (bridge.Service, error) {
 	statement, err := prepare(db, "SELECT id,target FROM shared_services WHERE owner_id=? AND id=?")
 	if err != nil {

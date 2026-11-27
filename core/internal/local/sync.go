@@ -8,6 +8,7 @@ import (
 	"crypto/ed25519"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -123,6 +124,46 @@ func registerSync(mux *http.ServeMux, device Device, dir string, mgr *syncengine
 		}
 		_ = storage.SetSyncFolderPausedStorage(dir, device.ID, id, req.Paused)
 		writeJSON(w, folder)
+	})
+	mux.HandleFunc("POST /v1/sync/discover", func(w http.ResponseWriter, r *http.Request) {
+		if key == nil {
+			http.Error(w, "Sync key unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		var req syncRunRequest
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096)).Decode(&req); err != nil {
+			http.Error(w, "Invalid sync discover request", http.StatusBadRequest)
+			return
+		}
+		endpoint, fingerprint, err := verificationInput(req.Interface, req.Endpoint, req.Fingerprint)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		trusted, err := storage.IsTrustedPeer(dir, device.ID, fingerprint.String())
+		if err != nil || !trusted {
+			http.Error(w, peer.ErrPeerIdentity.Error(), http.StatusForbidden)
+			return
+		}
+		ctx, cancel := context.WithTimeout(r.Context(), 12*time.Second)
+		defer cancel()
+		var folders []syncengine.RemoteFolderSummary
+		if req.Interface == "p2p" {
+			folders, err = peer.DiscoverSyncFoldersLoopback(ctx, endpoint, fingerprint, key, hasP2PEndpoint)
+		} else {
+			folders, err = peer.DiscoverSyncFolders(ctx, req.Interface, endpoint, fingerprint, key, func() ([]networking.Interface, error) {
+				return approvedInventory(dir)
+			})
+		}
+		if err != nil {
+			msg := err.Error()
+			if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) || strings.Contains(msg, "unexpected EOF") {
+				msg = "The other device is running an older Lanvory daemon that does not support sync discovery yet. Update and restart Lanvory on that device, or add the folder by Folder ID."
+			}
+			http.Error(w, msg, http.StatusBadGateway)
+			return
+		}
+		writeJSON(w, folders)
 	})
 	mux.HandleFunc("POST "+syncRoute+"/{id}/run", func(w http.ResponseWriter, r *http.Request) {
 		if key == nil {

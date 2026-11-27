@@ -29,6 +29,8 @@ export interface DesktopApi {
   openInbox(): Promise<'opened' | 'missing' | 'failed'>;
   openNotices(): Promise<'opened' | 'unavailable' | 'failed'>;
   openTunnelUrl(endpoint: string): Promise<boolean>;
+  discoverServices(adapter: string, endpoint: string, fingerprint: string): Promise<unknown>;
+  revealInboxFile(fileName: string): Promise<'opened' | 'missing' | 'failed'>;
   permissionActivity(): Promise<unknown>;
   inboxAccess(): Promise<unknown>;
   setInboxAccess(fingerprint: string, allowed: boolean, duration?: 'until-revoked' | 'hour' | 'day'): Promise<boolean>;
@@ -63,6 +65,7 @@ export interface DesktopApi {
   setSyncFolderPaused(id: string, paused: boolean): Promise<unknown>;
   setSyncAccess(fingerprint: string, folderId: string, allowed: boolean): Promise<boolean>;
   syncWithPeer(id: string, adapter: string, endpoint: string, pin: string, peerLabel?: string): Promise<unknown>;
+  discoverSyncFolders(adapter: string, endpoint: string, fingerprint: string): Promise<unknown>;
   mountExports(): Promise<unknown>;
   exportMountFolder(id: string, path: string, readOnly: boolean): Promise<unknown>;
   unexportMountFolder(id: string): Promise<boolean>;

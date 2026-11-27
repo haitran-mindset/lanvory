@@ -115,6 +115,9 @@ func (l *lanListener) start(adapter string, bind netip.AddrPort, advertise, enab
 		cancel()
 		return fmt.Errorf("start peer listener: %w", err)
 	}
+	tcp.EnableServiceList(func(fingerprint string) ([]string, error) {
+		return storage.AuthorizedServices(l.dir, l.device.ID, fingerprint, time.Now())
+	})
 	if l.clipboard != nil {
 		tcp.EnableClipboard(l.clipboard, func(fingerprint string) bool {
 			allowed, err := storage.HasGrant(l.dir, l.device.ID, storage.Grant{
@@ -231,6 +234,9 @@ func (l *lanListener) ensureP2PPort() int {
 		cancel()
 		return 0
 	}
+	loop.EnableServiceList(func(fingerprint string) ([]string, error) {
+		return storage.AuthorizedServices(l.dir, l.device.ID, fingerprint, time.Now())
+	})
 	if l.clipboard != nil {
 		loop.EnableClipboard(l.clipboard, func(fingerprint string) bool {
 			allowed, err := storage.HasGrant(l.dir, l.device.ID, storage.Grant{

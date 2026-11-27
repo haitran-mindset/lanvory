@@ -587,6 +587,28 @@ if (!app.requestSingleInstanceLock()) {
         return error.code === 'ENOENT' ? 'missing' : 'failed';
       }
     });
+    ipcMain.handle('lanvory:reveal-inbox-file', async (event, fileName) => {
+      assertTrustedFrame(event);
+      if (typeof fileName !== 'string' || !fileName.trim()) return 'failed';
+      const base = path.basename(fileName.trim());
+      if (!base || base === '.' || base === '..' || base !== fileName.trim()) return 'failed';
+      const state = process.env.LANVORY_STATE_DIR || path.join(app.getPath('home'), '.lanvory');
+      if (!path.isAbsolute(state)) return 'failed';
+      const inbox = path.join(state, 'inbox');
+      const target = path.join(inbox, base);
+      try {
+        for (const directory of [state, inbox]) {
+          const info = lstatSync(directory);
+          if (!info.isDirectory() || (info.mode & 0o777) !== 0o700 || info.uid !== process.geteuid?.()) return 'failed';
+        }
+        const fileInfo = lstatSync(target);
+        if (!fileInfo.isFile()) return 'missing';
+        shell.showItemInFolder(target);
+        return 'opened';
+      } catch (error) {
+        return error.code === 'ENOENT' ? 'missing' : 'failed';
+      }
+    });
     ipcMain.handle('lanvory:permission-activity', async (event) => {
       assertTrustedFrame(event);
       try {
@@ -1028,6 +1050,25 @@ if (!app.requestSingleInstanceLock()) {
       return false;
     });
 
+    function friendlyDaemonError(raw) {
+      const text = typeof raw === 'string' ? raw.trim() : '';
+      if (!text) return 'Operation failed.';
+      const lower = text.toLowerCase();
+      if (lower.includes('canceled by remote with error code 1') || lower.includes('application error 0x1')) {
+        return 'The other device rejected the connection (it may not trust this device yet, or its permission/network changed). Check Paired Devices on both devices and re-enable LAN on the other device.';
+      }
+      if (lower.includes('unexpected eof')) {
+        return 'The connection closed unexpectedly. Make sure Lanvory is open on the other device on the same Wi-Fi, then scan in Devices to refresh its IP address.';
+      }
+      if (lower.includes('no recent network activity') || lower.includes('i/o timeout') || lower.includes('deadline exceeded') || lower.includes('connection refused')) {
+        return 'Could not reach the other device at that address. Make sure Lanvory is open on both devices on the same Wi-Fi, then scan in Devices to refresh its IP address.';
+      }
+      if (lower.includes('permission denied') || lower.includes('unauthorized')) {
+        return 'Permission denied by the other device. Ask the owner to grant access for this device.';
+      }
+      return text;
+    }
+
     function requestDaemon(method, routePath, payload, timeoutMs = 15000) {
       return new Promise((resolve, reject) => {
         const stateDir = process.env.LANVORY_STATE_DIR || path.join(app.getPath('home'), '.lanvory');
@@ -1044,7 +1085,7 @@ if (!app.requestSingleInstanceLock()) {
           res.on('end', () => {
             const text = Buffer.concat(chunks).toString('utf8');
             if (res.statusCode >= 400) {
-              reject(new Error(text.trim() || `Daemon HTTP ${res.statusCode}`));
+              reject(new Error(friendlyDaemonError(text.trim() || `Daemon HTTP ${res.statusCode}`)));
               return;
             }
             if (!text.trim()) {
@@ -1074,6 +1115,28 @@ if (!app.requestSingleInstanceLock()) {
       }
       return requestDaemon('POST', '/v1/mounts/discover', { interface: adapter, endpoint, fingerprint: pin })
         .catch((err) => ({ error: err?.message || 'Unable to discover remote resources.' }));
+    });
+
+    ipcMain.handle('lanvory:sync-discover', async (event, adapter, endpoint, pin) => {
+      assertTrustedFrame(event);
+      if (typeof adapter !== 'string' || !/^[a-zA-Z0-9_.-]{1,32}$/.test(adapter)
+          || typeof endpoint !== 'string' || !/^(?:[0-9]{1,3}\.){3}[0-9]{1,3}:[0-9]{1,5}$/.test(endpoint)
+          || typeof pin !== 'string' || !/^[a-fA-F0-9]{64}$/.test(pin)) {
+        return { error: 'Invalid adapter, endpoint, or peer ID.' };
+      }
+      return requestDaemon('POST', '/v1/sync/discover', { interface: adapter, endpoint, fingerprint: pin })
+        .catch((err) => ({ error: err?.message || 'Unable to discover shared sync folders.' }));
+    });
+
+    ipcMain.handle('lanvory:service-discover', async (event, adapter, endpoint, pin) => {
+      assertTrustedFrame(event);
+      if (typeof adapter !== 'string' || !/^[a-zA-Z0-9_.-]{1,32}$/.test(adapter)
+          || typeof endpoint !== 'string' || !/^(?:[0-9]{1,3}\.){3}[0-9]{1,3}:[0-9]{1,5}$/.test(endpoint)
+          || typeof pin !== 'string' || !/^[a-fA-F0-9]{64}$/.test(pin)) {
+        return { error: 'Invalid adapter, endpoint, or peer ID.' };
+      }
+      return requestDaemon('POST', '/v1/services/discover', { interface: adapter, endpoint, fingerprint: pin })
+        .catch((err) => ({ error: err?.message || 'Unable to discover shared services.' }));
     });
 
     ipcMain.handle('lanvory:mount-native', async (event, id, mountPoint) => {
@@ -1238,7 +1301,7 @@ if (!app.requestSingleInstanceLock()) {
           const detail = typeof err?.stderr === 'string' && err.stderr.trim()
             ? err.stderr.trim().replace(/^lanvory:\s*/, '')
             : err?.message || 'Service action failed.';
-          return { ok: false, error: detail };
+          return { ok: false, error: friendlyDaemonError(detail) };
         },
       );
     });

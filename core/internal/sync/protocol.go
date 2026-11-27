@@ -49,6 +49,14 @@ type SyncResult struct {
 	Folder     Folder `json:"folder"`
 }
 
+// RemoteFolderSummary describes a sync folder shared with the requesting peer.
+type RemoteFolderSummary struct {
+	ID         string `json:"id"`
+	Mode       Mode   `json:"mode"`
+	FileCount  int    `json:"fileCount"`
+	TotalBytes int64  `json:"totalBytes"`
+}
+
 // ResolveSafePath resolves relPath inside root, rejecting traversal, hidden/ignored components, and symlinks.
 func ResolveSafePath(root, relPath string) (string, error) {
 	if relPath == "" || strings.ContainsRune(relPath, 0) {
@@ -83,7 +91,34 @@ func ServeConn(ctx context.Context, conn net.Conn, fingerprint string, mgr *Mana
 	if _, err := io.ReadFull(conn, idLen[:]); err != nil {
 		return err
 	}
-	if idLen[0] == 0 || idLen[0] > 64 {
+	if idLen[0] == 0 {
+		folders := mgr.List()
+		visible := make([]RemoteFolderSummary, 0, len(folders))
+		for _, f := range folders {
+			if f.Paused {
+				continue
+			}
+			if allowed != nil && !allowed(fingerprint, f.ID) {
+				continue
+			}
+			var total int64
+			for _, file := range f.Files {
+				total += file.Size
+			}
+			visible = append(visible, RemoteFolderSummary{
+				ID:         f.ID,
+				Mode:       f.Mode,
+				FileCount:  len(f.Files),
+				TotalBytes: total,
+			})
+		}
+		raw, err := json.Marshal(visible)
+		if err != nil || len(raw) > maxManifestBytes {
+			return errors.New("sync discovery response too large")
+		}
+		return writeSizedBytes(conn, raw)
+	}
+	if idLen[0] > 64 {
 		_, _ = conn.Write([]byte{0})
 		return ErrInvalidFolderID
 	}
@@ -212,6 +247,25 @@ func servePutFile(conn net.Conn, mgr *Manager, folder Folder, relPath string) er
 	}
 	_, err = conn.Write([]byte{1})
 	return err
+}
+
+// DiscoverRemoteFolders queries which non-paused sync folders the peer has allowed for this device.
+func DiscoverRemoteFolders(ctx context.Context, conn net.Conn) ([]RemoteFolderSummary, error) {
+	_ = conn.SetDeadline(time.Now().Add(syncFrameTimeout))
+	stop := context.AfterFunc(ctx, func() { _ = conn.Close() })
+	defer stop()
+	if _, err := conn.Write([]byte{0}); err != nil {
+		return nil, err
+	}
+	raw, err := readSizedBytes(conn, maxManifestBytes)
+	if err != nil {
+		return nil, err
+	}
+	var folders []RemoteFolderSummary
+	if err := json.Unmarshal(raw, &folders); err != nil {
+		return nil, err
+	}
+	return folders, nil
 }
 
 // RunClientSync synchronizes folderID against an authenticated peer connection.

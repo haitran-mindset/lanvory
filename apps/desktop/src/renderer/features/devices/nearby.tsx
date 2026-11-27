@@ -314,6 +314,32 @@ export function NearbyServices({ ready, scanRevision, trustRevision, searchQuery
     document.getElementById('pairing-heading')?.focus();
   }
 
+  async function refreshPairedRoutes(
+    discovered: Array<{ interface: string; name: string; transport?: string }>,
+    generation: number,
+  ) {
+    const tcpServices = discovered.filter((service) => service.transport !== 'udp');
+    for (const service of tcpServices) {
+      if (generation !== requestGeneration.current) return;
+      const response = await window.lanvory.resolveDiscovery(service.interface, service.name).catch(() => null);
+      if (generation !== requestGeneration.current) return;
+      const result = resolutionSchema.safeParse(response);
+      if (!result.success || result.data.interface !== service.interface || result.data.name !== service.name) continue;
+      for (const endpoint of result.data.endpoints.slice(0, 3)) {
+        const fingerprint = await window.lanvory.matchTrustedPeer(service.interface, endpoint).catch(() => null);
+        if (generation !== requestGeneration.current) return;
+        if (fingerprint) {
+          onVerified({ fingerprint, adapter: service.interface, endpoint });
+          setMatched((previous) => ({
+            ...previous,
+            [JSON.stringify([service.interface, service.name])]: trustRevision,
+          }));
+          break;
+        }
+      }
+    }
+  }
+
   async function discover() {
     if (scanInFlight.current) return;
     const generation = ++requestGeneration.current;
@@ -331,6 +357,9 @@ export function NearbyServices({ ready, scanRevision, trustRevision, searchQuery
     onCount(parsed.success && !parsed.data.unavailable ? parsed.data.services.filter((service) => service.transport !== 'udp').length : undefined);
     scanInFlight.current = false;
     setScanning(false);
+    if (parsed.success && !parsed.data.unavailable && parsed.data.services.length > 0) {
+      void refreshPairedRoutes(parsed.data.services, generation);
+    }
   }
 
   const lastScan = useRef(0);

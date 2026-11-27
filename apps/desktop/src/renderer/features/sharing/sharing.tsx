@@ -133,6 +133,7 @@ function transferEstimate(item: Transfer) {
 function TransferRow({
   item,
   peerName,
+  onReveal,
   onRemove,
   onRetry,
   onConfirm,
@@ -141,6 +142,7 @@ function TransferRow({
 }: {
   item: Transfer;
   peerName?: string;
+  onReveal?(): void;
   onRemove?(): void;
   onRetry?(): void;
   onConfirm?(): void;
@@ -187,6 +189,20 @@ function TransferRow({
           </div>
         </div>
         <div className="sharing-history-row-actions">
+          {onReveal &&
+            item.state === "completed" &&
+            item.direction === "incoming" && (
+              <button
+                type="button"
+                className="refresh sharing-history-retry"
+                title="Show in Finder"
+                aria-label={`Show ${item.name} in Finder`}
+                disabled={busy}
+                onClick={onReveal}
+              >
+                <FolderOpen size={15} aria-hidden="true" />
+              </button>
+            )}
           {onRetry &&
             (item.state === "failed" || item.state === "cancelled") &&
             item.direction === "outgoing" && (
@@ -428,6 +444,19 @@ export function Sharing({
           : "Unable to open the inbox folder.",
     );
     setOpeningInbox(false);
+  }
+
+  async function revealInboxFile(fileName: string) {
+    const result = await window.lanvory.revealInboxFile(fileName).catch(() => "failed");
+    if (result !== "opened") {
+      setInboxMessage(
+        result === "missing"
+          ? `“${fileName}” is no longer in the inbox folder.`
+          : `Unable to show “${fileName}” in Finder.`,
+      );
+    } else {
+      setInboxMessage("");
+    }
   }
 
   const canSelectFile = Boolean(
@@ -1200,6 +1229,11 @@ export function Sharing({
                   key={item.id}
                   peerName={transferPeerName(item)}
                   busy={removingHistory}
+                  onReveal={
+                    item.direction === "incoming" && item.state === "completed"
+                      ? () => void revealInboxFile(item.name)
+                      : undefined
+                  }
                   onRetry={() => retryTransfer(item)}
                   onRemove={() => setPendingHistoryRemoval(item.id)}
                   onConfirm={

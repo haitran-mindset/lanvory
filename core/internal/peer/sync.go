@@ -29,6 +29,36 @@ func SyncFolder(ctx context.Context, adapter string, endpoint netip.AddrPort, ex
 	return syncengine.RunClientSync(ctx, conn, mgr, folderID, peerLabel)
 }
 
+// DiscoverSyncFolders lists sync folders a peer has allowed for this device over LAN.
+func DiscoverSyncFolders(ctx context.Context, adapter string, endpoint netip.AddrPort, expected Fingerprint,
+	key ed25519.PrivateKey, inventory func() ([]networking.Interface, error)) ([]syncengine.RemoteFolderSummary, error) {
+	config, err := clientIdentity(expected, key, syncengine.Protocol)
+	if err != nil {
+		return nil, err
+	}
+	conn, err := dialScoped(ctx, adapter, endpoint, inventory, config)
+	if err != nil {
+		return nil, err
+	}
+	defer conn.Close()
+	return syncengine.DiscoverRemoteFolders(ctx, conn)
+}
+
+// DiscoverSyncFoldersLoopback lists sync folders a peer has allowed over Wi-Fi P2P loopback.
+func DiscoverSyncFoldersLoopback(ctx context.Context, endpoint netip.AddrPort, expected Fingerprint,
+	key ed25519.PrivateKey, hasEndpoint func(string) bool) ([]syncengine.RemoteFolderSummary, error) {
+	config, err := clientIdentity(expected, key, syncengine.Protocol)
+	if err != nil {
+		return nil, err
+	}
+	conn, err := dialLoopback(ctx, endpoint, config, hasEndpoint)
+	if err != nil {
+		return nil, err
+	}
+	defer conn.Close()
+	return syncengine.DiscoverRemoteFolders(ctx, conn)
+}
+
 // SyncFolderLoopback synchronizes a folder over a registered Wi-Fi P2P loopback bridge.
 func SyncFolderLoopback(ctx context.Context, endpoint netip.AddrPort, expected Fingerprint,
 	key ed25519.PrivateKey, mgr *syncengine.Manager, folderID, peerLabel string,

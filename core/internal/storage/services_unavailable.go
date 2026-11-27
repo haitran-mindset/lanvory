@@ -13,3 +13,7 @@ func RemoveService(string, string, string) error              { return errPermis
 func AuthorizedService(string, string, string, string, time.Time) (bridge.Service, error) {
 	return bridge.Service{}, errPermissionStorage
 }
+
+func AuthorizedServices(string, string, string, time.Time) ([]string, error) {
+	return nil, errPermissionStorage
+}

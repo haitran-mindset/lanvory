@@ -8,6 +8,7 @@ import {
   Laptop,
   Lock,
   Plug,
+  Search,
   Server,
   ShieldCheck,
   Trash2,
@@ -73,6 +74,10 @@ export function Services({
   const [message, setMessage] = useState("");
   const [connectionReady, setConnectionReady] = useState(false);
   const [forceLanAddress, setForceLanAddress] = useState(false);
+  const [discoveredServices, setDiscoveredServices] = useState<string[]>([]);
+  const [discoverBusy, setDiscoverBusy] = useState(false);
+  const [serviceNameInput, setServiceNameInput] = useState("");
+  const [lastServiceConn, setLastServiceConn] = useState<{ adapter: string; endpoint: string } | null>(null);
 
   useEffect(() => {
     if (!visible) return;
@@ -375,6 +380,7 @@ export function Services({
                         label="Paired device"
                         name="fingerprint"
                         required
+                        defaultValue={peerOptions.length === 1 ? peerOptions[0].value : undefined}
                         placeholder="Select a device"
                         options={peerOptions}
                       />
@@ -429,6 +435,9 @@ export function Services({
                 onValueChange={(value) => {
                   setRecipient(value);
                   setForceLanAddress(false);
+                  setDiscoveredServices([]);
+                  setServiceNameInput("");
+                  setLastServiceConn(null);
                 }}
                 disabled={busy}
               />
@@ -461,16 +470,6 @@ export function Services({
                       </div>
                     </>
                   )}
-                  <label>
-                    Service name on the sharing device
-                    <input
-                      name="id"
-                      required
-                      maxLength={64}
-                      pattern="[a-z0-9][a-z0-9_\-]{0,63}"
-                      placeholder="Name from the other device"
-                    />
-                  </label>
                   {!usingP2PRoute && (
                     <PeerConnectionFields
                       suggestedEndpoint={lanSuggestedEndpoint(route)}
@@ -480,6 +479,93 @@ export function Services({
                       onReady={setConnectionReady}
                     />
                   )}
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                    <button
+                      type="button"
+                      className="refresh"
+                      disabled={busy || discoverBusy || (!usingP2PRoute && !connectionReady)}
+                      onClick={(e) => {
+                        const form = e.currentTarget.form;
+                        if (!form) return;
+                        const fd = new FormData(form);
+                        const adapter = usingP2PRoute ? route!.adapter : String(fd.get("adapter") ?? "").trim();
+                        const endpoint = usingP2PRoute ? route!.endpoint : String(fd.get("endpoint") ?? "").trim();
+                        setDiscoverBusy(true);
+                        setMessage("");
+                        void window.lanvory
+                          .discoverServices(adapter, endpoint, selectedDevice)
+                          .then((raw) => {
+                            const parsed = z.array(z.string()).safeParse(raw);
+                            if (parsed.success) {
+                              setDiscoveredServices(parsed.data);
+                              setLastServiceConn({ adapter, endpoint });
+                              onRoute?.({ fingerprint: selectedDevice, adapter, endpoint });
+                              if (parsed.data.length === 1 && !serviceNameInput) {
+                                setServiceNameInput(parsed.data[0]);
+                              }
+                              if (parsed.data.length === 0) {
+                                setMessage("No services are currently shared with this device.");
+                              }
+                            } else {
+                              const errText = raw && typeof raw === "object" && "error" in raw && typeof raw.error === "string"
+                                ? raw.error
+                                : "Unable to discover shared services.";
+                              setMessage(errText);
+                            }
+                          })
+                          .finally(() => setDiscoverBusy(false));
+                      }}
+                    >
+                      <Search size={14} aria-hidden="true" />
+                      <span>{discoverBusy ? "Finding…" : "Find shared services"}</span>
+                    </button>
+                  </div>
+                  {discoveredServices.length > 0 && (
+                    <div className="service-grants-list" style={{ marginTop: 4 }}>
+                      <div className="service-sub-label">
+                        Available on {pairedDeviceName(selectedDevice, names)} ({discoveredServices.length})
+                      </div>
+                      {discoveredServices.map((svcId) => (
+                        <div className="service-grant-row" key={svcId}>
+                          <div className="service-grant-info">
+                            <Server size={14} className="service-device-icon" aria-hidden="true" />
+                            <strong className="service-grant-name">{svcId}</strong>
+                          </div>
+                          <button
+                            type="button"
+                            className="primary"
+                            style={{ minHeight: 28, padding: "0 12px", fontSize: ".78rem" }}
+                            disabled={busy}
+                            onClick={() => {
+                              const conn = lastServiceConn ?? (usingP2PRoute ? route : undefined);
+                              if (!conn) return;
+                              void update("open", {
+                                id: svcId,
+                                fingerprint: selectedDevice,
+                                adapter: conn.adapter,
+                                endpoint: conn.endpoint,
+                                bind: "127.0.0.1:0",
+                              });
+                            }}
+                          >
+                            Connect
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <label>
+                    Service name on the sharing device
+                    <input
+                      name="id"
+                      required
+                      maxLength={64}
+                      pattern="[a-z0-9][a-z0-9_\-]{0,63}"
+                      value={serviceNameInput}
+                      onChange={(e) => setServiceNameInput(e.target.value)}
+                      placeholder="Name from the other device"
+                    />
+                  </label>
                   <details className="trust-details services-connection">
                     <summary>Advanced · Address on this device</summary>
                     <label>

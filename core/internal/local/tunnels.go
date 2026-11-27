@@ -5,11 +5,15 @@ package local
 import (
 	"context"
 	"crypto/ed25519"
+	"encoding/json"
 	"errors"
+	"io"
 	"net"
 	"net/http"
 	"net/netip"
 	"net/url"
+	"strings"
+	"time"
 
 	"lanvory.local/core/internal/bridge"
 	"lanvory.local/core/internal/networking"
@@ -140,6 +144,46 @@ func registerTunnels(mux *http.ServeMux, device Device, dir string, tunnels *bri
 			return
 		}
 		w.WriteHeader(http.StatusNoContent)
+	})
+	mux.HandleFunc("POST /v1/services/discover", func(w http.ResponseWriter, r *http.Request) {
+		if key == nil {
+			http.Error(w, "Service key unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		var req syncRunRequest
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096)).Decode(&req); err != nil {
+			http.Error(w, "Invalid service discovery request", http.StatusBadRequest)
+			return
+		}
+		endpoint, fingerprint, err := verificationInput(req.Interface, req.Endpoint, req.Fingerprint)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		trusted, err := storage.IsTrustedPeer(dir, device.ID, fingerprint.String())
+		if err != nil || !trusted {
+			http.Error(w, peer.ErrPeerIdentity.Error(), http.StatusForbidden)
+			return
+		}
+		ctx, cancel := context.WithTimeout(r.Context(), 12*time.Second)
+		defer cancel()
+		var ids []string
+		if req.Interface == "p2p" {
+			ids, err = peer.DiscoverServicesLoopback(ctx, endpoint, fingerprint, key, hasP2PEndpoint)
+		} else {
+			ids, err = peer.DiscoverServices(ctx, req.Interface, endpoint, fingerprint, key, func() ([]networking.Interface, error) {
+				return approvedInventory(dir)
+			})
+		}
+		if err != nil {
+			msg := err.Error()
+			if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) || strings.Contains(msg, "unexpected EOF") || errors.Is(err, bridge.ErrNotAvailable) {
+				msg = "No discoverable services found, or the other device needs to be updated to support service discovery."
+			}
+			http.Error(w, msg, http.StatusBadGateway)
+			return
+		}
+		writeJSON(w, ids)
 	})
 }
 

@@ -2,6 +2,8 @@ package bridge
 
 import (
 	"context"
+	"encoding/binary"
+	"encoding/json"
 	"io"
 	"net"
 	"net/netip"
@@ -12,9 +14,15 @@ const Ready byte = 1
 const sessionLimit = 30 * time.Minute
 
 type Lookup func(fingerprint, id string) (Service, error)
+type ListLookup func(fingerprint string) ([]string, error)
 
 // Serve serves one request over an already authenticated peer connection.
 func Serve(ctx context.Context, remote net.Conn, fingerprint string, lookup Lookup, scope func() bool) error {
+	return ServeWithDiscovery(ctx, remote, fingerprint, lookup, nil, scope)
+}
+
+// ServeWithDiscovery serves one request or discovery probe over an authenticated peer connection.
+func ServeWithDiscovery(ctx context.Context, remote net.Conn, fingerprint string, lookup Lookup, list ListLookup, scope func() bool) error {
 	ctx, cancel := context.WithTimeout(ctx, sessionLimit)
 	defer cancel()
 	stop := context.AfterFunc(ctx, func() { abort(remote) })
@@ -26,7 +34,31 @@ func Serve(ctx context.Context, remote net.Conn, fingerprint string, lookup Look
 	if _, err := io.ReadFull(remote, length[:]); err != nil {
 		return err
 	}
-	if length[0] == 0 || length[0] > 64 {
+	if length[0] == 0 {
+		if list == nil || !scope() {
+			_, _ = remote.Write([]byte{0})
+			return ErrNotAvailable
+		}
+		ids, err := list(fingerprint)
+		if err != nil {
+			_, _ = remote.Write([]byte{0})
+			return err
+		}
+		raw, err := json.Marshal(ids)
+		if err != nil || len(raw) > 1024*1024 {
+			_, _ = remote.Write([]byte{0})
+			return ErrNotAvailable
+		}
+		var hdr [5]byte
+		hdr[0] = Ready
+		binary.BigEndian.PutUint32(hdr[1:], uint32(len(raw)))
+		if _, err := remote.Write(hdr[:]); err != nil {
+			return err
+		}
+		_, err = remote.Write(raw)
+		return err
+	}
+	if length[0] > 64 {
 		return ErrNotAvailable
 	}
 	rawID := make([]byte, int(length[0]))
@@ -94,6 +126,46 @@ func Serve(ctx context.Context, remote net.Conn, fingerprint string, lookup Look
 	cancel()
 	<-checked
 	return nil
+}
+
+// DiscoverServices queries which shared service IDs a peer has granted to this device.
+func DiscoverServices(ctx context.Context, remote net.Conn) ([]string, error) {
+	deadline := time.Now().Add(5 * time.Second)
+	if until, ok := ctx.Deadline(); ok && until.Before(deadline) {
+		deadline = until
+	}
+	if err := remote.SetDeadline(deadline); err != nil {
+		return nil, err
+	}
+	stop := context.AfterFunc(ctx, func() { abort(remote) })
+	defer stop()
+	if _, err := remote.Write([]byte{0}); err != nil {
+		return nil, err
+	}
+	var status [1]byte
+	if _, err := io.ReadFull(remote, status[:]); err != nil {
+		return nil, err
+	}
+	if status[0] != Ready {
+		return nil, ErrNotAvailable
+	}
+	var sizeBuf [4]byte
+	if _, err := io.ReadFull(remote, sizeBuf[:]); err != nil {
+		return nil, err
+	}
+	size := binary.BigEndian.Uint32(sizeBuf[:])
+	if size > 1024*1024 {
+		return nil, ErrNotAvailable
+	}
+	raw := make([]byte, int(size))
+	if _, err := io.ReadFull(remote, raw); err != nil {
+		return nil, err
+	}
+	var ids []string
+	if err := json.Unmarshal(raw, &ids); err != nil {
+		return nil, err
+	}
+	return ids, nil
 }
 
 // Forward relays a single TCP session, preserving half-closes when supported.

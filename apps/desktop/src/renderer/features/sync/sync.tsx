@@ -1,6 +1,6 @@
 import { WorkspaceTabs, WorkspaceTabPanel } from '../../components/workspace-tabs';
-import { type FormEvent, useEffect, useState } from 'react';
-import { AlertCircle, CheckCircle2, Folder, FolderSync, Info, Pause, Play, Plus, RefreshCw, Trash2 } from 'lucide-react';
+import { type FormEvent, useEffect, useRef, useState } from 'react';
+import { AlertCircle, CheckCircle2, Download, Folder, FolderSync, Info, Pause, Play, Plus, RefreshCw, Search, Trash2 } from 'lucide-react';
 import { z } from 'zod';
 import { PanelHeading } from '../../components/panel-heading';
 import { connectionError, isP2PRoute, lanSuggestedEndpoint, PeerConnectionFields } from '../../components/peer-connection-fields';
@@ -56,6 +56,35 @@ const grantSchema = z.object({
 type SyncGrant = z.infer<typeof grantSchema>;
 type SyncFolder = z.infer<typeof folderSchema>;
 
+const remoteSyncFolderSchema = z.object({
+  id: z.string(),
+  mode: z.enum(['send-only', 'receive-only', 'bidirectional']),
+  fileCount: z.number().nonnegative(),
+  totalBytes: z.number().nonnegative(),
+});
+type RemoteSyncFolder = z.infer<typeof remoteSyncFolderSchema>;
+
+function suggestFolderId(dirPath: string) {
+  const base = dirPath.split(/[\\/]/).filter(Boolean).pop() ?? '';
+  return base
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, '-')
+    .replace(/^[^a-z0-9]+|[-_]+$/g, '')
+    .slice(0, 64);
+}
+
+function matchingLocalMode(remoteMode: RemoteSyncFolder['mode']): SyncFolder['mode'] {
+  if (remoteMode === 'send-only') return 'receive-only';
+  if (remoteMode === 'receive-only') return 'send-only';
+  return 'bidirectional';
+}
+
+function modeLabel(m: SyncFolder['mode']) {
+  if (m === 'send-only') return 'Send only';
+  if (m === 'receive-only') return 'Receive only';
+  return 'Bidirectional';
+}
+
 const modeOptions = [
   { value: 'bidirectional', label: 'Bidirectional' },
   { value: 'send-only', label: 'Send only' },
@@ -94,11 +123,30 @@ export function SyncPanel({ visible, ownerId, routes, onRoute }: {
   const [selectedPeerByFolder, setSelectedPeerByFolder] = useState<Record<string, string>>({});
   const [connectionReadyByFolder, setConnectionReadyByFolder] = useState<Record<string, boolean>>({});
   const [pickedPath, setPickedPath] = useState('');
+  const [addFolderId, setAddFolderId] = useState('');
+  const [addSharePeer, setAddSharePeer] = useState('');
   const [mode, setMode] = useState<'send-only' | 'receive-only' | 'bidirectional'>('bidirectional');
   const [busy, setBusy] = useState(false);
   const [tab, setTab] = useState<'folders' | 'add'>('folders');
   const [addMessage, setAddMessage] = useState<SyncFeedback>(null);
   const [listMessage, setListMessage] = useState<SyncFeedback>(null);
+
+  const [discoverPeer, setDiscoverPeer] = useState('');
+  const [discoverForceLan, setDiscoverForceLan] = useState(false);
+  const [discoverConnReady, setDiscoverConnReady] = useState(false);
+  const [discoverLastConn, setDiscoverLastConn] = useState<{ adapter: string; endpoint: string } | null>(null);
+  const [discoveredFolders, setDiscoveredFolders] = useState<RemoteSyncFolder[]>([]);
+  const [discoverMessage, setDiscoverMessage] = useState<SyncFeedback>(null);
+  const [forceLanByFolder, setForceLanByFolder] = useState<Record<string, boolean>>({});
+  const [autoSyncByFolder, setAutoSyncByFolder] = useState<Record<string, boolean>>(() => {
+    try {
+      const parsed = JSON.parse(localStorage.getItem('lanvory.sync.auto') ?? '{}');
+      return parsed && typeof parsed === 'object' ? parsed : {};
+    } catch {
+      return {};
+    }
+  });
+  const autoSyncRunning = useRef(false);
   const names = ownerId ? readPairedNames(ownerId) : {};
 
   async function refresh() {
@@ -110,7 +158,14 @@ export function SyncPanel({ visible, ownerId, routes, onRoute }: {
     const parsed = foldersSchema.safeParse(rawFolders);
     setFolders(parsed.success ? parsed.data : null);
     const parsedPeers = z.array(z.object({ fingerprint: z.string() })).safeParse(rawPeers);
-    if (parsedPeers.success) setPeers(parsedPeers.data);
+    if (parsedPeers.success) {
+      setPeers(parsedPeers.data);
+      if (parsedPeers.data.length === 1) {
+        const only = parsedPeers.data[0].fingerprint;
+        setDiscoverPeer((cur) => cur || only);
+        setAddSharePeer((cur) => cur || only);
+      }
+    }
     const parsedGrants = z.object({ grants: z.array(grantSchema) }).safeParse(rawServiceSnap);
     if (parsedGrants.success) setGrants(parsedGrants.data.grants);
   }
@@ -122,14 +177,15 @@ export function SyncPanel({ visible, ownerId, routes, onRoute }: {
 
   async function pickDirectory() {
     const chosen = await window.lanvory.pickSyncDirectory().catch(() => null);
-    if (chosen) setPickedPath(chosen);
+    if (chosen) {
+      setPickedPath(chosen);
+      setAddFolderId((current) => current.trim() || suggestFolderId(chosen));
+    }
   }
 
   async function addFolder(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const formEl = event.currentTarget;
-    const form = new FormData(formEl);
-    const id = String(form.get('id') ?? '').trim();
+    const id = addFolderId.trim();
     if (!/^[a-z0-9][a-z0-9_-]{0,63}$/.test(id) || !pickedPath) {
       setAddMessage({ tone: 'error', text: 'Enter a lowercase folder ID and choose a local directory.' });
       return;
@@ -140,16 +196,29 @@ export function SyncPanel({ visible, ownerId, routes, onRoute }: {
       const raw = await window.lanvory.addSyncFolder(id, pickedPath, mode).catch(() => null);
       const created = folderSchema.safeParse(raw);
       if (created.success) {
-        formEl.reset();
+        let sharedWith = '';
+        if (addSharePeer && peers.some((p) => p.fingerprint === addSharePeer)) {
+          const allowed = await window.lanvory.setSyncAccess(addSharePeer, created.data.id, true).catch(() => false);
+          if (allowed) {
+            sharedWith = pairedDeviceName(addSharePeer, names);
+            setSelectedPeerByFolder((prev) => ({ ...prev, [created.data.id]: addSharePeer }));
+          }
+        }
+        setAddFolderId('');
         setPickedPath('');
         await refresh();
-        setAddMessage({ tone: 'success', text: `Registered sync folder “${created.data.id}”.` });
-        setListMessage(null);
+        setTab('folders');
+        setListMessage({
+          tone: 'success',
+          text: sharedWith
+            ? `Added “${created.data.id}” and shared it with ${sharedWith}. On ${sharedWith}, click “Find shared folders” → “Accept & Sync”.`
+            : `Registered sync folder “${created.data.id}”.`,
+        });
         notify({
           category: 'sync',
           tone: 'success',
-          title: `Sync folder added: ${created.data.id}`,
-          body: created.data.path,
+          title: sharedWith ? `Shared sync folder: ${created.data.id}` : `Sync folder added: ${created.data.id}`,
+          body: sharedWith ? `Allowed ${sharedWith} to sync this folder.` : created.data.path,
         });
       } else {
         const errText = raw && typeof raw === 'object' && 'error' in raw && typeof raw.error === 'string'
@@ -181,24 +250,11 @@ export function SyncPanel({ visible, ownerId, routes, onRoute }: {
     setBusy(false);
   }
 
-  async function syncWithPeer(event: FormEvent<HTMLFormElement>, folderId: string) {
-    event.preventDefault();
-    const fp = selectedPeerByFolder[folderId];
-    if (!fp) return;
-    const peerRoute = routes?.[fp];
-    const useP2P = isP2PRoute(peerRoute);
-    const form = new FormData(event.currentTarget);
-    const adapter = useP2P ? peerRoute!.adapter : String(form.get('adapter') ?? '').trim();
-    const endpoint = useP2P ? peerRoute!.endpoint : String(form.get('endpoint') ?? '').trim();
-    if (!useP2P) {
-      const validationErr = await connectionError(adapter, endpoint);
-      if (validationErr) {
-        setListMessage({ tone: 'error', text: validationErr });
-        return;
-      }
+  async function runFolderSync(folderId: string, fp: string, adapter: string, endpoint: string, quiet = false) {
+    if (!quiet) {
+      setBusy(true);
+      setListMessage({ tone: 'info', text: `Syncing “${folderId}” with ${pairedDeviceName(fp, names)}…` });
     }
-    setBusy(true);
-    setListMessage({ tone: 'info', text: `Syncing “${folderId}” with ${pairedDeviceName(fp, names)}…` });
     try {
       const raw = await window.lanvory
         .syncWithPeer(folderId, adapter, endpoint, fp, pairedDeviceName(fp, names))
@@ -209,18 +265,155 @@ export function SyncPanel({ visible, ownerId, routes, onRoute }: {
         setFolders((prev) => prev?.map((f) => (f.id === folderId ? parsed.data.folder : f)) ?? [parsed.data.folder]);
         const { downloaded, uploaded, conflicts } = parsed.data;
         const summary = `Synced “${folderId}”: ${downloaded} downloaded, ${uploaded} uploaded${conflicts > 0 ? `, ${conflicts} conflict(s) preserved` : ''}.`;
-        setListMessage({ tone: 'success', text: summary });
-        notify({ category: 'sync', tone: 'success', title: `Folder synced: ${folderId}`, body: summary });
-      } else {
+        if (!quiet || downloaded > 0 || uploaded > 0 || conflicts > 0) {
+          setListMessage({ tone: 'success', text: summary });
+        }
+        if (!quiet || downloaded > 0 || uploaded > 0 || conflicts > 0) {
+          notify({ category: 'sync', tone: 'success', title: `Folder synced: ${folderId}`, body: summary });
+        }
+        return true;
+      } else if (!quiet) {
         const errText = raw && typeof raw === 'object' && 'error' in raw && typeof raw.error === 'string'
           ? raw.error
           : `Unable to sync “${folderId}” with peer.`;
         setListMessage({ tone: 'error', text: errText });
       }
+      return false;
+    } finally {
+      if (!quiet) setBusy(false);
+    }
+  }
+
+  async function syncWithPeer(event: FormEvent<HTMLFormElement>, folderId: string) {
+    event.preventDefault();
+    const fp = selectedPeerByFolder[folderId];
+    if (!fp) return;
+    const peerRoute = routes?.[fp];
+    const useP2P = !forceLanByFolder[folderId] && isP2PRoute(peerRoute);
+    const form = new FormData(event.currentTarget);
+    const adapter = useP2P ? peerRoute!.adapter : String(form.get('adapter') ?? '').trim();
+    const endpoint = useP2P ? peerRoute!.endpoint : String(form.get('endpoint') ?? '').trim();
+    if (!useP2P) {
+      const validationErr = await connectionError(adapter, endpoint);
+      if (validationErr) {
+        setListMessage({ tone: 'error', text: validationErr });
+        return;
+      }
+    }
+    await runFolderSync(folderId, fp, adapter, endpoint);
+  }
+
+  async function discoverRemoteSyncFolders(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!discoverPeer) return;
+    const peerRoute = routes?.[discoverPeer];
+    const useP2P = !discoverForceLan && isP2PRoute(peerRoute);
+    const form = new FormData(event.currentTarget);
+    const adapter = useP2P ? peerRoute!.adapter : String(form.get('adapter') ?? '').trim();
+    const endpoint = useP2P ? peerRoute!.endpoint : String(form.get('endpoint') ?? '').trim();
+    if (!useP2P) {
+      const validationErr = await connectionError(adapter, endpoint);
+      if (validationErr) {
+        setDiscoverMessage({ tone: 'error', text: validationErr });
+        return;
+      }
+    }
+    setBusy(true);
+    setDiscoverMessage(null);
+    try {
+      const raw = await window.lanvory.discoverSyncFolders(adapter, endpoint, discoverPeer).catch(() => null);
+      const parsed = z.array(remoteSyncFolderSchema).safeParse(raw);
+      if (parsed.success) {
+        setDiscoveredFolders(parsed.data);
+        setDiscoverLastConn({ adapter, endpoint });
+        onRoute?.({ fingerprint: discoverPeer, adapter, endpoint });
+        if (parsed.data.length === 0) {
+          setDiscoverMessage({
+            tone: 'info',
+            text: `${pairedDeviceName(discoverPeer, names)} has not shared any sync folders with this device yet.`,
+          });
+        }
+      } else {
+        const errText = raw && typeof raw === 'object' && 'error' in raw && typeof raw.error === 'string'
+          ? raw.error
+          : 'Unable to reach peer for sync discovery.';
+        setDiscoverMessage({ tone: 'error', text: errText });
+      }
     } finally {
       setBusy(false);
     }
   }
+
+  async function acceptAndSyncRemoteFolder(remote: RemoteSyncFolder) {
+    if (!discoverPeer) return;
+    const conn = discoverLastConn ?? (isP2PRoute(routes?.[discoverPeer]) ? routes![discoverPeer] : undefined);
+    if (!conn) {
+      setDiscoverMessage({ tone: 'error', text: 'Click “Find shared folders” first to establish the peer address.' });
+      return;
+    }
+    const chosenPath = await window.lanvory.pickSyncDirectory().catch(() => null);
+    if (!chosenPath) return;
+
+    setBusy(true);
+    setDiscoverMessage({ tone: 'info', text: `Setting up “${remote.id}” and syncing…` });
+    try {
+      const localMode = matchingLocalMode(remote.mode);
+      const raw = await window.lanvory.addSyncFolder(remote.id, chosenPath, localMode).catch(() => null);
+      const created = folderSchema.safeParse(raw);
+      if (!created.success) {
+        const errText = raw && typeof raw === 'object' && 'error' in raw && typeof raw.error === 'string'
+          ? raw.error
+          : `Unable to register folder “${remote.id}”.`;
+        setDiscoverMessage({ tone: 'error', text: errText });
+        return;
+      }
+      await window.lanvory.setSyncAccess(discoverPeer, remote.id, true).catch(() => false);
+      setSelectedPeerByFolder((prev) => ({ ...prev, [remote.id]: discoverPeer }));
+      await refresh();
+      await runFolderSync(remote.id, discoverPeer, conn.adapter, conn.endpoint);
+      setDiscoverMessage(null);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function toggleAutoSync(folderId: string) {
+    setAutoSyncByFolder((prev) => {
+      const next = { ...prev, [folderId]: !prev[folderId] };
+      try {
+        localStorage.setItem('lanvory.sync.auto', JSON.stringify(next));
+      } catch {
+        // ignore storage failure
+      }
+      return next;
+    });
+  }
+
+  useEffect(() => {
+    if (!visible || !folders?.length) return;
+    const activeAuto = folders.filter((f) => !f.paused && autoSyncByFolder[f.id]);
+    if (activeAuto.length === 0) return;
+
+    const timer = setInterval(() => {
+      if (autoSyncRunning.current || busy) return;
+      autoSyncRunning.current = true;
+      void (async () => {
+        try {
+          for (const folder of activeAuto) {
+            const fp = selectedPeerByFolder[folder.id];
+            if (!fp) continue;
+            const allowed = grants.some((g) => g.fingerprint === fp && g.capability === 'folder-sync' && g.resource === folder.id && !g.inactive);
+            const peerRoute = routes?.[fp];
+            if (!allowed || !peerRoute) continue;
+            await runFolderSync(folder.id, fp, peerRoute.adapter, peerRoute.endpoint, true);
+          }
+        } finally {
+          autoSyncRunning.current = false;
+        }
+      })();
+    }, 20000);
+    return () => clearInterval(timer);
+  }, [visible, folders, autoSyncByFolder, selectedPeerByFolder, grants, routes, busy]);
 
   async function togglePause(folder: SyncFolder) {
     setBusy(true);
@@ -260,6 +453,118 @@ export function SyncPanel({ visible, ownerId, routes, onRoute }: {
       <h2 id="sync-heading" className="sr-only">Sync</h2>
       <WorkspaceTabs name="sync" label="Sync sections" active={tab} onChange={setTab} tabs={[{ id: 'folders', label: 'Registered folders', icon: Folder }, { id: 'add', label: 'Add folder', icon: Plus }]} />
       <WorkspaceTabPanel name="sync" id="folders" active={tab}>
+        {peers.length > 0 && (
+          <section className="operation-card" style={{ marginBottom: 16 }}>
+            <PanelHeading
+              icon={Download}
+              title="Shared from paired devices"
+              description="Find sync folders another device shared with you and accept them in one click."
+            />
+            <form className="trust-form" onSubmit={(e) => void discoverRemoteSyncFolders(e)}>
+              <SelectField
+                label="Paired device"
+                name="discoverPeer"
+                placeholder="Select paired peer"
+                value={discoverPeer}
+                disabled={busy}
+                onValueChange={(val) => {
+                  setDiscoverPeer(val);
+                  setDiscoverForceLan(false);
+                  setDiscoveredFolders([]);
+                  setDiscoverMessage(null);
+                }}
+                options={peers.map((p) => ({ value: p.fingerprint, label: pairedDeviceName(p.fingerprint, names) }))}
+              />
+              {discoverPeer && (() => {
+                const peerRoute = routes?.[discoverPeer];
+                const useP2P = !discoverForceLan && isP2PRoute(peerRoute);
+                return (
+                  <div className="trust-form" key={discoverPeer}>
+                    {useP2P ? (
+                      <div className="paired-device-meta-row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span className="paired-method-badge is-p2p">Bluetooth + Wi-Fi P2P</span>
+                        <button
+                          type="button"
+                          className="refresh"
+                          style={{ minHeight: 28, padding: '0 10px', fontSize: '.76rem' }}
+                          onClick={() => setDiscoverForceLan(true)}
+                        >
+                          Use LAN address instead
+                        </button>
+                      </div>
+                    ) : (
+                      <PeerConnectionFields
+                        suggestedEndpoint={lanSuggestedEndpoint(peerRoute)}
+                        endpointLabel="Peer Lanvory address"
+                        adapterLabel="Network adapter"
+                        disabled={busy}
+                        onReady={setDiscoverConnReady}
+                      />
+                    )}
+                    <button
+                      type="submit"
+                      className="refresh"
+                      disabled={busy || (!useP2P && !discoverConnReady)}
+                    >
+                      <Search size={14} aria-hidden="true" />
+                      <span>Find shared folders</span>
+                    </button>
+                  </div>
+                );
+              })()}
+            </form>
+            <SyncBanner feedback={discoverMessage} />
+            {discoveredFolders.length > 0 && (
+              <ul className="sync-folder-list" style={{ marginTop: 12 }}>
+                {discoveredFolders.map((remote) => {
+                  const existing = folders?.find((f) => f.id === remote.id);
+                  return (
+                    <li key={remote.id} className="sync-folder-card" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+                      <div className="sync-folder-identity">
+                        <span className="sync-folder-icon">
+                          <FolderSync size={17} aria-hidden="true" />
+                        </span>
+                        <div className="sync-folder-title">
+                          <strong>{remote.id}</strong>
+                          <span className="state-pill is-active">{modeLabel(remote.mode)}</span>
+                          <small style={{ color: 'var(--muted)', fontSize: '.76rem' }}>
+                            {remote.fileCount} {remote.fileCount === 1 ? 'file' : 'files'} · {formatBytes(remote.totalBytes)}
+                          </small>
+                        </div>
+                      </div>
+                      {existing ? (
+                        <button
+                          type="button"
+                          className="refresh"
+                          disabled={busy || existing.paused}
+                          onClick={() => {
+                            const conn = discoverLastConn ?? routes?.[discoverPeer];
+                            if (!conn) return;
+                            setSelectedPeerByFolder((prev) => ({ ...prev, [remote.id]: discoverPeer }));
+                            void runFolderSync(remote.id, discoverPeer, conn.adapter, conn.endpoint);
+                          }}
+                        >
+                          <RefreshCw size={14} aria-hidden="true" />
+                          <span>Sync now</span>
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          className="primary"
+                          disabled={busy}
+                          onClick={() => void acceptAndSyncRemoteFolder(remote)}
+                        >
+                          <Download size={14} aria-hidden="true" />
+                          <span>Accept & Sync</span>
+                        </button>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </section>
+        )}
         <section className="operation-card">
           <PanelHeading
             icon={RefreshCw}
@@ -287,6 +592,16 @@ export function SyncPanel({ visible, ownerId, routes, onRoute }: {
                       </div>
                     </div>
                     <div className="sync-folder-actions">
+                      <button
+                        type="button"
+                        className={autoSyncByFolder[folder.id] ? 'primary sync-scan-btn' : 'refresh sync-scan-btn'}
+                        disabled={busy}
+                        title="Automatically sync every 20 seconds when peer is reachable"
+                        onClick={() => toggleAutoSync(folder.id)}
+                      >
+                        <RefreshCw size={13} aria-hidden="true" />
+                        <span>{autoSyncByFolder[folder.id] ? 'Auto-sync: On' : 'Auto-sync'}</span>
+                      </button>
                       <button type="button" className="refresh sync-scan-btn" disabled={busy} onClick={() => void scanFolder(folder.id)}>
                         <RefreshCw size={13} aria-hidden="true" />
                         <span>Scan</span>
@@ -422,12 +737,20 @@ export function SyncPanel({ visible, ownerId, routes, onRoute }: {
                       </div>
                       {selectedPeer && isAllowed && (() => {
                         const peerRoute = routes?.[selectedPeer];
-                        const useP2P = isP2PRoute(peerRoute);
+                        const useP2P = !forceLanByFolder[folder.id] && isP2PRoute(peerRoute);
                         return (
                         <div className="trust-form sync-peer-connect" key={selectedPeer}>
                           {useP2P ? (
-                            <div className="paired-device-meta-row">
+                            <div className="paired-device-meta-row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
                               <span className="paired-method-badge is-p2p">Bluetooth + Wi-Fi P2P</span>
+                              <button
+                                type="button"
+                                className="refresh"
+                                style={{ minHeight: 28, padding: '0 10px', fontSize: '.76rem' }}
+                                onClick={() => setForceLanByFolder((prev) => ({ ...prev, [folder.id]: true }))}
+                              >
+                                Use LAN address instead
+                              </button>
                             </div>
                           ) : (
                             <PeerConnectionFields
@@ -467,10 +790,6 @@ export function SyncPanel({ visible, ownerId, routes, onRoute }: {
           />
           <form className="trust-form" onSubmit={(e) => void addFolder(e)}>
             <label>
-              Folder ID
-              <input name="id" required maxLength={64} placeholder="project-docs" disabled={busy} />
-            </label>
-            <label>
               Local directory
               <div className="sync-path-row">
                 <input
@@ -485,6 +804,18 @@ export function SyncPanel({ visible, ownerId, routes, onRoute }: {
                 </button>
               </div>
             </label>
+            <label>
+              Folder ID
+              <input
+                name="id"
+                required
+                maxLength={64}
+                value={addFolderId}
+                onChange={(e) => setAddFolderId(e.target.value)}
+                placeholder="project-docs (auto-filled from folder)"
+                disabled={busy}
+              />
+            </label>
             <SelectField
               label="Sync mode"
               name="mode"
@@ -495,8 +826,22 @@ export function SyncPanel({ visible, ownerId, routes, onRoute }: {
                 if (v === 'send-only' || v === 'receive-only' || v === 'bidirectional') setMode(v);
               }}
             />
+            {peers.length > 0 && (
+              <SelectField
+                label="Share immediately with paired device (optional)"
+                name="sharePeer"
+                placeholder="Select paired device"
+                value={addSharePeer}
+                disabled={busy}
+                onValueChange={setAddSharePeer}
+                options={[
+                  { value: '__none__', label: 'Keep private for now' },
+                  ...peers.map((p) => ({ value: p.fingerprint, label: pairedDeviceName(p.fingerprint, names) })),
+                ]}
+              />
+            )}
             <button type="submit" className="primary" disabled={busy || !pickedPath}>
-              <Plus size={16} aria-hidden="true" /> Add folder
+              <Plus size={16} aria-hidden="true" /> {addSharePeer && addSharePeer !== '__none__' ? 'Add & Share folder' : 'Add folder'}
             </button>
           </form>
           <SyncBanner feedback={addMessage} />

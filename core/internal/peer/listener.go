@@ -34,6 +34,7 @@ type Listener struct {
 	trusted          func(string) (bool, error)
 	receiver         *drop.Receiver
 	services         bridge.Lookup
+	serviceList      bridge.ListLookup
 	pairs            *pairing.Manager
 	clipboardBuf     *clipboard.Buffer
 	clipboardAllowed func(string) bool
@@ -174,7 +175,7 @@ func (l *Listener) Serve(ctx context.Context) error {
 				if err != nil {
 					return
 				}
-				_ = bridge.Serve(ctx, session, pin.String(), l.services, func() bool { return l.currentScope(remote) })
+				_ = bridge.ServeWithDiscovery(ctx, session, pin.String(), l.services, l.serviceList, func() bool { return l.currentScope(remote) })
 			case drop.Protocol:
 				if err := conn.SetDeadline(time.Time{}); err != nil {
 					return
@@ -229,6 +230,13 @@ func (l *Listener) Serve(ctx context.Context) error {
 				_ = serveMountConn(ctx, session, pin.String(), l.mountReg, l.mountAllowed, func() bool { return l.currentScope(remote) })
 			}
 		})
+	}
+}
+
+// EnableServiceList registers a callback returning service IDs granted to a peer.
+func (l *Listener) EnableServiceList(list bridge.ListLookup) {
+	if l != nil {
+		l.serviceList = list
 	}
 }
 

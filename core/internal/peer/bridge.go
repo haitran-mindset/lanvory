@@ -50,3 +50,33 @@ func OpenServiceLoopback(ctx context.Context, endpoint netip.AddrPort, expected 
 	}
 	return conn, nil
 }
+
+// DiscoverServices lists shared service IDs a peer has granted to this device over LAN.
+func DiscoverServices(ctx context.Context, adapter string, endpoint netip.AddrPort, expected Fingerprint,
+	key ed25519.PrivateKey, inventory func() ([]networking.Interface, error)) ([]string, error) {
+	config, err := clientIdentity(expected, key, bridge.Protocol)
+	if err != nil {
+		return nil, err
+	}
+	conn, err := dialResource(ctx, adapter, endpoint, inventory, config)
+	if err != nil {
+		return nil, err
+	}
+	defer conn.Close()
+	return bridge.DiscoverServices(ctx, conn)
+}
+
+// DiscoverServicesLoopback lists shared service IDs a peer has granted over Wi-Fi P2P loopback.
+func DiscoverServicesLoopback(ctx context.Context, endpoint netip.AddrPort, expected Fingerprint,
+	key ed25519.PrivateKey, hasEndpoint func(string) bool) ([]string, error) {
+	config, err := clientIdentity(expected, key, bridge.Protocol)
+	if err != nil {
+		return nil, err
+	}
+	conn, err := dialLoopback(ctx, endpoint, config, hasEndpoint)
+	if err != nil {
+		return nil, err
+	}
+	defer conn.Close()
+	return bridge.DiscoverServices(ctx, conn)
+}
